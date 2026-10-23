@@ -1,0 +1,16 @@
+{
+  "name": "cms-parcel",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --hot src/server.ts",
+    "start": "bun src/server.ts",
+    "test": "bun test",
+    "check": "tsc --noEmit && biome check ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.2.4",
+    "@types/bun": "^1.3.1",
+    "typescript": "^5.9.3"
+  }
+}
