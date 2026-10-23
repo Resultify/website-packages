@@ -1,14 +1,15 @@
 /**
- * Foundation is counted once.
- * A package discounts that foundation plus the pieces inside its bands.
- * Extra tiles stay at item price. One more than the cap drops the package rate.
+ * Hours come only from the selected items.
+ * The package is the lowest tier that covers every selected option.
+ * Design hours stay separate from build hours.
  * Website pages are not build hours. More than 30 needs Professional.
  */
 
 import {
+  alwaysOnTileIds,
   type BlogSetupMode,
-  blogSetupHours,
   defaultWebsitePages,
+  designParts,
   type Edition,
   editionLabel,
   editionRank,
@@ -18,9 +19,9 @@ import {
   type HourBucket,
   type HubId,
   hubName,
+  isAlwaysOn,
   modeLabel,
   type Parcel,
-  parcels,
   type ShapeId,
   type StartingPoint,
   type StartingPointId,
@@ -79,7 +80,6 @@ export type RestoreHint = {
   missing: MissingPiece[];
   trim: TrimPiece[];
   savedHours: number;
-  discountSavings: number;
 };
 
 export type PageSpeed = {
@@ -99,7 +99,6 @@ export type Quote = {
   parcel: Parcel | null;
   extraTileIds: string[];
   extraCount: number;
-  discountRate: number;
   foundationHours: number;
   openHours: number;
   hours: number;
@@ -117,7 +116,6 @@ export type Quote = {
   lines: HourLine[];
   restore: RestoreHint | null;
   pageSpeed: PageSpeed;
-  assumptions: string[];
 };
 
 const blogModes: readonly BlogSetupMode[] = ["same", "list", "post", "both"];
@@ -138,16 +136,20 @@ function clampQuantity(qty: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, rounded));
 }
 
+function blogTemplateCount(selection: Selection, countId: string): number {
+  const setups = selection.tiles["blog-setups"];
+  if (setups === undefined) return 0;
+  if (setups <= 1) return 1;
+  return selection.tiles[countId] ?? 1;
+}
+
 function hoursFor(item: ReturnType<typeof getTile>, qty: number, selection: Selection): number {
-  if (item.id !== "blog-setups") return tileHours(item, qty);
-  const listQty = selection.tiles["blog-list"] ?? 1;
-  const postQty = selection.tiles["blog-post"] ?? 1;
-  return blogSetupHours(
-    qty,
-    selection.blogSetupMode,
-    tileHours(getTile("blog-list"), listQty),
-    tileHours(getTile("blog-post"), postQty),
-  );
+  if (item.id === "blog-list" || item.id === "blog-post") {
+    const countId = item.id === "blog-list" ? "blog-list-count" : "blog-post-count";
+    return blogTemplateCount(selection, countId) * (qty >= 2 ? 8 : 4);
+  }
+  if (item.id === "custom-design") return 0;
+  return tileHours(item, qty);
 }
 
 export function normalize(selection: Selection): Selection {
@@ -163,7 +165,6 @@ export function normalize(selection: Selection): Selection {
     if (piece.disabled) continue;
     next[id] = clampQuantity(qty, piece.min, piece.max);
   }
-  if (next.setup === undefined) next.setup = getTile("setup").initial;
 
   let grew = true;
   while (grew) {
@@ -180,10 +181,32 @@ export function normalize(selection: Selection): Selection {
       next.hubdb = getTile("hubdb").initial;
       grew = true;
     }
-    if (external === 2 && next.serverless === undefined) {
-      next.serverless = getTile("serverless").initial;
-      grew = true;
+  }
+
+  if (next["blog-setups"] !== undefined) {
+    if (next["blog-list"] === undefined) next["blog-list"] = 1;
+    if (next["blog-post"] === undefined) next["blog-post"] = 1;
+    if (next["blog-list-count"] === undefined) next["blog-list-count"] = 1;
+    if (next["blog-post-count"] === undefined) next["blog-post-count"] = 1;
+    if ((next["blog-setups"] ?? 0) <= 1) {
+      next["blog-list-count"] = 1;
+      next["blog-post-count"] = 1;
     }
+  } else {
+    delete next["blog-list"];
+    delete next["blog-post"];
+    delete next["blog-list-count"];
+    delete next["blog-post-count"];
+    delete next["blog-recent"];
+  }
+  if (next["product-catalogue"] === undefined) {
+    delete next["favorite-products"];
+    delete next["related-products"];
+  } else if (next["product-catalogue"] === 1) {
+    delete next["related-products"];
+  }
+  for (const id of alwaysOnTileIds) {
+    if (next[id] === undefined) next[id] = getTile(id).initial;
   }
 
   const mode = blogModes.includes(selection.blogSetupMode) ? selection.blogSetupMode : "same";
@@ -209,60 +232,64 @@ function dependentsOf(rootId: string, selected: Record<string, number>): Set<str
     }
   }
   if (rootId === "hubdb" && selected["external-forms"] === 1) remove.add("external-forms");
-  if (rootId === "serverless" && selected["external-forms"] === 2) remove.add("external-forms");
   return remove;
 }
+
+const childTileIds = ["blog-list", "blog-post", "blog-list-count", "blog-post-count"] as const;
 
 export function setTile(selection: Selection, tileId: string, on: boolean): Selection {
   const piece = getTile(tileId);
   if (piece.disabled) return selection;
+  if (!on && (isAlwaysOn(tileId) || childTileIds.some((id) => id === tileId))) return selection;
+  if (on && tileId === "blog-recent" && selection.tiles["blog-setups"] === undefined) {
+    return selection;
+  }
+  if (
+    on &&
+    (tileId === "favorite-products" || tileId === "related-products") &&
+    selection.tiles["product-catalogue"] === undefined
+  ) {
+    return selection;
+  }
+  if (on && tileId === "related-products" && selection.tiles["product-catalogue"] === 1) {
+    return selection;
+  }
   const next = { ...selection.tiles };
   if (on) {
     next[tileId] = piece.initial;
-    if (tileId === "ai-design") delete next["custom-design"];
-    if (tileId === "custom-design") delete next["ai-design"];
     return normalize({ ...selection, tiles: next });
   }
   for (const id of dependentsOf(tileId, selection.tiles)) delete next[id];
+  if (tileId === "blog-setups") {
+    delete next["blog-list"];
+    delete next["blog-post"];
+    delete next["blog-list-count"];
+    delete next["blog-post-count"];
+    delete next["blog-recent"];
+  }
+  if (tileId === "product-catalogue") {
+    delete next["favorite-products"];
+    delete next["related-products"];
+  }
   return normalize({ ...selection, tiles: next });
 }
 
 export function setQuantity(selection: Selection, tileId: string, qty: number): Selection {
   const piece = getTile(tileId);
   if (piece.disabled) return selection;
-  if (qty < piece.min) return setTile(selection, tileId, false);
+  if (qty < piece.min) {
+    if (isAlwaysOn(tileId) || childTileIds.some((id) => id === tileId)) return selection;
+    return setTile(selection, tileId, false);
+  }
   return normalize({
     ...selection,
     tiles: { ...selection.tiles, [tileId]: qty },
   });
 }
 
-const shapeOrder = ["lite", "growth", "platform"] as const;
-
-/**
- * Apply a quantity step. When the step leaves the current package and a
- * neighbouring package can hold the new quantity, snap to that package.
- */
+/** Quantity changes apply immediately. The package is derived again from the whole set. */
 export function stepQuantity(selection: Selection, tileId: string, qty: number): Selection {
-  const piece = getTile(tileId);
-  if (piece.disabled) return selection;
-  if (qty < piece.min) return setTile(selection, tileId, false);
-  const naive = setQuantity(selection, tileId, qty);
-  const from = quote(selection).shape;
-  if (from === "custom" || quote(naive).shape !== "custom") return naive;
-  const fromIndex = shapeOrder.indexOf(from);
-  const goingUp = qty > (selection.tiles[tileId] ?? 0);
-  const candidates = goingUp
-    ? shapeOrder.slice(fromIndex + 1)
-    : shapeOrder.slice(0, fromIndex).reverse();
-  for (const shape of candidates) {
-    const band = getParcel(shape).items.find((item) => item.tileId === tileId);
-    if (!band || qty < band.min || qty > band.max) continue;
-    const snapped = selectionForShape(shape, selection.websitePages, selection.blogSetupMode);
-    const moved = setQuantity(snapped, tileId, qty);
-    if (quote(moved).shape === shape) return moved;
-  }
-  return naive;
+  return setQuantity(selection, tileId, qty);
 }
 
 export function setWebsitePages(selection: Selection, websitePages: number): Selection {
@@ -274,47 +301,60 @@ export function setBlogSetupMode(selection: Selection, blogSetupMode: BlogSetupM
 }
 
 export function selectionForShape(
-  shape: ShapeId,
+  _shape: ShapeId,
   websitePages = defaultWebsitePages,
   blogSetupMode: BlogSetupMode = "same",
 ): Selection {
-  const startingPoint: StartingPointId = "cms-react";
-  const base = { startingPoint, websitePages, blogSetupMode, tiles: {} as Record<string, number> };
-  if (shape === "custom") return normalize(base);
-  const parcel = getParcel(shape);
-  const next: Record<string, number> = {};
-  for (const item of parcel.items) next[item.tileId] = item.qty;
-  return normalize({ ...base, tiles: next });
-}
-
-function extraIds(selected: Record<string, number>, parcel: Parcel): string[] {
-  const included = new Set(parcel.items.map((item) => item.tileId));
-  return Object.keys(selected)
-    .filter((id) => getTile(id).bucket === "implementation" && !included.has(id))
-    .sort();
-}
-
-function itemsCovered(selected: Record<string, number>, parcel: Parcel): boolean {
-  return parcel.items.every((item) => {
-    const qty = selected[item.tileId];
-    return qty !== undefined && qty >= item.min && qty <= item.max;
+  return normalize({
+    startingPoint: "cms-react",
+    websitePages,
+    blogSetupMode,
+    tiles: {
+      templates: 3,
+      sections: 8,
+      menu: 1,
+      languages: 1,
+      forms: 2,
+      system: 1,
+      header: 1,
+      footer: 1,
+      setup: 1,
+      launch: 1,
+      "custom-design": 1,
+    },
   });
 }
 
-function coveredParcels(selected: Record<string, number>): Parcel[] {
-  return parcels.filter((parcel) => {
-    if (!itemsCovered(selected, parcel)) return false;
-    return extraIds(selected, parcel).length <= parcel.maxExtras;
-  });
+const packageRank = { essential: 0, growth: 1, platform: 2 } as const;
+
+function raisePackage(
+  current: Exclude<ShapeId, "custom">,
+  next: Exclude<ShapeId, "custom">,
+): Exclude<ShapeId, "custom"> {
+  return packageRank[next] > packageRank[current] ? next : current;
 }
 
-function bestParcel(selected: Record<string, number>): Parcel | null {
-  const covered = coveredParcels(selected);
-  covered.sort((a, b) => {
-    if (b.items.length !== a.items.length) return b.items.length - a.items.length;
-    return editionRank[b.usualEdition] - editionRank[a.usualEdition];
-  });
-  return covered[0] ?? null;
+/** Lowest package that satisfies every selected option. The highest need wins. */
+export function packageFor(selection: Selection): Exclude<ShapeId, "custom"> {
+  let pack: Exclude<ShapeId, "custom"> = "essential";
+  const selected = selection.tiles;
+  if ((selected.templates ?? 0) >= 4) pack = raisePackage(pack, "growth");
+  if ((selected.sections ?? 0) >= 11) pack = raisePackage(pack, "growth");
+  if ((selected.menu ?? 1) >= 2) pack = raisePackage(pack, "growth");
+  if ((selected.languages ?? 1) >= 2) pack = raisePackage(pack, "growth");
+  const landing = selected["landing-templates"];
+  if (landing !== undefined && landing >= 3) pack = raisePackage(pack, "growth");
+  if (selected.search === 2) pack = raisePackage(pack, "growth");
+  if (selected["blog-recent"] === 2) pack = raisePackage(pack, "growth");
+  if (selected["custom-forms"] !== undefined) pack = raisePackage(pack, "growth");
+  if (selected.hubdb !== undefined) pack = raisePackage(pack, "growth");
+  if ((selected["blog-setups"] ?? 0) >= 2) pack = raisePackage(pack, "growth");
+  if (selected["blog-list"] === 2) pack = raisePackage(pack, "growth");
+  if (selected["blog-post"] === 2) pack = raisePackage(pack, "growth");
+  if (selected["product-catalogue"] !== undefined) pack = raisePackage(pack, "platform");
+  if (selected["favorite-products"] !== undefined) pack = raisePackage(pack, "platform");
+  if (selected["related-products"] !== undefined) pack = raisePackage(pack, "platform");
+  return pack;
 }
 
 type Priced = {
@@ -323,7 +363,6 @@ type Priced = {
   label: string;
   extraTileIds: string[];
   extraCount: number;
-  discountRate: number;
   foundationHours: number;
   openHours: number;
   hours: number;
@@ -338,35 +377,13 @@ type Priced = {
 };
 
 function price(selection: Selection): Priced {
-  const start = getStartingPoint(selection.startingPoint);
-  const parcel = bestParcel(selection.tiles);
-  const inParcel = new Set<string>();
-  if (parcel) {
-    for (const item of parcel.items) inParcel.add(item.tileId);
-  }
-  const rate = parcel?.discount ?? 0;
-  const extraTileIds = parcel
-    ? extraIds(selection.tiles, parcel)
-    : Object.keys(selection.tiles)
-        .filter((id) => getTile(id).bucket === "implementation")
-        .sort();
+  const parcel = getParcel(packageFor(selection));
+  const extraTileIds: string[] = [];
 
   const lines: HourLine[] = [];
-  const foundationOpen = start.hours;
-  let parcelOpen = foundationOpen;
-  let listOpen = foundationOpen;
-  let extraList = 0;
+  let parcelOpen = 0;
+  let listOpen = 0;
   let side = 0;
-
-  lines.push({
-    id: "foundation",
-    label: "Foundation",
-    qty: 1,
-    openHours: foundationOpen,
-    billedHours: roundHours(foundationOpen * (1 - rate)),
-    extra: false,
-    bucket: "implementation",
-  });
 
   for (const item of tiles) {
     const qty = selection.tiles[item.id];
@@ -374,29 +391,58 @@ function price(selection: Selection): Priced {
     const open = hoursFor(item, qty, selection);
     listOpen += open;
     const isContent = item.bucket === "content";
-    const isDesign = item.bucket === "design";
-    const extra = !isContent && !isDesign && !inParcel.has(item.id);
-    let billed = open;
     if (isContent) side += open;
-    else if (parcel && !extra) {
-      parcelOpen += open;
-      billed = open * (1 - rate);
-    } else extraList += open;
+    else parcelOpen += open;
     const mode = modeLabel(item, qty);
+    const counted =
+      item.id === "blog-list" || item.id === "blog-post"
+        ? blogTemplateCount(
+            selection,
+            item.id === "blog-list" ? "blog-list-count" : "blog-post-count",
+          )
+        : qty;
+    const unit = item.id === "blog-list" || item.id === "blog-post" ? "templates" : item.unit;
     lines.push({
       id: item.id,
       label: item.label,
-      qty,
-      ...(item.unit ? { unit: item.unit } : {}),
+      qty: counted,
+      ...(unit ? { unit } : {}),
       ...(mode ? { mode } : {}),
       openHours: roundHours(open),
-      billedHours: roundHours(billed),
-      extra,
+      billedHours: roundHours(open),
+      extra: false,
       bucket: item.bucket,
     });
   }
 
-  const hours = roundHours(parcelOpen * (1 - rate) + extraList + side);
+  if (selection.tiles["custom-design"] !== undefined) {
+    const blog = selection.tiles["blog-setups"] !== undefined;
+    for (const part of designParts({
+      templates: selection.tiles.templates ?? 0,
+      landing: selection.tiles["landing-templates"] ?? 0,
+      sections: selection.tiles.sections ?? 0,
+      listTemplates: blog ? blogTemplateCount(selection, "blog-list-count") : 0,
+      listAdvanced: selection.tiles["blog-list"] === 2,
+      postTemplates: blog ? blogTemplateCount(selection, "blog-post-count") : 0,
+      postAdvanced: selection.tiles["blog-post"] === 2,
+      recentPosts: selection.tiles["blog-recent"] !== undefined,
+    })) {
+      listOpen += part.hours;
+      parcelOpen += part.hours;
+      lines.push({
+        id: part.id,
+        label: part.label,
+        qty: part.qty,
+        ...(part.unit ? { unit: part.unit } : {}),
+        openHours: part.hours,
+        billedHours: part.hours,
+        extra: false,
+        bucket: "design",
+      });
+    }
+  }
+
+  const hours = roundHours(parcelOpen + side);
   const designHours = sumBucket(lines, "design");
   const contentHours = sumBucket(lines, "content");
   const implementationOpenHours = sumBucket(lines, "implementation");
@@ -404,20 +450,14 @@ function price(selection: Selection): Priced {
   const packageOpenHours = roundHours(implementationOpenHours + designHours);
   const packageHours = roundHours(hours - contentHours);
   const openHours = roundHours(listOpen);
-  const label = !parcel
-    ? "Custom"
-    : extraTileIds.length === 0
-      ? parcel.label
-      : `${parcel.label} + ${extraTileIds.length}`;
 
   return {
     parcel,
-    shape: parcel?.id ?? "custom",
-    label,
+    shape: parcel.id,
+    label: parcel.label,
     extraTileIds,
     extraCount: extraTileIds.length,
-    discountRate: rate,
-    foundationHours: start.hours,
+    foundationHours: 0,
     openHours,
     hours,
     savedHours: roundHours(openHours - hours),
@@ -459,7 +499,7 @@ function editionOf(selection: Selection): { edition: Edition; reasons: string[] 
   const hits: { edition: Edition; reason: string }[] = [
     {
       edition: "starter",
-      reason: "Content Hub Starter removes HubSpot branding. Marketing Hub does not.",
+      reason: "Content Hub Starter removes HubSpot branding.",
     },
     ...pages,
   ];
@@ -519,122 +559,18 @@ function hubsOf(selection: Selection): HubBadge[] {
   });
 }
 
-function missingPieces(selected: Record<string, number>, parcel: Parcel): MissingPiece[] {
-  const missing: MissingPiece[] = [];
-  for (const item of parcel.items) {
-    const have = selected[item.tileId] ?? 0;
-    if (have >= item.min && have <= item.max) continue;
-    missing.push({
-      tileId: item.tileId,
-      label: getTile(item.tileId).label,
-      have,
-      need: have > item.max ? item.max : item.min,
-    });
-  }
-  return missing;
-}
-
-function withParcelBands(selection: Selection, parcel: Parcel): Selection {
-  const next = { ...selection.tiles };
-  for (const item of parcel.items) {
-    const have = next[item.tileId] ?? 0;
-    if (have < item.min) next[item.tileId] = item.min;
-    else if (have > item.max) next[item.tileId] = item.max;
-  }
-  return normalize({ ...selection, tiles: next });
-}
-
-function requiredByOthers(selected: Record<string, number>, id: string): boolean {
-  if (id === "hubdb" && selected["external-forms"] === 1) return true;
-  if (id === "serverless" && selected["external-forms"] === 2) return true;
-  return Object.keys(selected).some(
-    (other) => other !== id && getTile(other).requires.includes(id),
-  );
-}
-
-function fitToParcel(
-  selection: Selection,
-  parcel: Parcel,
-): { selection: Selection; removed: TrimPiece[] } {
-  let current = withParcelBands(selection, parcel);
-  const removed: TrimPiece[] = [];
-  for (let guard = 0; guard < 24; guard++) {
-    const extras = extraIds(current.tiles, parcel);
-    if (extras.length <= parcel.maxExtras) break;
-    const roots = extras.filter((id) => !requiredByOthers(current.tiles, id));
-    const pool = roots.length > 0 ? roots : extras;
-    pool.sort((a, b) => {
-      const diff =
-        hoursFor(getTile(b), current.tiles[b] ?? 0, current) -
-        hoursFor(getTile(a), current.tiles[a] ?? 0, current);
-      if (diff !== 0) return diff;
-      return a.localeCompare(b);
-    });
-    const drop = pool[0];
-    if (!drop) break;
-    const before = Object.keys(current.tiles).length;
-    removed.push({ tileId: drop, label: getTile(drop).label });
-    current = setTile(current, drop, false);
-    if (Object.keys(current.tiles).length >= before) break;
-  }
-  return { selection: current, removed };
-}
-
-function restoreHint(selection: Selection, currentHours: number): RestoreHint | null {
-  let best: RestoreHint | null = null;
-  for (const parcel of parcels) {
-    const missing = missingPieces(selection.tiles, parcel);
-    const fitted = fitToParcel(selection, parcel);
-    if (!coveredParcels(fitted.selection.tiles).some((item) => item.id === parcel.id)) continue;
-    if (missing.length === 0 && fitted.removed.length === 0) continue;
-    const restored = price(fitted.selection);
-    const hint: RestoreHint = {
-      shape: parcel.id,
-      label: parcel.label,
-      missing,
-      trim: fitted.removed,
-      savedHours: roundHours(currentHours - restored.hours),
-      discountSavings: restored.savedHours,
-    };
-    if (!best || betterHint(hint, best)) best = hint;
-  }
-  return best;
-}
-
-function betterHint(next: RestoreHint, current: RestoreHint): boolean {
-  if (next.savedHours !== current.savedHours) return next.savedHours > current.savedHours;
-  return next.missing.length + next.trim.length < current.missing.length + current.trim.length;
-}
-
 function pageSpeedOf(selection: Selection): PageSpeed {
   let mobile = 90;
   let desktop = 96;
   let accessibility = 96;
   let seo = 94;
-  let security = 95;
+  const security = 95;
   const notes: string[] = [];
   const sections = selection.tiles.sections ?? 0;
   if (sections > 14) {
     mobile -= 5;
     desktop -= 2;
     notes.push("Performance: a long run of sections weighs more on a phone.");
-  }
-  const video = selection.tiles.video;
-  if (video === 3) {
-    mobile -= 6;
-    desktop -= 2;
-    accessibility -= 2;
-    notes.push("HubSpot Video loads a player. Captions can be added on the file.");
-  } else if (video === 2) {
-    mobile -= 7;
-    desktop -= 3;
-    accessibility -= 6;
-    security -= 3;
-    notes.push("YouTube adds a third-party player. Captions and the embed privacy need a check.");
-  } else if (video === 1) {
-    mobile -= 3;
-    accessibility -= 4;
-    notes.push("A file video needs captions and a text alternative.");
   }
   if (selection.tiles["blog-recent"] === 2) {
     mobile -= 4;
@@ -664,16 +600,6 @@ function pageSpeedOf(selection: Selection): PageSpeed {
     seo -= 1;
     notes.push("SEO: a larger site needs unique titles and a checked sitemap.");
   }
-  if (selection.tiles["private-app"] !== undefined) {
-    security -= 2;
-    notes.push("Security: keep the private-app token least-privilege and the webhook URL checked.");
-  }
-  if (selection.tiles.serverless !== undefined) {
-    security -= 2;
-    notes.push(
-      "Security: serverless functions should validate input and keep secrets out of the response.",
-    );
-  }
   const clamp = (score: number) => Math.min(100, Math.max(35, score));
   if (notes.length === 0) {
     notes.push("A light build: labelled controls, one language, no third-party player.");
@@ -686,18 +612,6 @@ function pageSpeedOf(selection: Selection): PageSpeed {
     security: clamp(security),
     notes,
   };
-}
-
-function assumptions(start: StartingPoint): string[] {
-  return [
-    `${start.detail}`,
-    "Guide hours, not a quote. Replace the placeholders in src/catalog.ts before a proposal.",
-    "Confirm the Content Hub edition against HubSpot's current catalog. Licence price and seats are separate.",
-    "More than 30 website pages needs Professional. That choice is not build hours.",
-    "The PageSpeed figures are an estimate from the build, not a live test.",
-    "The client enters content. The first domain and the first language are included.",
-    "Content hours are added in full. The package rate covers the build and the design.",
-  ];
 }
 
 export function quote(input: Selection): Quote {
@@ -714,8 +628,7 @@ export function quote(input: Selection): Quote {
       : `${priced.parcel.label} is usually Content Hub ${usual}. This set needs ${need}.`;
   }
 
-  const hint = restoreHint(selection, priced.hours);
-  const restore = !priced.parcel ? hint : hint && hint.savedHours > 0 ? hint : null;
+  const restore = null;
 
   return {
     selection,
@@ -725,7 +638,6 @@ export function quote(input: Selection): Quote {
     parcel: priced.parcel,
     extraTileIds: priced.extraTileIds,
     extraCount: priced.extraCount,
-    discountRate: priced.discountRate,
     foundationHours: priced.foundationHours,
     openHours: priced.openHours,
     hours: priced.hours,
@@ -743,7 +655,6 @@ export function quote(input: Selection): Quote {
     lines: priced.lines,
     restore,
     pageSpeed: pageSpeedOf(selection),
-    assumptions: assumptions(getStartingPoint(selection.startingPoint)),
   };
 }
 
@@ -796,7 +707,7 @@ export function decodeSelection(hash: string): Selection | null {
 }
 
 export function isShapeId(value: string): value is ShapeId {
-  return value === "lite" || value === "growth" || value === "platform" || value === "custom";
+  return value === "essential" || value === "growth" || value === "platform" || value === "custom";
 }
 
 export function isBlogSetupMode(value: string): value is BlogSetupMode {

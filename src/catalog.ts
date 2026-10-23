@@ -1,14 +1,22 @@
 /**
  * Guide hours. Replace them before a real proposal.
  *
- * Lite on the CMS React foundation (56h) with 2 templates, 8 sections,
- * a simple blog list, a blog post, recent posts, a simple menu, header, footer,
- * system pages, and a 12h initial setup is 76h of pieces.
- * 56 + 76 = 132 open hours. Lite is 50% off, so the build is 66h.
+ * Essential, Growth, and Platform are project packages. The active package is
+ * the lowest tier that covers every selected option. It is not a choice.
  *
  * Website pages are not build hours. More than 30 needs Professional.
  * The count starts at 25.
+ *
+ * Design hours are charged only while Custom design is on, and they stay
+ * separate from build hours.
  */
+
+/** Display names. Rename the package labels here. */
+export const packageName = {
+  essential: "Essential",
+  growth: "Growth",
+  platform: "Platform",
+} as const;
 
 export const editions = ["free", "starter", "professional", "enterprise"] as const;
 export type Edition = (typeof editions)[number];
@@ -40,10 +48,25 @@ export const starterPageCap = 30;
 
 export const defaultWebsitePages = 25;
 
-/** Attached to every package type. */
-export const setupHours = 12;
+/** Shown before content work. Always on, and not a package choice. */
+export const closingTileIds = ["setup", "launch"] as const;
 
-export const setupNote = "initial setup. Kickoff, accounts, and the first deploy.";
+/** These stay on. Their quantities and modes choose the package. */
+export const alwaysOnTileIds = [
+  "templates",
+  "sections",
+  "menu",
+  "languages",
+  "system",
+  "header",
+  "footer",
+  "setup",
+  "launch",
+] as const;
+
+export function isAlwaysOn(id: string): boolean {
+  return alwaysOnTileIds.some((item) => item === id);
+}
 
 export const editionFacts: Record<Edition, readonly string[]> = {
   free: [
@@ -54,7 +77,6 @@ export const editionFacts: Record<Edition, readonly string[]> = {
   ],
   starter: [
     "Branding removed from pages",
-    "Marketing Hub does not remove that branding",
     "URL redirects and personalization tokens",
     "30 website pages and 30 landing pages",
     "One blog, up to 10,000 posts",
@@ -94,19 +116,19 @@ export const startingPoints: readonly StartingPoint[] = [
   {
     id: "cms-react",
     label: "CMS React project",
-    hours: 56,
-    detail: "Theme, modules, fields, deploy, and handover on a HubSpot Projects theme.",
+    hours: 0,
+    detail: "A HubSpot Projects theme. Hours come only from the items below.",
   },
 ];
 
 export type GroupId =
   | "design"
   | "site"
-  | "languages"
+  | "blog"
   | "features"
-  | "account"
-  | "service"
-  | "launch"
+  | "languages"
+  | "catalogue"
+  | "events"
   | "content";
 
 export type GroupLayout = "pair" | "tiles" | "wide" | "three";
@@ -121,17 +143,12 @@ export const groups: readonly {
 }[] = [
   { id: "design", label: "Design", layout: "pair" },
   { id: "site", label: "", layout: "tiles" },
-  { id: "languages", label: "Languages", layout: "wide" },
+  { id: "blog", label: "Blog", layout: "tiles" },
   { id: "features", label: "Extra features", layout: "tiles" },
-  {
-    id: "account",
-    label: "Account add-ons",
-    layout: "tiles",
-    note: "Separate from the page build. These can raise the HubSpot tier.",
-  },
-  { id: "service", label: "Service", layout: "tiles" },
-  { id: "launch", label: "Launch", layout: "tiles" },
-  { id: "content", label: "Content work", layout: "three" },
+  { id: "languages", label: "Languages", layout: "wide" },
+  { id: "catalogue", label: "", layout: "tiles" },
+  { id: "events", label: "", layout: "wide" },
+  { id: "content", label: "Content", layout: "tiles" },
 ];
 
 export type HubId = "marketing" | "service" | "operations" | "sales" | "commerce" | "crm";
@@ -154,11 +171,11 @@ export type EditionRule = {
 export type TileBadge = "new" | "planned";
 
 export const badgeLabel: Record<TileBadge, string> = {
-  new: "New",
-  planned: "In development",
+  new: "NEW",
+  planned: "in development",
 };
 
-export type TileMode = { label: string; hours: number };
+export type TileMode = { label: string; hours: number; detail?: string; group?: string };
 
 export type BlogSetupMode = "same" | "list" | "post" | "both";
 
@@ -257,10 +274,12 @@ function tile(input: {
 export const tiles: readonly Tile[] = [
   tile({
     id: "ai-design",
-    label: "AI generated design",
+    label: "AI generated",
     group: "design",
-    summary: "A first design pass from the brand notes. 20h. Choosing this clears Custom design.",
-    baseHours: 20,
+    summary: "Under development.",
+    baseHours: 0,
+    disabled: true,
+    badge: "planned",
     bucket: "design",
     rule: starter,
   }),
@@ -269,8 +288,8 @@ export const tiles: readonly Tile[] = [
     label: "Custom design",
     group: "design",
     summary:
-      "A designed set of pages before the build. 30h. Choosing this clears AI generated design.",
-    baseHours: 30,
+      "On by default in every package. Design hours are charged only while this is on. Build hours stay the same.",
+    baseHours: 0,
     bucket: "design",
     rule: starter,
   }),
@@ -278,13 +297,13 @@ export const tiles: readonly Tile[] = [
     id: "templates",
     label: "Page templates",
     group: "site",
-    summary: "Page templates to build. 3h each. Lite holds 2–4, Growth 4–6, Platform 4–12.",
+    summary: "2h each to build. 1–3 keeps Essential. 4 or more needs Growth.",
     baseHours: 0,
-    perUnitHours: 3,
+    perUnitHours: 2,
     unit: "templates",
     min: 1,
     max: 20,
-    initial: 2,
+    initial: 3,
     stepped: true,
     rule: starter,
   }),
@@ -293,7 +312,7 @@ export const tiles: readonly Tile[] = [
     label: "Sections",
     group: "site",
     summary:
-      "Sections to design and build, including things like a hero, cards, a quote, or an FAQ. 3h each. Lite holds 8–12, Growth 8–18, Platform 8–22.",
+      "A hero, cards, a quote, an FAQ, and the rest. 3h each to build. 1–10 keeps Essential. 11 or more needs Growth.",
     baseHours: 0,
     perUnitHours: 3,
     unit: "sections",
@@ -305,11 +324,12 @@ export const tiles: readonly Tile[] = [
   }),
   tile({
     id: "landing-templates",
-    label: "Landing page templates",
+    label: "Landing templates",
     group: "site",
-    summary: "Landing templates to build. None in the packages. 3h each, up to 10.",
+    summary:
+      "Off until you add them. 2h each to build. 1–2 keeps Essential. 3 or more needs Growth.",
     baseHours: 0,
-    perUnitHours: 3,
+    perUnitHours: 2,
     unit: "templates",
     min: 1,
     max: 10,
@@ -320,30 +340,63 @@ export const tiles: readonly Tile[] = [
   tile({
     id: "blog-list",
     label: "List template",
-    group: "site",
-    summary: "Simple is a post list. Advanced adds filters, featured posts, and a richer layout.",
+    group: "blog",
+    summary:
+      "Included with the blog. Simple is 4h. Advanced is 8h and adds related posts and other advanced HubSpot blog features. Advanced needs Growth.",
     baseHours: 0,
     modes: [
       { label: "Simple", hours: 4 },
-      { label: "Advanced", hours: 10 },
+      { label: "Advanced", hours: 8 },
     ],
     rule: starter,
   }),
   tile({
     id: "blog-post",
     label: "Post template",
-    group: "site",
-    summary: "The template for one blog post.",
-    baseHours: 4,
+    group: "blog",
+    summary:
+      "Included with the blog. Simple is 4h. Advanced is 8h and adds related posts and other advanced HubSpot blog features. Advanced needs Growth.",
+    baseHours: 0,
+    modes: [
+      { label: "Simple", hours: 4 },
+      { label: "Advanced", hours: 8 },
+    ],
+    rule: starter,
+  }),
+  tile({
+    id: "blog-list-count",
+    label: "List templates",
+    group: "blog",
+    summary: "How many list templates, when there is more than one blog.",
+    baseHours: 0,
+    unit: "templates",
+    min: 1,
+    max: 20,
+    initial: 1,
+    stepped: true,
+    rule: starter,
+  }),
+  tile({
+    id: "blog-post-count",
+    label: "Post templates",
+    group: "blog",
+    summary: "How many post templates, when there is more than one blog.",
+    baseHours: 0,
+    unit: "templates",
+    min: 1,
+    max: 20,
+    initial: 1,
+    stepped: true,
     rule: starter,
   }),
   tile({
     id: "blog-setups",
     label: "Blogs",
-    group: "site",
+    group: "blog",
     summary:
-      "One blog is included in Lite, with its list template and its post template. Each extra blog is 2h, and can reuse those templates or get its own.",
+      "Off until you add it. The blog itself has no hours. One blog keeps Essential. Two or more needs Growth. Turning this off also turns off the templates and recent posts.",
     baseHours: 0,
+    perUnitHours: 0,
     unit: "blogs",
     min: 1,
     max: 100,
@@ -357,13 +410,13 @@ export const tiles: readonly Tile[] = [
   tile({
     id: "blog-recent",
     label: "Recent blog posts",
-    group: "site",
+    group: "blog",
     summary:
-      "Simple shows the latest posts. Advanced matches recent posts by tag and can be a carousel.",
+      "Off until you add it, and only while the blog is on. Simple lists the latest posts. Advanced can match by tag. Both are 4h to build. Advanced needs Growth.",
     baseHours: 0,
     modes: [
-      { label: "Simple", hours: 6 },
-      { label: "Advanced", hours: 12 },
+      { label: "Simple", hours: 4 },
+      { label: "Advanced", hours: 4 },
     ],
     rule: starter,
   }),
@@ -371,11 +424,12 @@ export const tiles: readonly Tile[] = [
     id: "search",
     label: "Search",
     group: "site",
-    summary: "Simple is the search results template. Advanced adds filters and grouped results.",
+    summary:
+      "Off until you add it. Simple is the search results template, 4h. Advanced adds filters and grouped results, 10h, and needs Growth.",
     baseHours: 0,
     modes: [
-      { label: "Simple", hours: 6 },
-      { label: "Advanced", hours: 14 },
+      { label: "Simple", hours: 4 },
+      { label: "Advanced", hours: 10 },
     ],
     rule: starter,
   }),
@@ -383,11 +437,12 @@ export const tiles: readonly Tile[] = [
     id: "menu",
     label: "Menu",
     group: "site",
-    summary: "Simple is a standard header menu. Advanced is a mega menu.",
+    summary:
+      "Simple is a standard header menu, 2h, and keeps Essential. Advanced is a mega menu, 14h, and needs Growth.",
     baseHours: 0,
     modes: [
-      { label: "Simple", hours: 4 },
-      { label: "Advanced", hours: 12 },
+      { label: "Simple", hours: 2 },
+      { label: "Advanced", hours: 14 },
     ],
     rule: starter,
   }),
@@ -395,101 +450,186 @@ export const tiles: readonly Tile[] = [
     id: "system",
     label: "System pages",
     group: "site",
-    summary: "404, 500, subscriptions, and the password prompt.",
+    summary:
+      "404 and 500 error pages, the subscription page, the backup unsubscribe page, and the subscriptions update page. 2h.",
     baseHours: 2,
     rule: starter,
   }),
   tile({
     id: "header",
-    label: "Global header",
+    label: "Global site header",
     group: "site",
-    summary: "The theme header: logo, navigation slot, and announcement. Placeholder hours.",
-    baseHours: 8,
+    summary: "The theme header: logo, navigation slot, and announcement. 3h.",
+    baseHours: 3,
     rule: starter,
   }),
   tile({
     id: "footer",
-    label: "Global footer",
+    label: "Global site footer",
     group: "site",
-    summary: "The theme footer: links, contact, and legal. Placeholder hours.",
-    baseHours: 6,
+    summary: "The theme footer: links, contact, and legal. 4h.",
+    baseHours: 4,
     rule: starter,
   }),
   tile({
     id: "setup",
     label: "Initial setup",
     group: "site",
-    summary: setupNote,
-    baseHours: setupHours,
+    summary: "Kickoff, accounts, and the first deploy.",
+    baseHours: 6,
     rule: starter,
   }),
   tile({
-    id: "video",
-    label: "Video",
-    group: "features",
+    id: "launch",
+    label: "Launch",
+    group: "site",
     summary:
-      "File is a decorative mp4 from the file manager and plays on any tier. YouTube is an embed, also any tier. HubSpot Video, with tracking, captions, and an in-player form or CTA, starts on Professional (150 videos, 500 on Enterprise).",
-    baseHours: 0,
-    modes: [
-      { label: "File", hours: 4 },
-      { label: "YouTube", hours: 3 },
-      { label: "HubSpot Video", hours: 8 },
-    ],
-    rule: ladder([{ upTo: 2, edition: "starter", reason: "" }], {
-      edition: "professional",
-      reason: () => "HubSpot Video needs Content Hub Professional",
-    }),
+      "Go-live checks and the handover. Includes the DNS change that points the domain at HubSpot.",
+    baseHours: 6,
+    rule: starter,
   }),
   tile({
     id: "hubdb",
-    label: "HubDB module",
+    label: "HubDB based section",
     group: "features",
     summary:
-      "One HubDB-backed module. Use it for a resource library, a team or office directory, or a filterable list that is not a full catalogue.",
-    baseHours: 12,
+      "Off until you add it. A HubDB-backed section, 10h each. A resource library, a directory, or a filterable list that is not a full catalogue. Needs Growth, and Content Hub Professional.",
+    baseHours: 0,
+    perUnitHours: 10,
+    unit: "modules",
+    min: 1,
+    max: 10,
+    initial: 1,
+    stepped: true,
     mark: "Pro",
     rule: fixed("professional", "HubDB needs Content Hub Professional"),
   }),
   tile({
-    id: "product-catalogue",
-    label: "Product catalogue",
+    id: "crm-section",
+    label: "CRM object based section",
     group: "features",
-    summary:
-      "HubDB product catalogue. Basic is listing and detail. Filtered adds facets. Multi-level adds categories.",
+    summary: "",
     baseHours: 0,
+    disabled: true,
+    badge: "planned",
+    rule: starter,
+  }),
+  tile({
+    id: "crm-custom-section",
+    label: "CRM custom object based section",
+    group: "features",
+    summary: "",
+    baseHours: 0,
+    disabled: true,
+    badge: "planned",
+    mark: "Ent",
+    rule: fixed("enterprise", "A CRM custom object needs Enterprise"),
+  }),
+  tile({
+    id: "product-catalogue",
+    label: "HubDB-based",
+    group: "catalogue",
+    summary:
+      "Platform only. HubDB is the catalogue you can quote. CRM Object and Custom Object are in development.",
+    baseHours: 0,
+    initial: 2,
     modes: [
-      { label: "Basic", hours: 16 },
-      { label: "Filtered", hours: 28 },
-      { label: "Multi-level", hours: 40 },
+      {
+        label: "Module based",
+        hours: 28,
+        detail:
+          "A module shows one product and several levels of subproducts. There is no listing page and no dynamic pages. It suits a few main products with many subproducts.",
+      },
+      {
+        label: "Simple",
+        hours: 16,
+        group: "Dynamic pages",
+        detail:
+          "Dynamic pages with one listing page, pagination, and a detail page for each product.",
+      },
+      {
+        label: "Filtered",
+        hours: 28,
+        group: "Dynamic pages",
+        detail:
+          "Dynamic pages with one listing page, pagination, simple filters, sorting, and a detail page for each product.",
+      },
+      {
+        label: "Multi-level",
+        hours: 48,
+        group: "Dynamic pages",
+        detail:
+          "The filtered catalogue, plus an SEO-friendly page for each category. Each category page has filters, sorting, and breadcrumbs, and each product has a detail page.",
+      },
     ],
     mark: "Pro",
-    badge: "new",
-    requires: ["hubdb"],
     rule: fixed("professional", "A product catalogue on HubDB needs Content Hub Professional"),
+  }),
+  tile({
+    id: "catalogue-crm",
+    label: "CRM Object",
+    group: "catalogue",
+    summary: "Products as the standard CRM product record. In development.",
+    baseHours: 0,
+    disabled: true,
+    badge: "planned",
+    rule: starter,
+  }),
+  tile({
+    id: "catalogue-objects",
+    label: "CRM custom object",
+    group: "catalogue",
+    summary: "Enterprise only. Products as a CRM custom object. In development.",
+    baseHours: 0,
+    disabled: true,
+    badge: "planned",
+    mark: "Ent",
+    rule: fixed("enterprise", "CRM custom objects need Enterprise"),
+  }),
+  tile({
+    id: "favorite-products",
+    label: "Favorite products",
+    group: "catalogue",
+    summary:
+      "A favorite-products section on a static page. 6h each. Several are allowed. Off until the catalogue is on.",
+    baseHours: 0,
+    perUnitHours: 6,
+    unit: "sections",
+    min: 1,
+    max: 10,
+    initial: 1,
+    stepped: true,
+    rule: starter,
+  }),
+  tile({
+    id: "related-products",
+    label: "Related products",
+    group: "catalogue",
+    summary: "Related products on the product detail page. 6h. Off until the catalogue is on.",
+    baseHours: 6,
+    rule: starter,
   }),
   tile({
     id: "event-catalogue",
     label: "Event catalogue",
-    group: "features",
-    summary: "HubDB event listing and event page. Not in the build yet.",
+    group: "events",
+    summary: "",
     baseHours: 0,
     disabled: true,
-    mark: "Pro",
     badge: "planned",
-    requires: ["hubdb"],
-    rule: fixed("professional", "An event catalogue on HubDB needs Content Hub Professional"),
+    rule: starter,
   }),
   tile({
     id: "forms",
-    label: "Forms",
-    group: "features",
-    summary: "A standard HubSpot form, with HubSpot's own styling. 3h each.",
+    label: "Form",
+    group: "site",
+    summary: "A standard HubSpot form, with HubSpot's own styling. 1h each.",
     baseHours: 0,
-    perUnitHours: 3,
+    perUnitHours: 1,
     unit: "forms",
     min: 1,
     max: 20,
-    initial: 1,
+    initial: 2,
     stepped: true,
     rule: starter,
   }),
@@ -498,9 +638,9 @@ export const tiles: readonly Tile[] = [
     label: "Custom forms",
     group: "features",
     summary:
-      "The same HubSpot form, restyled to the brand type, colours, and buttons. The first is 8h, then 4h each.",
-    baseHours: 8,
-    perUnitHours: 4,
+      "Off until you add it. Needs Growth. The same HubSpot form, restyled to the brand. The first is 6h, then 2h each.",
+    baseHours: 6,
+    perUnitHours: 2,
     includedInBase: 1,
     unit: "forms",
     min: 1,
@@ -539,11 +679,11 @@ export const tiles: readonly Tile[] = [
   tile({
     id: "ctas",
     label: "CTAs",
-    group: "features",
+    group: "site",
     summary:
-      "HubSpot CTAs: a sticky banner, a pop-up box, a slide-in, an embedded button or banner, or an embedded image. 3h each. Available from Content Hub Starter.",
+      "HubSpot CTAs: a sticky banner, a pop-up box, a slide-in, an embedded button or banner, or an embedded image. 1h each. Any package.",
     baseHours: 0,
-    perUnitHours: 3,
+    perUnitHours: 1,
     unit: "CTAs",
     min: 1,
     max: 20,
@@ -595,121 +735,19 @@ export const tiles: readonly Tile[] = [
     max: 60,
     initial: 1,
     stepped: true,
-    mark: "50+",
     rule: ladder([{ upTo: 50, edition: "starter", reason: "" }], {
       edition: "professional",
       reason: (qty) => `${qty} languages need Content Hub Professional`,
     }),
   }),
   tile({
-    id: "domains",
-    label: "Extra root domains",
-    group: "account",
-    summary: "Each root domain beyond the first. 5h each. Enterprise allows up to 10.",
-    baseHours: 0,
-    perUnitHours: 5,
-    unit: "extra domains",
-    min: 1,
-    max: 9,
-    initial: 1,
-    stepped: true,
-    mark: "Ent",
-    rule: fixed("enterprise", "A second root domain needs Content Hub Enterprise"),
-  }),
-  tile({
-    id: "serverless",
-    label: "Serverless functions",
-    group: "account",
-    summary: "CMS serverless functions. Enter the hours for this account. None until you set them.",
-    baseHours: 0,
-    perUnitHours: 1,
-    unit: "hours",
-    min: 0,
-    max: 400,
-    initial: 0,
-    hourInput: true,
-    mark: "Ent",
-    rule: fixed("enterprise", "Serverless functions need Content Hub Enterprise"),
-  }),
-  tile({
-    id: "custom-objects",
-    label: "Custom objects",
-    group: "account",
-    summary:
-      "Custom object definitions used by the site. Enter the hours. None until you set them.",
-    baseHours: 0,
-    perUnitHours: 1,
-    unit: "hours",
-    min: 0,
-    max: 400,
-    initial: 0,
-    hourInput: true,
-    mark: "Ent",
-    rule: fixed("enterprise", "Custom objects need Content Hub Enterprise"),
-  }),
-  tile({
-    id: "private-app",
-    label: "Private app and webhooks",
-    group: "account",
-    summary:
-      "A private app and its webhooks. They work on every tier. The cap follows the account's highest hub: Starter is 100 calls per 10 seconds and 250,000 a day, Professional is 190 and 625,000, Enterprise is 190 and 1,000,000. Up to 20 private apps, and 1,000 webhook subscriptions on each. A workflow webhook that sends contact data needs Marketing Hub Enterprise. Enter the hours. None until you set them.",
-    baseHours: 0,
-    perUnitHours: 1,
-    unit: "hours",
-    min: 0,
-    max: 400,
-    initial: 0,
-    hourInput: true,
-    rule: starter,
-  }),
-  tile({
-    id: "meetings",
-    label: "Meetings",
-    group: "features",
-    summary: "A meetings link on the site.",
-    baseHours: 0,
-    disabled: true,
-    badge: "planned",
-    hub: { id: "sales", edition: "starter", detail: "Meetings" },
-    rule: starter,
-  }),
-  tile({
-    id: "kb",
-    label: "Knowledge base",
-    group: "service",
-    summary: "Knowledge base theme.",
-    baseHours: 0,
-    disabled: true,
-    badge: "planned",
-    mark: "Service",
-    hub: { id: "service", edition: "professional", detail: "Knowledge base" },
-    rule: starter,
-  }),
-  tile({
-    id: "portal",
-    label: "Customer portal",
-    group: "service",
-    summary: "Customer portal theme.",
-    baseHours: 0,
-    disabled: true,
-    badge: "planned",
-    mark: "Service",
-    hub: { id: "service", edition: "professional", detail: "Customer portal" },
-    rule: starter,
-  }),
-  tile({
     id: "redirects",
-    label: "Redirects",
-    group: "launch",
-    summary:
-      "Redirects for domains HubSpot hosts, from the customer's URL list. The first 100 are 6h. Each further 100 is 2h. The old host still needs its own rules.",
+    label: "Additional redirects",
+    group: "content",
+    summary: "",
     baseHours: 0,
-    unit: "redirects",
-    min: 100,
-    max: 5000,
-    initial: 100,
-    step: 100,
-    stepped: true,
+    disabled: true,
+    badge: "planned",
     rule: starter,
   }),
   tile({
@@ -717,7 +755,7 @@ export const tiles: readonly Tile[] = [
     label: "Page migration",
     group: "content",
     bucket: "content",
-    summary: "Rebuild pages from the current site.",
+    summary: "",
     baseHours: 0,
     disabled: true,
     badge: "planned",
@@ -728,7 +766,7 @@ export const tiles: readonly Tile[] = [
     label: "Blog import",
     group: "content",
     bucket: "content",
-    summary: "Import blog posts into the new templates.",
+    summary: "",
     baseHours: 0,
     disabled: true,
     badge: "planned",
@@ -738,7 +776,7 @@ export const tiles: readonly Tile[] = [
     id: "content-hours",
     label: "Content",
     group: "content",
-    summary: "Hours to write and enter the page and blog content. None until you set them.",
+    summary: "",
     baseHours: 0,
     perUnitHours: 1,
     unit: "hours",
@@ -763,31 +801,43 @@ const groupOrder: Partial<Record<GroupId, readonly string[]>> = {
   design: ["ai-design", "custom-design"],
   site: [
     "templates",
-    "landing-templates",
     "sections",
     "menu",
-    "blog-list",
-    "blog-post",
-    "blog-setups",
-    "blog-recent",
-    "search",
     "header",
     "footer",
     "system",
+    "forms",
+    "ctas",
+    "search",
+    "landing-templates",
+    "setup",
+    "launch",
+  ],
+  blog: [
+    "blog-setups",
+    "blog-list",
+    "blog-post",
+    "blog-list-count",
+    "blog-post-count",
+    "blog-recent",
+  ],
+  catalogue: [
+    "product-catalogue",
+    "catalogue-crm",
+    "catalogue-objects",
+    "favorite-products",
+    "related-products",
   ],
   features: [
-    "forms",
     "custom-forms",
     "external-forms",
-    "ctas",
     "hubdb",
-    "product-catalogue",
-    "event-catalogue",
+    "crm-section",
+    "crm-custom-section",
     "membership",
-    "meetings",
-    "video",
   ],
-  content: ["content-hours", "migrate-pages", "migrate-posts"],
+  events: ["event-catalogue"],
+  content: ["content-hours", "migrate-pages", "migrate-posts", "redirects"],
 };
 
 export function tilesInGroup(group: GroupId): Tile[] {
@@ -820,26 +870,7 @@ export function languageHours(qty: number): number {
 export function redirectHours(count: number): number {
   if (count <= 0) return 0;
   const hundreds = Math.ceil(count / 100);
-  return 6 + 2 * (hundreds - 1);
-}
-
-export function blogSetupHours(
-  qty: number,
-  mode: BlogSetupMode,
-  listHours: number,
-  postHours: number,
-): number {
-  const extra = Math.max(0, qty - 1);
-  if (extra === 0) return 0;
-  const added =
-    mode === "list"
-      ? listHours
-      : mode === "post"
-        ? postHours
-        : mode === "both"
-          ? listHours + postHours
-          : 0;
-  return extra * (2 + added);
+  return 4 + 2 * (hundreds - 1);
 }
 
 export function modeLabel(item: Tile, qty: number): string | undefined {
@@ -848,7 +879,7 @@ export function modeLabel(item: Tile, qty: number): string | undefined {
   return item.modes[index]?.label;
 }
 
-export type ShapeId = "lite" | "growth" | "platform" | "custom";
+export type ShapeId = "essential" | "growth" | "platform" | "custom";
 
 export type ParcelItem = {
   tileId: string;
@@ -862,130 +893,55 @@ export type ParcelItem = {
 export type Parcel = {
   id: Exclude<ShapeId, "custom">;
   label: string;
-  blurb: string;
-  discount: number;
+  customer: string;
   usualEdition: Edition;
   maxExtras: number;
   items: readonly ParcelItem[];
 };
 
-function fixedItem(tileId: string, qty: number, min = qty, max = qty): ParcelItem {
-  return { tileId, qty, min, max };
-}
-
-const liteItems: readonly ParcelItem[] = [
-  fixedItem("templates", 2, 2, 4),
-  fixedItem("sections", 8, 8, 12),
-  fixedItem("blog-list", 1, 1, 2),
-  fixedItem("blog-post", 1),
-  fixedItem("blog-setups", 1, 1, 1),
-  fixedItem("blog-recent", 1, 1, 1),
-  fixedItem("menu", 1, 1, 2),
-  fixedItem("header", 1),
-  fixedItem("footer", 1),
-  fixedItem("system", 1),
-  fixedItem("setup", 1),
-  fixedItem("languages", 1, 1, 60),
-];
-
-const growthItems: readonly ParcelItem[] = [
-  fixedItem("templates", 4, 4, 6),
-  fixedItem("sections", 8, 8, 18),
-  fixedItem("blog-list", 2, 1, 2),
-  fixedItem("blog-post", 1),
-  fixedItem("blog-setups", 1, 1, 100),
-  fixedItem("blog-recent", 1, 1, 2),
-  fixedItem("menu", 2, 1, 2),
-  fixedItem("search", 2, 1, 2),
-  fixedItem("header", 1),
-  fixedItem("footer", 1),
-  fixedItem("system", 1),
-  fixedItem("setup", 1),
-  fixedItem("hubdb", 1),
-  fixedItem("forms", 1, 1, 20),
-  fixedItem("languages", 1, 1, 60),
-];
-
-const platformItems: readonly ParcelItem[] = [
-  fixedItem("templates", 4, 4, 12),
-  fixedItem("sections", 8, 8, 22),
-  fixedItem("blog-list", 2, 1, 2),
-  fixedItem("blog-post", 1),
-  fixedItem("blog-setups", 1, 1, 100),
-  fixedItem("blog-recent", 2, 1, 2),
-  fixedItem("menu", 2, 1, 2),
-  fixedItem("search", 2, 1, 2),
-  fixedItem("header", 1),
-  fixedItem("footer", 1),
-  fixedItem("system", 1),
-  fixedItem("setup", 1),
-  fixedItem("hubdb", 1),
-  fixedItem("product-catalogue", 2, 1, 3),
-  fixedItem("forms", 1, 1, 20),
-  fixedItem("languages", 1, 1, 60),
-];
-
 export const parcels: readonly Parcel[] = [
   {
-    id: "lite",
-    label: "Lite",
-    blurb: "One blog, with the list and post templates.",
-    discount: 0.5,
+    id: "essential",
+    label: packageName.essential,
+    customer:
+      "A smaller website: up to 3 page templates, 10 sections, one language, a simple menu, and one blog.",
     usualEdition: "starter",
-    maxExtras: 1,
-    items: liteItems,
+    maxExtras: 0,
+    items: [],
   },
   {
     id: "growth",
-    label: "Growth",
-    blurb: "More templates, an advanced blog, and a HubDB module.",
-    discount: 0.35,
+    label: packageName.growth,
+    customer:
+      "A larger website: more templates, sections, or languages, or an advanced menu, search, or blog.",
     usualEdition: "professional",
-    maxExtras: 3,
-    items: growthItems,
+    maxExtras: 0,
+    items: [],
   },
   {
     id: "platform",
-    label: "Platform",
-    blurb: "A product catalogue and the wider build.",
-    discount: 0.2,
+    label: packageName.platform,
+    customer:
+      "The website plus a product catalogue, with a product list and a page for each product.",
     usualEdition: "professional",
-    maxExtras: 4,
-    items: platformItems,
+    maxExtras: 0,
+    items: [],
   },
 ];
 
 export type ShapeChoice = {
-  id: ShapeId;
+  id: Exclude<ShapeId, "custom">;
   label: string;
-  discountLabel: string;
-  blurb: string;
-  extraLabel: string;
-  usualEdition: Edition | null;
+  customer: string;
+  usualEdition: Edition;
 };
 
-function extraLabel(count: number): string {
-  return count === 1 ? "1 extra option" : `${count} extra options`;
-}
-
-export const shapeChoices: readonly ShapeChoice[] = [
-  ...parcels.map((parcel) => ({
-    id: parcel.id,
-    label: parcel.label,
-    discountLabel: `${Math.round(parcel.discount * 100)}% off`,
-    blurb: parcel.blurb,
-    extraLabel: extraLabel(parcel.maxExtras),
-    usualEdition: parcel.usualEdition,
-  })),
-  {
-    id: "custom",
-    label: "Custom",
-    discountLabel: "Item price",
-    blurb: "Each piece on its own, without the package rate.",
-    extraLabel: "No package cap",
-    usualEdition: null,
-  },
-];
+export const shapeChoices: readonly ShapeChoice[] = parcels.map((parcel) => ({
+  id: parcel.id,
+  label: parcel.label,
+  customer: parcel.customer,
+  usualEdition: parcel.usualEdition,
+}));
 
 export function getStartingPoint(id: StartingPointId): StartingPoint {
   const found = startingPoints.find((item) => item.id === id);
@@ -997,6 +953,74 @@ export function getParcel(id: Exclude<ShapeId, "custom">): Parcel {
   const found = parcels.find((item) => item.id === id);
   if (!found) throw new Error(`Unknown parcel: ${id}`);
   return found;
+}
+
+export type DesignPart = {
+  id: string;
+  label: string;
+  qty: number;
+  unit?: string;
+  hours: number;
+};
+
+export type DesignInput = {
+  templates: number;
+  landing: number;
+  sections: number;
+  listTemplates: number;
+  listAdvanced: boolean;
+  postTemplates: number;
+  postAdvanced: boolean;
+  recentPosts: boolean;
+};
+
+/** Design hours. Charged only while Custom design is on. Build hours are separate. */
+export function designParts(input: DesignInput): DesignPart[] {
+  const parts: DesignPart[] = [
+    { id: "design-base", label: "Design base", qty: 1, hours: 4 },
+    {
+      id: "design-templates",
+      label: "Page template design",
+      qty: input.templates,
+      unit: "templates",
+      hours: 3 * input.templates,
+    },
+    {
+      id: "design-landing",
+      label: "Landing page design",
+      qty: input.landing,
+      unit: "templates",
+      hours: 3 * input.landing,
+    },
+    {
+      id: "design-sections",
+      label: "Section design",
+      qty: input.sections,
+      unit: "sections",
+      hours: 4 * input.sections,
+    },
+    {
+      id: "design-blog-list",
+      label: "Blog list design",
+      qty: input.listTemplates,
+      unit: "templates",
+      hours: input.listTemplates * (input.listAdvanced ? 6 : 4),
+    },
+    {
+      id: "design-blog-post",
+      label: "Blog post design",
+      qty: input.postTemplates,
+      unit: "templates",
+      hours: input.postTemplates * (input.postAdvanced ? 6 : 4),
+    },
+    {
+      id: "design-recent",
+      label: "Recent blog posts design",
+      qty: 1,
+      hours: input.recentPosts ? 4 : 0,
+    },
+  ];
+  return parts.filter((part) => part.hours > 0);
 }
 
 function assertCatalog(): void {

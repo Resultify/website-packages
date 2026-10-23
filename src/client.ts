@@ -8,9 +8,7 @@ import {
   groups,
   type HubId,
   hubName,
-  type ShapeId,
-  setupHours,
-  setupNote,
+  isAlwaysOn,
   shapeChoices,
   starterPageCap,
   type Tile,
@@ -19,36 +17,25 @@ import {
 } from "./catalog.ts";
 import { type ProductIconId, productIconPaths } from "./product-icons.ts";
 import {
-  type BlogSetupMode,
   decodeSelection,
   encodeSelection,
   formatHours,
-  isBlogSetupMode,
-  isShapeId,
-  type MissingPiece,
   type Quote,
   quote,
   type Selection,
   selectionForShape,
-  setBlogSetupMode,
   setQuantity,
   setTile,
   setWebsitePages,
   stepQuantity,
-  type TrimPiece,
 } from "./quote.ts";
 
 const app = document.querySelector("#app");
 if (!(app instanceof HTMLElement)) throw new Error("Missing #app");
 
-let selection: Selection = decodeSelection(location.hash) ?? selectionForShape("lite");
-
-type PendingChange = { key: string; message: string; next: Selection };
-
-let pending: PendingChange | null = null;
+let selection: Selection = decodeSelection(location.hash) ?? selectionForShape("essential");
 
 function commit(next: Selection): void {
-  pending = null;
   selection = quote(next).selection;
   const hash = `#${encodeSelection(selection)}`;
   if (location.hash !== hash) history.replaceState(null, "", hash);
@@ -70,38 +57,6 @@ function quantityLabel(unit: string, qty: number): string {
   if (qty === 1 && unit === "CTAs") return "1 CTA";
   if (qty === 1 && unit.endsWith("s")) return `1 ${unit.slice(0, -1)}`;
   return `${qty} ${unit}`;
-}
-
-function piecePhrase(piece: MissingPiece): string {
-  if (piece.have <= 0) return `add ${piece.label}`;
-  if (piece.have > piece.need) return `lower ${piece.label} to ${piece.need}`;
-  return `raise ${piece.label} to ${piece.need}`;
-}
-
-function nameList(names: string[]): string {
-  const shown = names.slice(0, 8);
-  const rest = names.length - shown.length;
-  return rest > 0 ? `${shown.join(", ")}, and ${rest} more` : shown.join(", ");
-}
-
-function restoreCopy(result: Quote): string {
-  const hint = result.restore;
-  if (!hint) return "";
-  const missing = nameList(hint.missing.map(piecePhrase));
-  const trim = nameList(hint.trim.map((piece: TrimPiece) => piece.label));
-  const save = hint.savedHours > 0 ? ` and save ${formatHours(hint.savedHours)}h` : "";
-  if (hint.trim.length > 0 && hint.missing.length === 0) {
-    return `Remove ${trim} to fit ${hint.label}${save}.`;
-  }
-  if (hint.trim.length > 0) {
-    return `To use ${hint.label}, ${missing}, and remove ${trim}${save}.`;
-  }
-  if (hint.savedHours > 0) {
-    const sentence = missing.charAt(0).toUpperCase() + missing.slice(1);
-    return `${sentence} to restore ${hint.label} and save ${formatHours(hint.savedHours)}h.`;
-  }
-  const noun = hint.missing.length === 1 ? "change" : "changes";
-  return `${hint.label} is ${hint.missing.length} ${noun} away (${missing}). That shape saves ${formatHours(hint.discountSavings)}h against the item price of the same set.`;
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -131,6 +86,12 @@ function tierPill(edition: Edition, text: string): HTMLElement {
   const badge = el("span", "tier-pill");
   badge.dataset.edition = edition;
   badge.textContent = text;
+  return badge;
+}
+
+function cornerTier(edition: Edition, text: string): HTMLElement {
+  const badge = tierPill(edition, text);
+  badge.classList.add("is-corner");
   return badge;
 }
 
@@ -202,30 +163,10 @@ function renderNav(result: Quote): HTMLElement {
 
 function renderLayout(result: Quote): HTMLElement {
   const layout = el("div", "layout");
-  layout.append(renderShapes(result), renderBoard(result), renderRail(result));
+  const side = el("div", "side");
+  side.append(renderShapes(result), renderSpeed(result));
+  layout.append(side, renderBoard(result), renderRail(result));
   return layout;
-}
-
-function shapeProducts(choiceId: ShapeId, result: Quote): HTMLElement[] {
-  const active = result.shape === choiceId;
-  if (active) {
-    const rows = [
-      productLine("content", "Content Hub", result.edition, editionLabel[result.edition]),
-    ];
-    for (const hub of result.hubs) {
-      rows.push(
-        productLine(hubIcon(hub.id), hubName[hub.id], hub.edition, editionLabel[hub.edition]),
-      );
-    }
-    return rows;
-  }
-  const choice = shapeChoices.find((item) => item.id === choiceId);
-  if (choice?.usualEdition) {
-    return [
-      productLine("content", "Content Hub", choice.usualEdition, editionLabel[choice.usualEdition]),
-    ];
-  }
-  return [];
 }
 
 function hubIcon(id: HubId): ProductIconId {
@@ -290,53 +231,59 @@ function infoMark(): SVGSVGElement {
 
 function renderShapes(result: Quote): HTMLElement {
   const nav = el("nav", "shapes");
-  nav.setAttribute("aria-label", "Project shape");
+  nav.setAttribute("aria-label", "Project package");
   for (const shape of shapeChoices) {
     const on = result.shape === shape.id;
-    const button = el("button", on ? "shape is-on" : "shape");
-    button.type = "button";
-    button.dataset.action = "shape";
-    button.dataset.id = shape.id;
-    button.dataset.focus = `shape-${shape.id}`;
-    button.setAttribute("aria-pressed", on ? "true" : "false");
-    if (shape.id !== "custom") button.append(el("span", "shape-discount", shape.discountLabel));
-    button.append(el("span", "shape-name", shape.label));
-    const rows = shapeProducts(shape.id, result);
-    if (rows.length > 0) {
-      const tiers = el("span", "tier-row");
-      for (const row of rows) tiers.append(row);
-      button.append(tiers);
-    }
-    const setup = el("span", "shape-setup");
-    setup.append(
-      el("strong", undefined, `${setupHours}h`),
-      document.createTextNode(` ${setupNote}`),
-    );
-    button.append(
-      el("span", "shape-extra", shape.extraLabel),
-      el("span", "shape-blurb", shape.blurb),
-      setup,
-    );
-    nav.append(button);
+    const card = el("div", on ? "shape is-on" : "shape");
+    card.dataset.id = shape.id;
+    if (on) card.setAttribute("aria-current", "true");
+    card.append(el("span", "shape-name", shape.label), el("p", "shape-line", shape.customer));
+    nav.append(card);
   }
   return nav;
 }
 
 function renderBoard(result: Quote): HTMLElement {
   const board = el("div", "board");
-  const blogIds = new Set(["blog-list", "blog-post", "blog-setups"]);
+  const blogIds = new Set([
+    "blog-list",
+    "blog-post",
+    "blog-setups",
+    "blog-list-count",
+    "blog-post-count",
+    "blog-recent",
+  ]);
+  const catalogueIds = new Set([
+    "product-catalogue",
+    "catalogue-crm",
+    "catalogue-objects",
+    "favorite-products",
+    "related-products",
+  ]);
   for (const group of groups) {
-    const section = el("section", `group is-${group.layout}`);
+    const section = el("section", `group is-${group.layout} is-${group.id}`);
     if (group.label) section.append(el("h2", undefined, group.label));
     if (group.note) section.append(el("p", "group-note", group.note));
     const grid = el("div", `tiles is-${group.layout}`);
     let blogPlaced = false;
+    let cataloguePlaced = false;
     for (const item of tilesInGroup(group.id)) {
       if (blogIds.has(item.id)) {
         if (!blogPlaced) {
           grid.append(renderBlog(result));
           blogPlaced = true;
         }
+        continue;
+      }
+      if (catalogueIds.has(item.id)) {
+        if (!cataloguePlaced) {
+          grid.append(renderCatalogue(result));
+          cataloguePlaced = true;
+        }
+        continue;
+      }
+      if (item.id === "custom-design") {
+        grid.append(renderDesignTile(result));
         continue;
       }
       grid.append(renderTile(result, item.id));
@@ -347,31 +294,14 @@ function renderBoard(result: Quote): HTMLElement {
   return board;
 }
 
-function ownsPending(id: string): boolean {
-  if (!pending) return false;
-  return (
-    pending.key.startsWith(`step:${id}:`) ||
-    pending.key.startsWith(`tile:${id}:`) ||
-    pending.key.startsWith(`mode:${id}:`)
-  );
-}
-
-function appendLimit(parent: HTMLElement, id: string): void {
-  if (!pending || !ownsPending(id)) return;
-  const note = el("p", "limit", pending.message);
-  note.id = `limit-${id}`;
-  note.setAttribute("role", "status");
-  parent.append(note);
-}
-
-function stepClass(id: string, target: number): string {
-  return pending?.key === `step:${id}:${target}` ? "step is-armed" : "step";
+function stepClass(): string {
+  return "step";
 }
 
 function renderStepper(tile: Tile, qty: number): HTMLElement {
   const step = tile.step;
   const stepper = el("div", "stepper");
-  const dec = el("button", stepClass(tile.id, qty - step));
+  const dec = el("button", stepClass());
   dec.type = "button";
   dec.dataset.action = "dec";
   dec.dataset.id = tile.id;
@@ -390,7 +320,7 @@ function renderStepper(tile: Tile, qty: number): HTMLElement {
   input.dataset.id = tile.id;
   input.dataset.focus = `qty-${tile.id}`;
   input.setAttribute("aria-label", tile.unit ?? tile.label);
-  const inc = el("button", stepClass(tile.id, qty + step));
+  const inc = el("button", stepClass());
   inc.type = "button";
   inc.dataset.action = "inc";
   inc.dataset.id = tile.id;
@@ -402,79 +332,86 @@ function renderStepper(tile: Tile, qty: number): HTMLElement {
   return stepper;
 }
 
+function renderModeButton(
+  id: string,
+  label: string,
+  level: number,
+  qty: number,
+): HTMLButtonElement {
+  const modeButton = el("button", level === qty ? "mode is-on" : "mode");
+  modeButton.type = "button";
+  modeButton.dataset.action = "mode";
+  modeButton.dataset.id = id;
+  modeButton.dataset.qty = String(level);
+  modeButton.dataset.focus = `mode-${id}-${level}`;
+  modeButton.setAttribute("aria-pressed", level === qty ? "true" : "false");
+  modeButton.textContent = label;
+  return modeButton;
+}
+
 function renderModes(id: string, modes: readonly { label: string }[], qty: number): HTMLElement {
   const wrap = el("div", "modes");
   for (const [index, mode] of modes.entries()) {
-    const level = index + 1;
-    const modeButton = el("button", level === qty ? "mode is-on" : "mode");
-    modeButton.type = "button";
-    modeButton.dataset.action = "mode";
-    modeButton.dataset.id = id;
-    modeButton.dataset.qty = String(level);
-    modeButton.dataset.focus = `mode-${id}-${level}`;
-    modeButton.setAttribute("aria-pressed", level === qty ? "true" : "false");
-    if (pending?.key === `mode:${id}:${level}`) modeButton.classList.add("is-armed");
-    modeButton.textContent = mode.label;
-    wrap.append(modeButton);
+    wrap.append(renderModeButton(id, mode.label, index + 1, qty));
   }
   return wrap;
 }
 
-function renderBlogPart(result: Quote, id: string): HTMLElement {
-  const tile = getTile(id);
-  const qty = result.selection.tiles[id];
-  const on = qty !== undefined;
-  const part = el("div", on ? "blog-part is-on" : "blog-part");
-  const button = el("button", "tile-button");
-  button.type = "button";
-  button.dataset.action = "tile";
-  button.dataset.id = id;
-  button.dataset.focus = `tile-${id}`;
-  button.setAttribute("aria-pressed", on ? "true" : "false");
-  const top = el("span", "tile-top");
-  top.append(el("span", "seat"), el("span", "tile-name", tile.label));
-  button.append(top);
-  const line = result.lines.find((item) => item.id === id);
-  const hours = line?.openHours;
-  if (on && hours !== undefined) {
-    const meta = line && !line.extra && result.parcel ? "Included" : `${formatHours(hours)}h`;
-    button.append(el("span", "tile-meta", meta));
+function renderCatalogueComplexity(
+  id: string,
+  modes: readonly { label: string; hours: number; detail?: string; group?: string }[],
+  qty: number,
+): HTMLElement {
+  const block = el("div", "complexity");
+  const choices = el("div", "complexity-choices");
+  let index = 0;
+  while (index < modes.length) {
+    const mode = modes[index];
+    if (!mode) break;
+    if (!mode.group) {
+      choices.append(renderModeButton(id, mode.label, index + 1, qty));
+      index += 1;
+      continue;
+    }
+    const groupName = mode.group;
+    const group = el("div", "mode-group");
+    group.append(el("p", "mode-kicker", groupName));
+    const row = el("div", "modes");
+    while (index < modes.length && modes[index]?.group === groupName) {
+      const grouped = modes[index];
+      if (grouped) row.append(renderModeButton(id, grouped.label, index + 1, qty));
+      index += 1;
+    }
+    group.append(row);
+    choices.append(group);
   }
-  button.append(el("span", "tile-summary", tile.summary));
-  part.append(button);
-  if (on && tile.modes && qty !== undefined) part.append(renderModes(id, tile.modes, qty));
-  appendLimit(part, id);
-  return part;
+  block.append(choices);
+  const selected = modes[qty - 1];
+  if (selected?.detail) block.append(el("p", "tile-summary", selected.detail));
+  return block;
 }
 
-function renderBlogExtra(result: Quote): HTMLElement {
-  const extra = el("div", "blog-extra");
-  extra.append(el("p", undefined, "Each extra blog can reuse these templates, or get its own."));
-  const modes = el("div", "modes");
-  const choices: { id: BlogSetupMode; label: string }[] = [
-    { id: "same", label: "Reuse these" },
-    { id: "list", label: "New list" },
-    { id: "post", label: "New post" },
-    { id: "both", label: "New list and post" },
-  ];
-  for (const choice of choices) {
-    const modeButton = el(
-      "button",
-      result.selection.blogSetupMode === choice.id ? "mode is-on" : "mode",
-    );
-    modeButton.type = "button";
-    modeButton.dataset.action = "blog-mode";
-    modeButton.dataset.qty = choice.id;
-    modeButton.dataset.focus = `blog-mode-${choice.id}`;
-    modeButton.setAttribute(
-      "aria-pressed",
-      result.selection.blogSetupMode === choice.id ? "true" : "false",
-    );
-    modeButton.textContent = choice.label;
-    modes.append(modeButton);
+function renderBlogPart(result: Quote, id: string, countId: string, setups: number): HTMLElement {
+  const tile = getTile(id);
+  const modeQty = result.selection.tiles[id] ?? 1;
+  const count = result.selection.tiles[countId] ?? 1;
+  const part = el("div", "blog-part is-on");
+  const head = el("div", "tile-button");
+  const top = el("span", "tile-top");
+  top.append(el("span", "tile-name", tile.label));
+  const line = result.lines.find((item) => item.id === id);
+  head.append(top);
+  if (line) head.append(el("span", "tile-meta", `${formatHours(line.openHours)}h`));
+  head.append(el("span", "tile-summary", tile.summary));
+  part.append(head);
+  if (tile.modes) part.append(renderModes(id, tile.modes, modeQty));
+  if (setups > 1) {
+    const countTile = getTile(countId);
+    const row = el("div", "design-control");
+    row.append(el("span", "design-control-label", "How many"), renderStepper(countTile, count));
+    part.append(row);
   }
-  extra.append(modes);
-  return extra;
+  return part;
 }
 
 function renderBlog(result: Quote): HTMLElement {
@@ -492,17 +429,111 @@ function renderBlog(result: Quote): HTMLElement {
   top.append(el("span", "seat"), el("span", "tile-name", "Blog"));
   button.append(top);
   const hours = result.lines.find((item) => item.id === "blog-setups")?.openHours ?? 0;
-  if (on) {
-    button.append(el("span", "tile-meta", hours === 0 ? "Included" : `${formatHours(hours)}h`));
-  }
+  if (on && hours > 0) button.append(el("span", "tile-meta", `${formatHours(hours)}h`));
   button.append(el("span", "tile-summary", setups.summary));
   card.append(button);
   if (on && qty !== undefined) card.append(renderStepper(setups, qty));
-  appendLimit(card, "blog-setups");
-  const parts = el("div", "blog-parts");
-  parts.append(renderBlogPart(result, "blog-list"), renderBlogPart(result, "blog-post"));
+  const parts = el("div", on ? "blog-parts" : "blog-parts is-off");
+  if (on && qty !== undefined) {
+    parts.append(
+      renderBlogPart(result, "blog-list", "blog-list-count", qty),
+      renderBlogPart(result, "blog-post", "blog-post-count", qty),
+    );
+  }
   card.append(parts);
-  if (on && qty !== undefined && qty > 1) card.append(renderBlogExtra(result));
+  if (on) card.append(renderTile(result, "blog-recent"));
+  return card;
+}
+
+function catalogueTotal(result: Quote): number {
+  const ids = ["product-catalogue", "favorite-products", "related-products"] as const;
+  return ids.reduce((sum, id) => {
+    const line = result.lines.find((item) => item.id === id);
+    return sum + (line?.openHours ?? 0);
+  }, 0);
+}
+
+function renderCatalogue(result: Quote): HTMLElement {
+  const on = result.selection.tiles["product-catalogue"] !== undefined;
+  const card = el("article", on ? "blog-set catalogue-set is-on" : "blog-set catalogue-set");
+  const button = el("button", "tile-button");
+  button.type = "button";
+  button.dataset.action = "tile";
+  button.dataset.id = "product-catalogue";
+  button.dataset.focus = "tile-product-catalogue";
+  button.setAttribute("aria-pressed", on ? "true" : "false");
+  const catalogue = getTile("product-catalogue");
+  const top = el("span", "tile-top");
+  top.append(el("span", "seat"), el("span", "tile-name", "Product catalogue"));
+  if (on) top.append(el("span", "tile-meta", `${formatHours(catalogueTotal(result))}h`));
+  button.append(top);
+  card.append(button);
+  card.append(el("p", "tile-name", "Source"));
+  const sources = el("div", "source-list");
+  const hubdbWrap = el("div", "source-live");
+  const hubdb = el("button", on ? "mode is-on" : "mode");
+  hubdb.type = "button";
+  hubdb.dataset.action = "tile-on";
+  hubdb.dataset.id = "product-catalogue";
+  hubdb.dataset.focus = "source-hubdb";
+  hubdb.setAttribute("aria-pressed", on ? "true" : "false");
+  hubdb.textContent = "HubDB";
+  hubdbWrap.append(hubdb, cornerTier("professional", "Pro"));
+  sources.append(hubdbWrap);
+  sources.append(
+    renderPlannedSource("CRM Object", "professional", "Pro"),
+    renderPlannedSource("Custom Object", "enterprise", "Ent"),
+  );
+  card.append(sources);
+  const level = result.selection.tiles["product-catalogue"];
+  if (on && catalogue.modes && level !== undefined) {
+    card.append(el("p", "tile-name", "Complexity"));
+    card.append(renderCatalogueComplexity("product-catalogue", catalogue.modes, level));
+  }
+  if (on) {
+    const addons = el("div", "blog-parts");
+    addons.append(renderTile(result, "favorite-products"));
+    if (level !== 1) addons.append(renderTile(result, "related-products"));
+    card.append(addons);
+  }
+  return card;
+}
+
+function renderPlannedSource(label: string, edition: Edition, mark: string): HTMLElement {
+  const item = el("div", "source-choice is-planned");
+  item.append(el("span", "source-choice-name", label));
+  const cover = el("div", "tile-cover");
+  cover.append(el("span", "badge badge-planned", badgeLabel.planned));
+  item.append(cover, cornerTier(edition, mark));
+  return item;
+}
+
+function renderDesignTile(result: Quote): HTMLElement {
+  const tile = getTile("custom-design");
+  const on = result.selection.tiles["custom-design"] !== undefined;
+  const card = el("article", on ? "design-card tile is-on" : "design-card tile");
+  const button = el("button", "tile-button");
+  button.type = "button";
+  button.dataset.action = "tile";
+  button.dataset.id = "custom-design";
+  button.dataset.focus = "tile-custom-design";
+  button.setAttribute("aria-pressed", on ? "true" : "false");
+  const top = el("span", "tile-top");
+  top.append(el("span", "seat"), el("span", "tile-name", tile.label));
+  top.append(el("span", "tile-meta", on ? `${formatHours(result.designHours)}h` : "0h"));
+  button.append(top);
+  const facts = el("ul", "design-facts");
+  for (const fact of [
+    "4h base",
+    "3h each page template",
+    "3h each landing page",
+    "4h each section",
+    "4h or 6h each blog template",
+    "4h recent posts",
+  ]) {
+    facts.append(el("li", undefined, fact));
+  }
+  card.append(button, el("p", "design-lead", tile.summary), facts);
   return card;
 }
 
@@ -519,44 +550,54 @@ function markBadge(mark: string): HTMLElement {
   return el("span", "mark", mark);
 }
 
+function blockedTile(result: Quote, id: string): boolean {
+  if (id === "blog-recent") return result.selection.tiles["blog-setups"] === undefined;
+  if (id === "favorite-products" || id === "related-products") {
+    return result.selection.tiles["product-catalogue"] === undefined;
+  }
+  return false;
+}
+
 function renderTile(result: Quote, id: string): HTMLElement {
   const line = result.lines.find((item) => item.id === id);
   const qty = result.selection.tiles[id];
   const on = qty !== undefined;
   const tile = getTile(id);
+  const locked = isAlwaysOn(id);
+  const blocked = blockedTile(result, id);
   const card = el("article", on ? "tile is-on" : "tile");
-  if (tile.disabled) card.classList.add("is-disabled");
+  if (tile.disabled || blocked) card.classList.add("is-disabled");
+  if (locked) card.classList.add("is-locked");
 
-  const button = el("button", "tile-button");
-  button.type = "button";
-  button.dataset.action = "tile";
+  const button = locked ? el("div", "tile-button") : el("button", "tile-button");
+  if (button instanceof HTMLButtonElement) {
+    button.type = "button";
+    button.dataset.action = "tile";
+    button.disabled = tile.disabled === true || blocked;
+    button.setAttribute("aria-pressed", on ? "true" : "false");
+  }
   button.dataset.id = id;
   button.dataset.focus = `tile-${id}`;
-  button.disabled = tile.disabled === true;
-  button.setAttribute("aria-pressed", on ? "true" : "false");
 
   const top = el("span", "tile-top");
   top.append(el("span", "seat"));
   top.append(el("span", "tile-name", tile.label));
-  const flags = el("span", "tile-flags");
-  if (tile.badge && tile.badge !== "planned") {
-    flags.append(el("span", `badge badge-${tile.badge}`, badgeLabel[tile.badge]));
+  const cornerMark = tile.mark === "Pro" || tile.mark === "Ent";
+  if (tile.mark && !cornerMark) {
+    const flags = el("span", "tile-flags");
+    flags.append(markBadge(tile.mark));
+    top.append(flags);
   }
-  if (tile.mark) flags.append(markBadge(tile.mark));
-  if (flags.childElementCount > 0) top.append(flags);
   button.append(top);
 
   const shownQty = qty ?? tile.initial;
   const shownHours = on && line ? line.openHours : tileHours(tile, shownQty);
-  if (!tile.disabled) {
+  const includedLanguage = tile.id === "languages" && shownQty === 1 && shownHours === 0;
+  if (!tile.disabled && !includedLanguage) {
     const meta = el("span", "tile-meta");
     if (tile.hourInput) {
       meta.append(el("span", undefined, on ? `${formatHours(shownQty)}h` : "Set the hours"));
-    } else if (
-      (tile.id === "languages" || tile.id === "blog-setups") &&
-      shownQty === 1 &&
-      shownHours === 0
-    ) {
+    } else if (tile.id === "blog-setups" && shownQty === 1 && shownHours === 0) {
       meta.append(el("span", undefined, "Included"));
     } else {
       meta.append(el("span", undefined, `${formatHours(shownHours)}h`));
@@ -571,12 +612,17 @@ function renderTile(result: Quote, id: string): HTMLElement {
     }
     button.append(meta);
   }
-  button.append(el("span", "tile-summary", tile.summary));
+  if (tile.summary) button.append(el("span", "tile-summary", tile.summary));
   if (tile.note) button.append(el("span", "tile-note", tile.note));
   card.append(button);
-  appendLimit(card, id);
+  if (cornerMark && tile.mark) {
+    const corner = markBadge(tile.mark);
+    corner.classList.add("is-corner");
+    card.append(corner);
+  }
 
-  if (on && tile.modes && qty !== undefined) card.append(renderModes(id, tile.modes, qty));
+  if (on && !blocked && tile.modes && qty !== undefined)
+    card.append(renderModes(id, tile.modes, qty));
 
   if (on && tile.hourInput && qty !== undefined) {
     const field = el("label", "hour-field");
@@ -595,7 +641,7 @@ function renderTile(result: Quote, id: string): HTMLElement {
     card.append(field);
   }
 
-  if (on && tile.stepped && qty !== undefined && !tile.hourInput) {
+  if (on && !blocked && tile.stepped && qty !== undefined && !tile.hourInput) {
     card.append(renderStepper(tile, qty));
   }
 
@@ -617,48 +663,81 @@ function scoreClass(score: number): string {
 
 function renderTotals(result: Quote): HTMLElement {
   const section = el("section", "rail totals");
+  section.dataset.shape = result.shape;
   section.setAttribute("aria-label", "Hours");
-  const head = el("div", "totals-head");
-  head.append(el("h2", "parcel-label", result.label));
-  if (result.savedHours > 0 && result.parcel) {
-    const percent = Math.round(result.discountRate * 100);
-    head.append(el("span", "totals-off", `${percent}% off`));
-  }
-  section.append(head);
-  const price = el("div", "totals-price");
-  price.append(el("span", "total-label", "Item price"));
-  if (result.savedHours > 0) {
-    price.append(el("span", "totals-open", `${formatHours(result.packageOpenHours)}h`));
-    price.append(el("span", "totals-save", `saves ${formatHours(result.savedHours)}h`));
-  }
-  price.append(el("span", "totals-now", `${formatHours(result.packageHours)}h`));
-  section.append(price);
-  section.append(totalLine("Content", result.contentHours, false));
-  section.append(totalLine("Total", result.hours, true));
+  const banner = el("div", "totals-banner");
+  banner.append(el("h2", "parcel-label", result.label));
+  const body = el("div", "totals-body");
+  const parts = [
+    { key: "design", label: "Design", hours: result.designHours },
+    { key: "build", label: "Implementation", hours: result.implementationHours },
+    { key: "content", label: "Content", hours: result.contentHours },
+  ] as const;
+  for (const part of parts) body.append(totalLine(part.label, part.hours, part.key));
+  body.append(totalsBar(parts));
+  body.append(totalLine("Total", result.hours));
+  section.append(banner, body);
   return section;
 }
 
-function totalLine(label: string, hours: number, sum: boolean): HTMLElement {
-  const line = el("div", sum ? "total-row is-sum" : "total-row");
+function totalsBar(parts: readonly { key: string; hours: number }[]): HTMLElement {
+  const track = el("div", "totals-bar");
+  for (const part of parts) {
+    if (part.hours <= 0) continue;
+    const segment = el("span", `totals-seg is-${part.key}`);
+    segment.style.flexGrow = String(part.hours);
+    track.append(segment);
+  }
+  return track;
+}
+
+function totalLine(label: string, hours: number, key?: string): HTMLElement {
+  const line = el("div", key ? `total-row is-${key}` : "total-row is-sum");
   const value = el("span", "total-value", `${formatHours(hours)}h`);
-  if (sum) value.ariaLive = "polite";
-  line.append(el("span", "total-label", label), value);
+  if (!key) value.ariaLive = "polite";
+  if (key) {
+    const name = el("span", "total-name");
+    name.append(el("span", "totals-dot"), el("span", "total-label", label));
+    line.append(name, value);
+  } else {
+    line.append(el("span", "total-label", label), value);
+  }
   return line;
 }
 
-function renderFold(title: string, focus: string): HTMLDetailsElement {
-  const details = el("details", "rail rail-fold");
-  details.open = true;
-  const summary = el("summary", undefined, title);
-  summary.dataset.focus = focus;
-  details.append(summary);
-  return details;
+function renderDetails(result: Quote): HTMLElement {
+  const section = el("section", "rail");
+  section.dataset.quoteLabel = result.label;
+  section.dataset.quoteHours = String(result.hours);
+  section.dataset.quoteEdition = result.edition;
+  section.dataset.quoteShape = result.shape;
+  section.append(el("h2", "details-title", "Details"));
+
+  section.append(
+    el("p", "rule", `${result.label} is the lowest package that covers every selected option.`),
+  );
+
+  const pages =
+    result.selection.websitePages > starterPageCap
+      ? "More than 30 website pages"
+      : "30 website pages or fewer";
+  section.append(el("p", "counts", pages));
+
+  const facts = el("details", "facts");
+  facts.open = true;
+  facts.append(el("summary", undefined, "Included with this edition"));
+  facts.append(el("p", "facts-note", "These come with the licence. They do not add build hours."));
+  const factList = el("ul");
+  for (const fact of editionFacts[result.edition]) factList.append(el("li", undefined, fact));
+  facts.append(factList);
+  section.append(facts);
+
+  section.append(renderBreakdown(result));
+  return section;
 }
 
 function renderEdition(result: Quote): HTMLElement {
   const section = el("section", "rail edition");
-  const blurb = result.parcel?.blurb ?? "Each piece on its own, without the package rate.";
-  section.append(el("p", "facts-note", blurb));
   const tiers = el("div", "tier-row");
   tiers.append(productLine("content", "Content Hub", result.edition, editionLabel[result.edition]));
   for (const hub of result.hubs) {
@@ -676,65 +755,9 @@ function renderEdition(result: Quote): HTMLElement {
   return section;
 }
 
-function renderDetails(result: Quote): HTMLElement {
-  const fold = renderFold("Details", "fold-details");
-  fold.dataset.quoteLabel = result.label;
-  fold.dataset.quoteHours = String(result.hours);
-  fold.dataset.quoteEdition = result.edition;
-  fold.dataset.quoteShape = result.shape;
-
-  if (result.parcel) {
-    const allowance =
-      result.parcel.maxExtras === 1 ? "1 extra option" : `${result.parcel.maxExtras} extra options`;
-    fold.append(
-      el(
-        "p",
-        "rule",
-        `${result.extraCount} of ${allowance}. Extras stay at item price. The ${result.parcel.label} rate still covers the package.`,
-      ),
-    );
-  } else {
-    fold.append(el("p", "rule", "No package matches this set, so each piece is at item price."));
-  }
-
-  const pages =
-    result.selection.websitePages > starterPageCap
-      ? "More than 30 website pages"
-      : "30 website pages or fewer";
-  fold.append(el("p", "counts", pages));
-
-  const facts = el("section", "facts");
-  facts.append(el("h3", undefined, "Included with this edition"));
-  facts.append(el("p", "facts-note", "These come with the licence. They do not add build hours."));
-  const factList = el("ul");
-  for (const fact of editionFacts[result.edition]) factList.append(el("li", undefined, fact));
-  facts.append(factList);
-  fold.append(facts);
-
-  if (result.restore) fold.append(el("p", "restore", restoreCopy(result)));
-  fold.append(renderBreakdown(result));
-
-  const notes = el("ul", "assumptions");
-  for (const note of result.assumptions) notes.append(el("li", undefined, note));
-  fold.append(notes);
-
-  const print = el("button", "print");
-  print.type = "button";
-  print.dataset.action = "print";
-  print.dataset.focus = "print";
-  print.textContent = "Print this set";
-  fold.append(print);
-  return fold;
-}
-
 function renderRail(result: Quote): HTMLElement {
   const stack = el("div", "rail-stack");
-  stack.append(
-    renderTotals(result),
-    renderEdition(result),
-    renderSpeed(result),
-    renderDetails(result),
-  );
+  stack.append(renderTotals(result), renderEdition(result), renderDetails(result));
   return stack;
 }
 
@@ -765,30 +788,19 @@ function gauge(label: string, score: number): HTMLElement {
 }
 
 function renderSpeed(result: Quote): HTMLElement {
-  const section = renderFold("PageSpeed", "fold-speed");
-  section.append(
-    el(
-      "p",
-      "facts-note",
-      "Performance, accessibility, SEO, and security from the build. Not a live Lighthouse run.",
-    ),
+  const section = el("section", "speed");
+  section.setAttribute("aria-label", "PageSpeed Insights");
+  section.append(el("h2", undefined, "PageSpeed Insights"));
+  const top = el("div", "speed-row");
+  top.append(gauge("Mobile", result.pageSpeed.mobile), gauge("Desktop", result.pageSpeed.desktop));
+  const bottom = el("div", "speed-row");
+  bottom.append(
+    gauge("Accessibility", result.pageSpeed.accessibility),
+    gauge("SEO", result.pageSpeed.seo),
+    gauge("Security", result.pageSpeed.security),
   );
-  const scores = el("div", "speed-scores");
-  const items: { label: string; score: number }[] = [
-    { label: "Mobile", score: result.pageSpeed.mobile },
-    { label: "Desktop", score: result.pageSpeed.desktop },
-    { label: "Accessibility", score: result.pageSpeed.accessibility },
-    { label: "SEO", score: result.pageSpeed.seo },
-    { label: "Security", score: result.pageSpeed.security },
-  ];
-  for (const item of items) scores.append(gauge(item.label, item.score));
-  section.append(scores);
-  const notes = el("ul", "reasons");
-  for (const note of result.pageSpeed.notes) notes.append(el("li", undefined, note));
-  section.append(notes);
-  const cover = el("div", "speed-cover");
-  cover.append(el("span", "badge badge-planned", badgeLabel.planned));
-  section.append(cover);
+  section.append(top, bottom);
+  section.append(el("div", "speed-cover"), el("span", "badge badge-planned", badgeLabel.planned));
   return section;
 }
 
@@ -799,27 +811,18 @@ function renderBreakdown(result: Quote): HTMLElement {
   const list = el("ul", "lines");
   for (const line of result.lines) {
     if (line.bucket === "content") continue;
-    if (line.openHours === 0 && line.id !== "foundation") continue;
+    if (line.openHours === 0) continue;
     const row = el("li", line.extra ? "line is-extra" : "line");
     let name = line.label;
-    if (line.mode) name = `${line.label} · ${line.mode}`;
+    if (line.mode && line.unit && line.unit !== "hours") {
+      name = `${line.label} · ${line.mode} · ${quantityLabel(line.unit, line.qty)}`;
+    } else if (line.mode) name = `${line.label} · ${line.mode}`;
     else if (line.unit && line.unit !== "hours")
       name = `${line.label} · ${quantityLabel(line.unit, line.qty)}`;
     row.append(el("span", undefined, name));
     row.append(el("span", "line-hours", `${formatHours(line.openHours)}h`));
     list.append(row);
   }
-  if (result.savedHours > 0 && result.parcel) {
-    const cut = el("li", "line is-cut");
-    const percent = Math.round(result.discountRate * 100);
-    cut.append(el("span", undefined, `${result.parcel.label} ${percent}% on the package`));
-    cut.append(el("span", "line-hours", `−${formatHours(result.savedHours)}h`));
-    list.append(cut);
-  }
-  const packaged = el("li", "line");
-  packaged.append(el("span", undefined, "Package"));
-  packaged.append(el("span", "line-hours", `${formatHours(result.packageHours)}h`));
-  list.append(packaged);
   if (result.contentHours > 0) {
     const content = el("li", "line");
     content.append(el("span", undefined, "Content"));
@@ -832,32 +835,6 @@ function renderBreakdown(result: Quote): HTMLElement {
   list.append(total);
   details.append(list);
   return details;
-}
-
-function shapeName(result: Quote): string {
-  return result.parcel?.label ?? "Custom";
-}
-
-function switchMessage(
-  current: Selection,
-  next: Selection,
-  tileId: string,
-  dir: "up" | "down" | "other",
-): string {
-  const from = quote(current);
-  const to = quote(next);
-  let lead = `This leaves ${shapeName(from)}`;
-  const band = from.parcel?.items.find((item) => item.tileId === tileId);
-  if (band && dir !== "other") {
-    const piece = getTile(tileId);
-    const edge = dir === "up" ? band.max : band.min;
-    const amount = piece.unit ? quantityLabel(piece.unit, edge) : String(edge);
-    lead =
-      dir === "up"
-        ? `${shapeName(from)} holds ${amount}`
-        : `${shapeName(from)} starts at ${amount}`;
-  }
-  return `${lead}. Click again to switch this set to ${shapeName(to)}.`;
 }
 
 function copyText(value: string): Promise<void> {
@@ -877,19 +854,6 @@ function copyText(value: string): Promise<void> {
   return navigator.clipboard.writeText(value).catch(() => legacy());
 }
 
-function gate(key: string, next: Selection, message: string): void {
-  if (quote(selection).shape === quote(next).shape) {
-    commit(next);
-    return;
-  }
-  if (pending?.key === key) {
-    commit(pending.next);
-    return;
-  }
-  pending = { key, message, next };
-  draw();
-}
-
 app.addEventListener("click", (event) => {
   const target = event.target;
   if (!(target instanceof Element)) return;
@@ -898,7 +862,7 @@ app.addEventListener("click", (event) => {
   const action = button.dataset.action;
   const id = button.dataset.id;
   if (action === "reset") {
-    commit(selectionForShape("lite"));
+    commit(selectionForShape("essential"));
     return;
   }
   if (action === "share") {
@@ -924,14 +888,6 @@ app.addEventListener("click", (event) => {
     commit(setWebsitePages(selection, pages));
     return;
   }
-  if (action === "print") {
-    window.print();
-    return;
-  }
-  if (action === "shape" && id && isShapeId(id)) {
-    commit(selectionForShape(id, selection.websitePages, selection.blogSetupMode));
-    return;
-  }
   if (action === "pages") {
     const next =
       button.dataset.dir === "inc" ? selection.websitePages + 1 : selection.websitePages - 1;
@@ -941,22 +897,16 @@ app.addEventListener("click", (event) => {
   if (action === "mode" && id) {
     const level = Number(button.dataset.qty);
     if (!Number.isFinite(level)) return;
-    const next = setQuantity(selection, id, level);
-    gate(`mode:${id}:${level}`, next, switchMessage(selection, next, id, "other"));
-    return;
-  }
-  if (action === "blog-mode" && button.dataset.qty && isBlogSetupMode(button.dataset.qty)) {
-    commit(setBlogSetupMode(selection, button.dataset.qty));
+    commit(setQuantity(selection, id, level));
     return;
   }
   if (action === "tile" && id) {
     const turningOn = selection.tiles[id] === undefined;
-    const next = setTile(selection, id, turningOn);
-    gate(
-      `tile:${id}:${turningOn ? "on" : "off"}`,
-      next,
-      switchMessage(selection, next, id, "other"),
-    );
+    commit(setTile(selection, id, turningOn));
+    return;
+  }
+  if (action === "tile-on" && id) {
+    if (selection.tiles[id] === undefined) commit(setTile(selection, id, true));
     return;
   }
   if ((action === "dec" || action === "inc") && id) {
@@ -964,9 +914,7 @@ app.addEventListener("click", (event) => {
     if (qty === undefined) return;
     const step = getTile(id).step;
     const nextQty = qty + (action === "inc" ? step : -step);
-    const next = stepQuantity(selection, id, nextQty);
-    const dir = action === "inc" ? "up" : "down";
-    gate(`step:${id}:${nextQty}`, next, switchMessage(selection, next, id, dir));
+    commit(stepQuantity(selection, id, nextQty));
   }
 });
 
@@ -985,22 +933,12 @@ app.addEventListener("change", (event) => {
     commit(setQuantity(selection, id, qty));
     return;
   }
-  if (input.dataset.action === "qty") {
-    const current = selection.tiles[id] ?? qty;
-    const next = stepQuantity(selection, id, qty);
-    if (qty === current) {
-      commit(next);
-      return;
-    }
-    const dir = qty > current ? "up" : "down";
-    gate(`step:${id}:${qty}`, next, switchMessage(selection, next, id, dir));
-  }
+  if (input.dataset.action === "qty") commit(stepQuantity(selection, id, qty));
 });
 
 window.addEventListener("hashchange", () => {
   const decoded = decodeSelection(location.hash);
   if (!decoded) return;
-  pending = null;
   selection = decoded;
   draw();
 });
