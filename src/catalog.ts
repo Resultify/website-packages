@@ -49,7 +49,7 @@ export const starterPageCap = 30;
 export const defaultWebsitePages = 25;
 
 /** Shown before content work. Always on, and not a package choice. */
-export const closingTileIds = ["setup", "launch"] as const;
+export const closingTileIds = ["setup"] as const;
 
 /** These stay on. Their quantities and modes choose the package. */
 export const alwaysOnTileIds = [
@@ -57,51 +57,166 @@ export const alwaysOnTileIds = [
   "sections",
   "menu",
   "languages",
-  "system",
   "header",
   "footer",
   "setup",
-  "launch",
 ] as const;
 
 export function isAlwaysOn(id: string): boolean {
   return alwaysOnTileIds.some((item) => item === id);
 }
 
-export const editionFacts: Record<Edition, readonly string[]> = {
-  free: [
-    "HubSpot branding stays on pages",
-    "30 website pages and 30 landing pages",
-    "One blog, up to 100 posts",
-    "3 languages",
-  ],
-  starter: [
-    "Branding removed from pages",
-    "URL redirects and personalization tokens",
-    "30 website pages and 30 landing pages",
-    "One blog, up to 10,000 posts",
-    "Up to 50 languages",
-    "One root domain",
-    "CTAs: banner, pop-up box, slide-in, embedded, embedded image",
-  ],
-  professional: [
-    "Everything in Starter, with 10,000 website and landing pages",
-    "Up to 100 blogs",
-    "HubDB, dynamic pages, and smart content",
-    "Memberships, up to 2 access groups",
-    "HubSpot Video with advanced features, up to 150 videos",
-    "Brand voice and content remix",
-    "Unlimited languages",
-    "One root domain",
-  ],
-  enterprise: [
-    "Everything in Professional",
-    "Up to 10 root domains",
-    "Serverless functions and custom objects",
-    "Up to 100 access groups",
-    "HubSpot Video advanced features for up to 500 videos",
-  ],
+export type IncludedModule = { name: string; demo?: boolean };
+
+const coreModules: readonly IncludedModule[] = [
+  { name: "Heading" },
+  { name: "Button" },
+  { name: "Form" },
+  { name: "Accordion" },
+  { name: "Icon" },
+  { name: "Video" },
+  { name: "Lottie animation" },
+  { name: "Carousel" },
+  { name: "Hero" },
+  { name: "Hero video" },
+  { name: "Card group" },
+  { name: "Card group with filter" },
+  { name: "FAQ" },
+  { name: "Divider" },
+  { name: "SVG divider" },
+  { name: "Social links" },
+  { name: "Social sharing" },
+  { name: "Audio" },
+];
+
+const growthModules: readonly IncludedModule[] = [
+  { name: "Blog list" },
+  { name: "Recent posts" },
+  { name: "Blog pagination" },
+  { name: "Blog tag filter" },
+  { name: "Case study list" },
+  { name: "Search results" },
+  { name: "Mega menu" },
+];
+
+const platformModules: readonly IncludedModule[] = [{ name: "Product list" }, { name: "Events" }];
+
+const closingModules: readonly IncludedModule[] = [
+  { name: "Unicard", demo: true },
+  { name: "Unicard Duo", demo: true },
+];
+
+export function modulesFor(shape: ShapeId): readonly IncludedModule[] {
+  const modules = [...coreModules];
+  if (shape === "growth" || shape === "platform") modules.push(...growthModules);
+  if (shape === "platform") modules.push(...platformModules);
+  modules.push(...closingModules);
+  return modules;
+}
+
+/** Theme and CMS setup included with the website. Not billed as extra hours. */
+const cmsInclusions: readonly string[] = [
+  "Unicard",
+  "Unicard Duo",
+  "Content modules",
+  "System pages",
+  "HubSpot CTAs",
+  "HubSpot Forms connected to CRM",
+  "Drag-and-drop editing",
+  "Cookie banner and form consent",
+  "Built-in SEO optimizations",
+  "Responsive on all devices",
+  "Fast on mobile",
+  "Optimized for Google PageSpeed",
+  "HTTPS and security updates",
+  "WCAG 2.2 AA accessibility",
+  "European Accessibility Act aligned",
+  "EU Web Accessibility Directive aligned",
+  "Domain with SSL",
+  "Automatic URL redirects",
+  "Auto-generated sitemap",
+  "HubSpot analytics included",
+  "Google Tag Manager ready",
+];
+
+/** Placeholder copy. Replace when the real descriptions are ready. */
+export type InclusionPopover = {
+  text?: string;
+  items?: readonly string[];
+  demo?: string | true;
 };
+
+export const inclusionPopovers: Record<string, InclusionPopover> = {
+  Unicard: {
+    text:
+      "The most flexible and editor-friendly module in the HubSpot CMS ecosystem. " +
+      "One module gives editors up to 30 content variants.",
+    demo: "https://www.nimbly.tech/unicard-variations1",
+  },
+  "Unicard Duo": {
+    text:
+      "Unicard as a pair, side by side. The most flexible and editor-friendly module in the " +
+      "HubSpot CMS ecosystem, with up to 30 content variants from a single module.",
+    demo: true,
+  },
+  "Content modules": {
+    items: [
+      "Audio Player",
+      "Button",
+      "Call-to-Action (CTA)",
+      "Form",
+      "Heading",
+      "Image",
+      "Main CTA",
+      "Meetings",
+      "One Line of Text",
+      "Payment",
+      "Rich Text",
+      "RSS Listing",
+      "Simple Menu",
+      "Video",
+      "WhatsApp Link",
+    ],
+  },
+  "System pages": {
+    text: "404 and 500 error pages, subscription page, backup unsubscribe page, and subscriptions update page.",
+  },
+  "HubSpot CTAs": {
+    text: "HubSpot calls-to-action for the site, and for emails.",
+    items: [
+      "Banner: fixed to the top or bottom, and it stays while the visitor scrolls.",
+      "Pop-up box: appears on a schedule you set.",
+      "Slide-in: slides in from a corner and stays while the visitor scrolls.",
+      "Embedded: a button, banner, or call-to-action on a page or in a HubSpot email.",
+      "Embedded image: an image on a page or in an email.",
+    ],
+  },
+};
+
+const growthPackage: readonly string[] = ["Blog, case studies, and search"];
+
+const platformPackage: readonly string[] = [
+  "Blog, case studies, and search",
+  "Product list and events",
+];
+
+const inclusionNoteByEdition: Record<Edition, string> = {
+  free: "",
+  starter: "",
+  professional: "",
+  enterprise: "",
+};
+
+export function inclusionNote(edition: Edition): string {
+  return inclusionNoteByEdition[edition];
+}
+
+export function inclusionsFor(shape: ShapeId): readonly string[] {
+  const items = [...cmsInclusions];
+  if (shape === "growth") items.push(...growthPackage);
+  if (shape === "platform") items.push(...platformPackage);
+  return items;
+}
 
 export type StartingPointId = "cms-react";
 
@@ -128,7 +243,6 @@ export type GroupId =
   | "features"
   | "languages"
   | "catalogue"
-  | "events"
   | "content";
 
 export type GroupLayout = "pair" | "tiles" | "wide" | "three";
@@ -147,7 +261,6 @@ export const groups: readonly {
   { id: "features", label: "Extra features", layout: "tiles" },
   { id: "languages", label: "Languages", layout: "wide" },
   { id: "catalogue", label: "", layout: "tiles" },
-  { id: "events", label: "", layout: "wide" },
   { id: "content", label: "Content", layout: "tiles" },
 ];
 
@@ -274,12 +387,32 @@ function tile(input: {
 export const tiles: readonly Tile[] = [
   tile({
     id: "ai-design",
-    label: "AI generated",
+    label: "AI generated design",
     group: "design",
-    summary: "Under development.",
+    summary:
+      "Generates design variants from the features included and how many of each. Two variants are the starting cost. Each variant after that adds half of that cost.",
     baseHours: 0,
-    disabled: true,
-    badge: "planned",
+    unit: "variants",
+    min: 2,
+    max: 10,
+    initial: 2,
+    stepped: true,
+    bucket: "design",
+    rule: starter,
+  }),
+  tile({
+    id: "ai-feedback",
+    label: "AI feedback",
+    group: "design",
+    summary: "1 round included. Each extra round is 3h.",
+    baseHours: 0,
+    perUnitHours: 3,
+    includedInBase: 1,
+    unit: "rounds",
+    min: 1,
+    max: 10,
+    initial: 1,
+    stepped: true,
     bucket: "design",
     rule: starter,
   }),
@@ -287,9 +420,24 @@ export const tiles: readonly Tile[] = [
     id: "custom-design",
     label: "Custom design",
     group: "design",
-    summary:
-      "On by default in every package. Design hours are charged only while this is on. Build hours stay the same.",
+    summary: "Design depends on the features included and how many of each.",
     baseHours: 0,
+    bucket: "design",
+    rule: starter,
+  }),
+  tile({
+    id: "design-feedback",
+    label: "Custom feedback",
+    group: "design",
+    summary: "2 rounds included. Each extra round is 6h.",
+    baseHours: 0,
+    perUnitHours: 6,
+    includedInBase: 2,
+    unit: "rounds",
+    min: 2,
+    max: 10,
+    initial: 2,
+    stepped: true,
     bucket: "design",
     rule: starter,
   }),
@@ -297,7 +445,7 @@ export const tiles: readonly Tile[] = [
     id: "templates",
     label: "Page templates",
     group: "site",
-    summary: "2h each to build. 1–3 keeps Essential. 4 or more needs Growth.",
+    summary: "2h each to build. 1–4 keeps Essential. 5 or more needs Growth.",
     baseHours: 0,
     perUnitHours: 2,
     unit: "templates",
@@ -312,9 +460,9 @@ export const tiles: readonly Tile[] = [
     label: "Sections",
     group: "site",
     summary:
-      "A hero, cards, a quote, an FAQ, and the rest. 3h each to build. 1–10 keeps Essential. 11 or more needs Growth.",
+      "A hero, cards, a quote, an FAQ, and the rest. 4h each to build. 1–10 keeps Essential. 11 or more needs Growth.",
     baseHours: 0,
-    perUnitHours: 3,
+    perUnitHours: 4,
     unit: "sections",
     min: 1,
     max: 40,
@@ -326,10 +474,9 @@ export const tiles: readonly Tile[] = [
     id: "landing-templates",
     label: "Landing templates",
     group: "site",
-    summary:
-      "Off until you add them. 2h each to build. 1–2 keeps Essential. 3 or more needs Growth.",
+    summary: "3h each to build. 1–2 keeps Essential. 3 or more needs Growth.",
     baseHours: 0,
-    perUnitHours: 2,
+    perUnitHours: 3,
     unit: "templates",
     min: 1,
     max: 10,
@@ -341,12 +488,16 @@ export const tiles: readonly Tile[] = [
     id: "blog-list",
     label: "List template",
     group: "blog",
-    summary:
-      "Included with the blog. Simple is 4h. Advanced is 8h and adds related posts and other advanced HubSpot blog features. Advanced needs Growth.",
+    summary: "A blog list with pagination.",
     baseHours: 0,
     modes: [
-      { label: "Simple", hours: 4 },
-      { label: "Advanced", hours: 8 },
+      { label: "Simple", hours: 4, detail: "A blog list with pagination." },
+      {
+        label: "Advanced",
+        hours: 8,
+        detail:
+          "A blog list with a custom grid, favorites, filtering, and pagination. Needs Growth.",
+      },
     ],
     rule: starter,
   }),
@@ -354,12 +505,16 @@ export const tiles: readonly Tile[] = [
     id: "blog-post",
     label: "Post template",
     group: "blog",
-    summary:
-      "Included with the blog. Simple is 4h. Advanced is 8h and adds related posts and other advanced HubSpot blog features. Advanced needs Growth.",
+    summary: "A blog post template.",
     baseHours: 0,
     modes: [
-      { label: "Simple", hours: 4 },
-      { label: "Advanced", hours: 8 },
+      { label: "Simple", hours: 4, detail: "A blog post template." },
+      {
+        label: "Advanced",
+        hours: 8,
+        detail:
+          "A blog post with related posts and other advanced HubSpot blog features. Needs Growth.",
+      },
     ],
     rule: starter,
   }),
@@ -393,8 +548,7 @@ export const tiles: readonly Tile[] = [
     id: "blog-setups",
     label: "Blogs",
     group: "blog",
-    summary:
-      "Off until you add it. The blog itself has no hours. One blog keeps Essential. Two or more needs Growth. Turning this off also turns off the templates and recent posts.",
+    summary: "One blog keeps Essential. Two or more needs Growth.",
     baseHours: 0,
     perUnitHours: 0,
     unit: "blogs",
@@ -411,25 +565,24 @@ export const tiles: readonly Tile[] = [
     id: "blog-recent",
     label: "Recent blog posts",
     group: "blog",
-    summary:
-      "Off until you add it, and only while the blog is on. Simple lists the latest posts. Advanced can match by tag. Both are 4h to build. Advanced needs Growth.",
-    baseHours: 0,
-    modes: [
-      { label: "Simple", hours: 4 },
-      { label: "Advanced", hours: 4 },
-    ],
+    summary: "Lists the latest posts. 4h.",
+    baseHours: 4,
     rule: starter,
   }),
   tile({
     id: "search",
     label: "Search",
     group: "site",
-    summary:
-      "Off until you add it. Simple is the search results template, 4h. Advanced adds filters and grouped results, 10h, and needs Growth.",
+    summary: "A search field and a results page template.",
     baseHours: 0,
     modes: [
-      { label: "Simple", hours: 4 },
-      { label: "Advanced", hours: 10 },
+      { label: "Simple", hours: 4, detail: "A search field and a results page template." },
+      {
+        label: "Advanced",
+        hours: 10,
+        detail:
+          "A search dialog with favorites and grouped suggestions, plus a results page template. Needs Growth.",
+      },
     ],
     rule: starter,
   }),
@@ -437,55 +590,54 @@ export const tiles: readonly Tile[] = [
     id: "menu",
     label: "Menu",
     group: "site",
-    summary:
-      "Simple is a standard header menu, 2h, and keeps Essential. Advanced is a mega menu, 14h, and needs Growth.",
+    summary: "A one-level menu, with a touch-friendly version on mobile.",
     baseHours: 0,
     modes: [
-      { label: "Simple", hours: 2 },
-      { label: "Advanced", hours: 14 },
+      {
+        label: "Simple",
+        hours: 3,
+        detail: "A one-level menu, with a touch-friendly version on mobile.",
+      },
+      {
+        label: "Advanced",
+        hours: 12,
+        detail: "A multi-level mega menu, with a touch-friendly version on mobile. Needs Growth.",
+      },
     ],
     rule: starter,
   }),
   tile({
     id: "system",
-    label: "System pages",
+    label: "Custom system templates",
     group: "site",
     summary:
-      "404 and 500 error pages, the subscription page, the backup unsubscribe page, and the subscriptions update page. 2h.",
-    baseHours: 2,
+      "Custom 404 and 500 error pages, subscription page, backup unsubscribe page, and subscriptions update page.",
+    baseHours: 6,
     rule: starter,
   }),
   tile({
     id: "header",
-    label: "Global site header",
+    label: "Global header",
     group: "site",
-    summary: "The theme header: logo, navigation slot, and announcement. 3h.",
+    summary: "The theme header: logo, navigation slot, and buttons.",
     baseHours: 3,
     rule: starter,
   }),
   tile({
     id: "footer",
-    label: "Global site footer",
+    label: "Global footer",
     group: "site",
-    summary: "The theme footer: links, contact, and legal. 4h.",
+    summary: "The theme footer: links, contact, and legal.",
     baseHours: 4,
     rule: starter,
   }),
   tile({
     id: "setup",
-    label: "Initial setup",
-    group: "site",
-    summary: "Kickoff, accounts, and the first deploy.",
-    baseHours: 6,
-    rule: starter,
-  }),
-  tile({
-    id: "launch",
-    label: "Launch",
+    label: "Setup and launch",
     group: "site",
     summary:
-      "Go-live checks and the handover. Includes the DNS change that points the domain at HubSpot.",
-    baseHours: 6,
+      "Kickoff, accounts, and the first deploy, then go-live checks, the handover, and the DNS change that points the domain at HubSpot.",
+    baseHours: 12,
     rule: starter,
   }),
   tile({
@@ -493,7 +645,7 @@ export const tiles: readonly Tile[] = [
     label: "HubDB based section",
     group: "features",
     summary:
-      "Off until you add it. A HubDB-backed section, 10h each. A resource library, a directory, or a filterable list that is not a full catalogue. Needs Growth, and Content Hub Professional.",
+      "A HubDB-backed section. A resource library, a directory, or a filterable list that is not a full catalogue.",
     baseHours: 0,
     perUnitHours: 10,
     unit: "modules",
@@ -506,7 +658,7 @@ export const tiles: readonly Tile[] = [
   }),
   tile({
     id: "crm-section",
-    label: "CRM object based section",
+    label: "CRM Object based section",
     group: "features",
     summary: "",
     baseHours: 0,
@@ -516,7 +668,7 @@ export const tiles: readonly Tile[] = [
   }),
   tile({
     id: "crm-custom-section",
-    label: "CRM custom object based section",
+    label: "Custom Object based section",
     group: "features",
     summary: "",
     baseHours: 0,
@@ -536,13 +688,13 @@ export const tiles: readonly Tile[] = [
     modes: [
       {
         label: "Module based",
-        hours: 28,
+        hours: 22,
         detail:
           "A module shows one product and several levels of subproducts. There is no listing page and no dynamic pages. It suits a few main products with many subproducts.",
       },
       {
         label: "Simple",
-        hours: 16,
+        hours: 18,
         group: "Dynamic pages",
         detail:
           "Dynamic pages with one listing page, pagination, and a detail page for each product.",
@@ -556,10 +708,10 @@ export const tiles: readonly Tile[] = [
       },
       {
         label: "Multi-level",
-        hours: 48,
+        hours: 40,
         group: "Dynamic pages",
         detail:
-          "The filtered catalogue, plus an SEO-friendly page for each category. Each category page has filters, sorting, and breadcrumbs, and each product has a detail page.",
+          "The filtered catalogue, plus an SEO-friendly listing page for each category. Each category page has filters, sorting, and breadcrumbs, and each product has a detail page.",
       },
     ],
     mark: "Pro",
@@ -590,8 +742,7 @@ export const tiles: readonly Tile[] = [
     id: "favorite-products",
     label: "Favorite products",
     group: "catalogue",
-    summary:
-      "A favorite-products section on a static page. 6h each. Several are allowed. Off until the catalogue is on.",
+    summary: "A favorite-products section on a static page.",
     baseHours: 0,
     perUnitHours: 6,
     unit: "sections",
@@ -605,48 +756,16 @@ export const tiles: readonly Tile[] = [
     id: "related-products",
     label: "Related products",
     group: "catalogue",
-    summary: "Related products on the product detail page. 6h. Off until the catalogue is on.",
+    summary: "Related products on the product detail page.",
     baseHours: 6,
-    rule: starter,
-  }),
-  tile({
-    id: "event-catalogue",
-    label: "Event catalogue",
-    group: "events",
-    summary: "",
-    baseHours: 0,
-    disabled: true,
-    badge: "planned",
-    rule: starter,
-  }),
-  tile({
-    id: "forms",
-    label: "Form",
-    group: "site",
-    summary: "A standard HubSpot form, with HubSpot's own styling. 1h each.",
-    baseHours: 0,
-    perUnitHours: 1,
-    unit: "forms",
-    min: 1,
-    max: 20,
-    initial: 2,
-    stepped: true,
     rule: starter,
   }),
   tile({
     id: "custom-forms",
     label: "Custom forms",
-    group: "features",
-    summary:
-      "Off until you add it. Needs Growth. The same HubSpot form, restyled to the brand. The first is 6h, then 2h each.",
-    baseHours: 6,
-    perUnitHours: 2,
-    includedInBase: 1,
-    unit: "forms",
-    min: 1,
-    max: 10,
-    initial: 1,
-    stepped: true,
+    group: "site",
+    summary: "Works like a standard HubSpot form, with your brand styling and better performance",
+    baseHours: 5,
     rule: starter,
   }),
   tile({
@@ -654,7 +773,7 @@ export const tiles: readonly Tile[] = [
     label: "Forms with external data",
     group: "features",
     summary:
-      "A custom form filled from HubDB, or from an external API through a serverless function. Not in the build yet.",
+      "A custom form filled from HubDB, or from an external API through a serverless function.",
     baseHours: 0,
     modes: [
       { label: "HubDB", hours: 12 },
@@ -677,26 +796,10 @@ export const tiles: readonly Tile[] = [
     ),
   }),
   tile({
-    id: "ctas",
-    label: "CTAs",
-    group: "site",
-    summary:
-      "HubSpot CTAs: a sticky banner, a pop-up box, a slide-in, an embedded button or banner, or an embedded image. 1h each. Any package.",
-    baseHours: 0,
-    perUnitHours: 1,
-    unit: "CTAs",
-    min: 1,
-    max: 20,
-    initial: 1,
-    stepped: true,
-    rule: starter,
-  }),
-  tile({
     id: "membership",
     label: "Memberships",
     group: "features",
-    summary:
-      "Login, registration, reset, and access denied, plus each access group. Not in the build yet.",
+    summary: "",
     baseHours: 0,
     disabled: true,
     perUnitHours: 4,
@@ -708,7 +811,7 @@ export const tiles: readonly Tile[] = [
     stepped: true,
     mark: "Pro",
     badge: "planned",
-    note: "Content Hub Professional includes 2 access groups. Enterprise includes 100.",
+    note: "",
     rule: ladder(
       [
         {
@@ -728,7 +831,7 @@ export const tiles: readonly Tile[] = [
     label: "Languages",
     group: "languages",
     summary:
-      "One language is included. The second is 20h. Each language after that is 5h. That covers the language switcher, the domain setup, and translations for the templates and sections. Starter allows 50. Professional is unlimited.",
+      "One language is included. The second is 14h. Each language after that is 6h. That covers the language switcher, the domain setup, and translations for the templates and sections.",
     baseHours: 0,
     unit: "languages",
     min: 1,
@@ -801,17 +904,15 @@ const groupOrder: Partial<Record<GroupId, readonly string[]>> = {
   design: ["ai-design", "custom-design"],
   site: [
     "templates",
+    "landing-templates",
     "sections",
     "menu",
     "header",
     "footer",
-    "system",
-    "forms",
-    "ctas",
+    "custom-forms",
     "search",
-    "landing-templates",
+    "system",
     "setup",
-    "launch",
   ],
   blog: [
     "blog-setups",
@@ -828,15 +929,7 @@ const groupOrder: Partial<Record<GroupId, readonly string[]>> = {
     "favorite-products",
     "related-products",
   ],
-  features: [
-    "custom-forms",
-    "external-forms",
-    "hubdb",
-    "crm-section",
-    "crm-custom-section",
-    "membership",
-  ],
-  events: ["event-catalogue"],
+  features: ["external-forms", "hubdb", "crm-section", "crm-custom-section", "membership"],
   content: ["content-hours", "migrate-pages", "migrate-posts", "redirects"],
 };
 
@@ -864,7 +957,7 @@ export function tileHours(item: Tile, qty: number): number {
 
 export function languageHours(qty: number): number {
   if (qty <= 1) return 0;
-  return 20 + 5 * (qty - 2);
+  return 14 + 6 * (qty - 2);
 }
 
 export function redirectHours(count: number): number {
@@ -904,7 +997,7 @@ export const parcels: readonly Parcel[] = [
     id: "essential",
     label: packageName.essential,
     customer:
-      "A smaller website: up to 3 page templates, 10 sections, one language, a simple menu, and one blog.",
+      "A smaller website: up to 4 page templates, 10 sections, one language and simple menu",
     usualEdition: "starter",
     maxExtras: 0,
     items: [],
@@ -913,7 +1006,7 @@ export const parcels: readonly Parcel[] = [
     id: "growth",
     label: packageName.growth,
     customer:
-      "A larger website: more templates, sections, or languages, or an advanced menu, search, or blog.",
+      "A larger website: 5 or more page templates, more sections or languages, or an advanced menu, search, or blog.",
     usualEdition: "professional",
     maxExtras: 0,
     items: [],
@@ -921,8 +1014,7 @@ export const parcels: readonly Parcel[] = [
   {
     id: "platform",
     label: packageName.platform,
-    customer:
-      "The website plus a product catalogue, with a product list and a page for each product.",
+    customer: "The website plus a product catalogue, and other extra features.",
     usualEdition: "professional",
     maxExtras: 0,
     items: [],
@@ -960,6 +1052,7 @@ export type DesignPart = {
   label: string;
   qty: number;
   unit?: string;
+  mode?: string;
   hours: number;
 };
 
@@ -967,60 +1060,258 @@ export type DesignInput = {
   templates: number;
   landing: number;
   sections: number;
+  /** 0 off, 1 simple, 2 advanced. */
+  menu: number;
+  header: boolean;
+  footer: boolean;
+  customForms: boolean;
+  /** 0 off, 1 simple, 2 advanced. */
+  search: number;
+  systemPages: boolean;
+  setup: boolean;
   listTemplates: number;
   listAdvanced: boolean;
   postTemplates: number;
   postAdvanced: boolean;
   recentPosts: boolean;
+  hubdb: number;
+  /** 0 off, then module based, simple, filtered, multi-level. */
+  catalogue: number;
+  favoriteProducts: number;
+  relatedProducts: boolean;
 };
 
-/** Design hours. Charged only while Custom design is on. Build hours are separate. */
-export function designParts(input: DesignInput): DesignPart[] {
+const catalogueDesignMode = ["", "Module based", "Simple", "Filtered", "Multi-level"] as const;
+
+type DesignRates = {
+  template: number;
+  landing: number;
+  section: number;
+  menuSimple: number;
+  menuAdvanced: number;
+  header: number;
+  footer: number;
+  customForms: number;
+  searchSimple: number;
+  searchAdvanced: number;
+  system: number;
+  setup: number;
+  blogListSimple: number;
+  blogListAdvanced: number;
+  blogPostSimple: number;
+  blogPostAdvanced: number;
+  recent: number;
+  hubdb: number;
+  catalogue: readonly [number, number, number, number, number];
+  favorite: number;
+  related: number;
+};
+
+const customDesignRates: DesignRates = {
+  template: 2,
+  landing: 2,
+  section: 3,
+  menuSimple: 2,
+  menuAdvanced: 8,
+  header: 2,
+  footer: 3,
+  customForms: 4,
+  searchSimple: 3,
+  searchAdvanced: 6,
+  system: 5,
+  setup: 4,
+  blogListSimple: 4,
+  blogListAdvanced: 6,
+  blogPostSimple: 4,
+  blogPostAdvanced: 6,
+  recent: 3,
+  hubdb: 3,
+  catalogue: [0, 16, 10, 18, 28],
+  favorite: 3,
+  related: 3,
+};
+
+const aiDesignRates: DesignRates = {
+  template: 1,
+  landing: 1,
+  section: 1,
+  menuSimple: 1,
+  menuAdvanced: 1,
+  header: 1,
+  footer: 1,
+  customForms: 1,
+  searchSimple: 1,
+  searchAdvanced: 1,
+  system: 1,
+  setup: 4,
+  blogListSimple: 2,
+  blogListAdvanced: 2,
+  blogPostSimple: 2,
+  blogPostAdvanced: 2,
+  recent: 1,
+  hubdb: 1,
+  catalogue: [0, 6, 4, 6, 10],
+  favorite: 1,
+  related: 1,
+};
+
+/** Two variants are the starting cost. Each variant after that adds half of that cost. */
+export function aiDesignSets(variants: number): number {
+  if (variants <= 0) return 0;
+  return 1 + Math.max(0, variants - 2) * 0.5;
+}
+
+function designLines(
+  input: DesignInput,
+  rates: DesignRates,
+  idPrefix: string,
+  namePrefix: string,
+): DesignPart[] {
+  const menuAdvanced = input.menu >= 2;
+  const searchAdvanced = input.search >= 2;
+  const listRate = input.listAdvanced ? rates.blogListAdvanced : rates.blogListSimple;
+  const postRate = input.postAdvanced ? rates.blogPostAdvanced : rates.blogPostSimple;
+  const catalogueLevel = Math.min(rates.catalogue.length - 1, Math.max(0, input.catalogue));
+  const catalogueMode = catalogueDesignMode[catalogueLevel] ?? "";
   const parts: DesignPart[] = [
-    { id: "design-base", label: "Design base", qty: 1, hours: 4 },
     {
-      id: "design-templates",
-      label: "Page template design",
+      id: `${idPrefix}templates`,
+      label: `${namePrefix}Page template design`,
       qty: input.templates,
       unit: "templates",
-      hours: 3 * input.templates,
+      hours: rates.template * input.templates,
     },
     {
-      id: "design-landing",
-      label: "Landing page design",
+      id: `${idPrefix}landing`,
+      label: `${namePrefix}Landing page design`,
       qty: input.landing,
       unit: "templates",
-      hours: 3 * input.landing,
+      hours: rates.landing * input.landing,
     },
     {
-      id: "design-sections",
-      label: "Section design",
+      id: `${idPrefix}sections`,
+      label: `${namePrefix}Section design`,
       qty: input.sections,
       unit: "sections",
-      hours: 4 * input.sections,
+      hours: rates.section * input.sections,
     },
     {
-      id: "design-blog-list",
-      label: "Blog list design",
+      id: `${idPrefix}menu`,
+      label: `${namePrefix}Menu design`,
+      qty: 1,
+      ...(rates.menuSimple === rates.menuAdvanced
+        ? {}
+        : { mode: menuAdvanced ? "Advanced" : "Simple" }),
+      hours: input.menu === 0 ? 0 : menuAdvanced ? rates.menuAdvanced : rates.menuSimple,
+    },
+    {
+      id: `${idPrefix}header`,
+      label: `${namePrefix}Global header design`,
+      qty: 1,
+      hours: input.header ? rates.header : 0,
+    },
+    {
+      id: `${idPrefix}footer`,
+      label: `${namePrefix}Global footer design`,
+      qty: 1,
+      hours: input.footer ? rates.footer : 0,
+    },
+    {
+      id: `${idPrefix}custom-forms`,
+      label: `${namePrefix}Custom forms design`,
+      qty: 1,
+      hours: input.customForms ? rates.customForms : 0,
+    },
+    {
+      id: `${idPrefix}search`,
+      label: `${namePrefix}Search design`,
+      qty: 1,
+      ...(rates.searchSimple === rates.searchAdvanced
+        ? {}
+        : { mode: searchAdvanced ? "Advanced" : "Simple" }),
+      hours: input.search === 0 ? 0 : searchAdvanced ? rates.searchAdvanced : rates.searchSimple,
+    },
+    {
+      id: `${idPrefix}system`,
+      label: `${namePrefix}Custom system templates design`,
+      qty: 1,
+      hours: input.systemPages ? rates.system : 0,
+    },
+    {
+      id: `${idPrefix}setup`,
+      label: `${namePrefix}Setup and launch design`,
+      qty: 1,
+      hours: input.setup ? rates.setup : 0,
+    },
+    {
+      id: `${idPrefix}blog-list`,
+      label: `${namePrefix}Blog list design`,
       qty: input.listTemplates,
       unit: "templates",
-      hours: input.listTemplates * (input.listAdvanced ? 6 : 4),
+      ...(rates.blogListSimple === rates.blogListAdvanced
+        ? {}
+        : { mode: input.listAdvanced ? "Advanced" : "Simple" }),
+      hours: input.listTemplates * listRate,
     },
     {
-      id: "design-blog-post",
-      label: "Blog post design",
+      id: `${idPrefix}blog-post`,
+      label: `${namePrefix}Blog post design`,
       qty: input.postTemplates,
       unit: "templates",
-      hours: input.postTemplates * (input.postAdvanced ? 6 : 4),
+      ...(rates.blogPostSimple === rates.blogPostAdvanced
+        ? {}
+        : { mode: input.postAdvanced ? "Advanced" : "Simple" }),
+      hours: input.postTemplates * postRate,
     },
     {
-      id: "design-recent",
-      label: "Recent blog posts design",
+      id: `${idPrefix}recent`,
+      label: `${namePrefix}Recent blog posts design`,
       qty: 1,
-      hours: input.recentPosts ? 4 : 0,
+      hours: input.recentPosts ? rates.recent : 0,
+    },
+    {
+      id: `${idPrefix}hubdb`,
+      label: `${namePrefix}HubDB section design`,
+      qty: input.hubdb,
+      unit: "modules",
+      hours: rates.hubdb * input.hubdb,
+    },
+    {
+      id: `${idPrefix}catalogue`,
+      label: `${namePrefix}Product catalogue design`,
+      qty: 1,
+      ...(catalogueMode ? { mode: catalogueMode } : {}),
+      hours: rates.catalogue[catalogueLevel] ?? 0,
+    },
+    {
+      id: `${idPrefix}favorites`,
+      label: `${namePrefix}Favorite products design`,
+      qty: input.favoriteProducts,
+      unit: "sections",
+      hours: rates.favorite * input.favoriteProducts,
+    },
+    {
+      id: `${idPrefix}related`,
+      label: `${namePrefix}Related products design`,
+      qty: 1,
+      hours: input.relatedProducts ? rates.related : 0,
     },
   ];
   return parts.filter((part) => part.hours > 0);
+}
+
+/** Design hours. Charged only while Custom design is on. Build hours are separate. */
+export function designParts(input: DesignInput): DesignPart[] {
+  return designLines(input, customDesignRates, "design-", "");
+}
+
+/** AI design hours for one set, multiplied by the variant sets. */
+export function aiDesignParts(input: DesignInput, sets: number): DesignPart[] {
+  if (sets <= 0) return [];
+  return designLines(input, aiDesignRates, "ai-", "AI ").map((part) => ({
+    ...part,
+    hours: part.hours * sets,
+  }));
 }
 
 function assertCatalog(): void {

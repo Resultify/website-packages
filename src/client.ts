@@ -2,12 +2,14 @@ import {
   badgeLabel,
   defaultWebsitePages,
   type Edition,
-  editionFacts,
   editionLabel,
   getTile,
   groups,
   type HubId,
   hubName,
+  inclusionNote,
+  inclusionPopovers,
+  inclusionsFor,
   isAlwaysOn,
   shapeChoices,
   starterPageCap,
@@ -20,6 +22,7 @@ import {
   decodeSelection,
   encodeSelection,
   formatHours,
+  type HourLine,
   type Quote,
   quote,
   type Selection,
@@ -54,7 +57,6 @@ function draw(): void {
 }
 
 function quantityLabel(unit: string, qty: number): string {
-  if (qty === 1 && unit === "CTAs") return "1 CTA";
   if (qty === 1 && unit.endsWith("s")) return `1 ${unit.slice(0, -1)}`;
   return `${qty} ${unit}`;
 }
@@ -91,8 +93,13 @@ function tierPill(edition: Edition, text: string): HTMLElement {
 
 function cornerTier(edition: Edition, text: string): HTMLElement {
   const badge = tierPill(edition, text);
-  badge.classList.add("is-corner");
+  badge.classList.add("badge", "is-sm", "is-tr", "is-corner");
   return badge;
+}
+
+function hourBadge(hours: string, bucket: "design" | "implementation" | "content"): HTMLElement {
+  const kind = bucket === "design" ? "is-design" : bucket === "content" ? "is-content" : "is-build";
+  return el("span", `badge is-lg is-br is-hours is-corner ${kind}`, hours);
 }
 
 function productLine(
@@ -139,7 +146,9 @@ function resultifyLogo(): SVGSVGElement {
 function renderNav(result: Quote): HTMLElement {
   const header = el("header", "navbar");
   const brand = el("div", "nav-brand");
-  brand.append(resultifyLogo(), el("p", "nav-title", "Website packages"));
+  const title = el("p", "nav-title");
+  title.append(el("span", undefined, "Website packages"), el("span", "nav-beta", "Beta"));
+  brand.append(resultifyLogo(), title);
   const tools = el("div", "nav-tools");
   tools.append(renderPageCap(result));
   const reset = el("button", "nav-btn");
@@ -156,7 +165,15 @@ function renderNav(result: Quote): HTMLElement {
   json.type = "button";
   json.disabled = true;
   json.textContent = "JSON";
-  tools.append(reset, share, json);
+  const save = el("button", "nav-btn");
+  save.type = "button";
+  save.disabled = true;
+  save.textContent = "Save";
+  const login = el("button", "nav-btn");
+  login.type = "button";
+  login.disabled = true;
+  login.textContent = "Login";
+  tools.append(reset, share, json, save, login);
   header.append(brand, tools);
   return header;
 }
@@ -184,22 +201,23 @@ function hubIcon(id: HubId): ProductIconId {
 
 function renderPageCap(result: Quote): HTMLElement {
   const on = result.selection.websitePages > starterPageCap;
-  const button = el("button", on ? "nav-btn page-cap is-on" : "nav-btn page-cap");
+  const wrap = el("span", on ? "nav-btn page-cap is-on" : "nav-btn page-cap");
+  const button = el("button", "page-cap-toggle");
   button.type = "button";
   button.dataset.action = "pages-over";
   button.dataset.focus = "pages-over";
   button.setAttribute("aria-pressed", on ? "true" : "false");
-  button.append(el("span", undefined, "30+ pages"), infoMark());
-  const note = el(
-    "span",
-    "info-note",
-    "More than 30 website pages needs Professional. This is not a build feature.",
-  );
-  note.setAttribute("role", "tooltip");
-  note.setAttribute("aria-hidden", "true");
-  button.setAttribute("aria-label", "30+ pages");
-  button.append(note);
-  return button;
+  button.textContent = "30+ pages";
+  const info = el("button", "page-cap-info");
+  info.type = "button";
+  info.setAttribute("aria-label", "About 30+ pages");
+  info.setAttribute("aria-describedby", "page-cap-note");
+  info.append(infoMark());
+  const note = el("div", "info-note", "More than 30 website pages needs Professional.");
+  note.id = "page-cap-note";
+  bindClickPopover(info, note);
+  wrap.append(button, info, note);
+  return wrap;
 }
 
 function infoMark(): SVGSVGElement {
@@ -280,6 +298,10 @@ function renderBoard(result: Quote): HTMLElement {
           grid.append(renderCatalogue(result));
           cataloguePlaced = true;
         }
+        continue;
+      }
+      if (item.id === "ai-design") {
+        grid.append(renderAiDesignTile(result));
         continue;
       }
       if (item.id === "custom-design") {
@@ -401,16 +423,11 @@ function renderBlogPart(result: Quote, id: string, countId: string, setups: numb
   top.append(el("span", "tile-name", tile.label));
   const line = result.lines.find((item) => item.id === id);
   head.append(top);
-  if (line) head.append(el("span", "tile-meta", `${formatHours(line.openHours)}h`));
-  head.append(el("span", "tile-summary", tile.summary));
+  head.append(el("span", "tile-summary", tile.modes?.[modeQty - 1]?.detail ?? tile.summary));
   part.append(head);
+  if (line) part.append(hourBadge(`${formatHours(line.openHours)}h`, tile.bucket));
   if (tile.modes) part.append(renderModes(id, tile.modes, modeQty));
-  if (setups > 1) {
-    const countTile = getTile(countId);
-    const row = el("div", "design-control");
-    row.append(el("span", "design-control-label", "How many"), renderStepper(countTile, count));
-    part.append(row);
-  }
+  if (setups > 1) part.append(renderStepper(getTile(countId), count));
   return part;
 }
 
@@ -428,10 +445,10 @@ function renderBlog(result: Quote): HTMLElement {
   const top = el("span", "tile-top");
   top.append(el("span", "seat"), el("span", "tile-name", "Blog"));
   button.append(top);
-  const hours = result.lines.find((item) => item.id === "blog-setups")?.openHours ?? 0;
-  if (on && hours > 0) button.append(el("span", "tile-meta", `${formatHours(hours)}h`));
   button.append(el("span", "tile-summary", setups.summary));
   card.append(button);
+  const hours = result.lines.find((item) => item.id === "blog-setups")?.openHours ?? 0;
+  if (on && hours > 0) card.append(hourBadge(`${formatHours(hours)}h`, setups.bucket));
   if (on && qty !== undefined) card.append(renderStepper(setups, qty));
   const parts = el("div", on ? "blog-parts" : "blog-parts is-off");
   if (on && qty !== undefined) {
@@ -465,9 +482,12 @@ function renderCatalogue(result: Quote): HTMLElement {
   const catalogue = getTile("product-catalogue");
   const top = el("span", "tile-top");
   top.append(el("span", "seat"), el("span", "tile-name", "Product catalogue"));
-  if (on) top.append(el("span", "tile-meta", `${formatHours(catalogueTotal(result))}h`));
   button.append(top);
   card.append(button);
+  if (on) {
+    const total = catalogueTotal(result);
+    if (total > 0) card.append(hourBadge(`${formatHours(total)}h`, catalogue.bucket));
+  }
   card.append(el("p", "tile-name", "Source"));
   const sources = el("div", "source-list");
   const hubdbWrap = el("div", "source-live");
@@ -503,7 +523,7 @@ function renderPlannedSource(label: string, edition: Edition, mark: string): HTM
   const item = el("div", "source-choice is-planned");
   item.append(el("span", "source-choice-name", label));
   const cover = el("div", "tile-cover");
-  cover.append(el("span", "badge badge-planned", badgeLabel.planned));
+  cover.append(el("span", "badge badge-planned is-md is-bl is-corner", badgeLabel.planned));
   item.append(cover, cornerTier(edition, mark));
   return item;
 }
@@ -520,21 +540,158 @@ function renderDesignTile(result: Quote): HTMLElement {
   button.setAttribute("aria-pressed", on ? "true" : "false");
   const top = el("span", "tile-top");
   top.append(el("span", "seat"), el("span", "tile-name", tile.label));
-  top.append(el("span", "tile-meta", on ? `${formatHours(result.designHours)}h` : "0h"));
   button.append(top);
-  const facts = el("ul", "design-facts");
-  for (const fact of [
-    "4h base",
-    "3h each page template",
-    "3h each landing page",
-    "4h each section",
-    "4h or 6h each blog template",
-    "4h recent posts",
-  ]) {
-    facts.append(el("li", undefined, fact));
+  card.append(button, el("p", "design-lead", tile.summary), renderDesignRates());
+  if (on) {
+    const foot = el("div", "design-foot");
+    foot.append(renderFeedback(result, "design-feedback"));
+    card.append(foot);
   }
-  card.append(button, el("p", "design-lead", tile.summary), facts);
+  card.append(hourBadge(`${formatHours(on ? designHoursFor(result, "design-") : 0)}h`, "design"));
   return card;
+}
+
+function renderLabeledStepper(label: string, tile: Tile, qty: number): HTMLElement {
+  const row = el("div", "design-feedback-row");
+  row.append(el("span", "design-feedback-label", label), renderStepper(tile, qty));
+  return row;
+}
+
+function renderFeedback(result: Quote, id: string): HTMLElement {
+  const tile = getTile(id);
+  const qty = result.selection.tiles[id] ?? tile.initial;
+  const wrap = el("div", "design-feedback");
+  wrap.append(
+    renderLabeledStepper("Feedback", tile, qty),
+    el("p", "design-feedback-note", tile.summary),
+  );
+  return wrap;
+}
+
+function designHoursFor(result: Quote, prefix: string): number {
+  return result.lines.reduce((sum, line) => {
+    if (!line.id.startsWith(prefix)) return sum;
+    return sum + line.openHours;
+  }, 0);
+}
+
+function renderAiDesignTile(result: Quote): HTMLElement {
+  const tile = getTile("ai-design");
+  const qty = result.selection.tiles["ai-design"];
+  const on = qty !== undefined;
+  const card = el("article", on ? "design-card tile is-on" : "design-card tile");
+  const button = el("button", "tile-button");
+  button.type = "button";
+  button.dataset.action = "tile";
+  button.dataset.id = "ai-design";
+  button.dataset.focus = "tile-ai-design";
+  button.setAttribute("aria-pressed", on ? "true" : "false");
+  const top = el("span", "tile-top");
+  top.append(el("span", "seat"), el("span", "tile-name", tile.label));
+  button.append(top);
+  card.append(button, el("p", "design-lead", tile.summary));
+  if (on && qty !== undefined) {
+    const foot = el("div", "design-foot");
+    foot.append(renderLabeledStepper("Variants", tile, qty), renderFeedback(result, "ai-feedback"));
+    card.append(foot);
+  }
+  const hours = on ? designHoursFor(result, "ai-") : previewAiHours(result);
+  const badge = hourBadge(`${formatHours(hours)}h`, "design");
+  if (!on) badge.classList.add("is-idle");
+  card.append(badge);
+  return card;
+}
+
+function previewAiHours(result: Quote): number {
+  const without = { ...result.selection, tiles: { ...result.selection.tiles } };
+  delete without.tiles["ai-design"];
+  const priced = quote({ ...without, tiles: { ...without.tiles, "ai-design": 2 } });
+  return designHoursFor(priced, "ai-");
+}
+
+const designRates = [
+  "2h each page template",
+  "2h each landing page",
+  "3h each section",
+  "2h or 8h menu",
+  "2h global header",
+  "3h global footer",
+  "4h custom forms",
+  "3h or 6h search",
+  "5h custom system templates",
+  "4h setup and launch",
+  "4h or 6h each blog list",
+  "4h or 6h each blog post",
+  "3h recent posts",
+  "3h each HubDB section",
+  "16h, 10h, 18h, or 28h product catalogue",
+  "3h each favorite products",
+  "3h related products",
+  "6h each extra feedback round",
+];
+
+function renderDesignRates(): HTMLElement {
+  const wrap = el("span", "design-pop");
+  const btn = el("button", "design-pop-btn");
+  btn.type = "button";
+  btn.textContent = "Design hours";
+  const panel = el("div", "design-pop-panel");
+  const facts = el("ul", "design-facts");
+  for (const fact of designRates) facts.append(el("li", undefined, fact));
+  panel.append(facts);
+  bindClickPopover(btn, panel);
+  wrap.append(btn, panel);
+  return wrap;
+}
+
+function bindClickPopover(trigger: HTMLElement, panel: HTMLElement): void {
+  panel.popover = "manual";
+  trigger.setAttribute("aria-expanded", "false");
+  const place = () => {
+    const box = trigger.getBoundingClientRect();
+    const width = panel.getBoundingClientRect().width || 240;
+    const left = Math.min(box.left, window.innerWidth - width - 8);
+    panel.style.right = "auto";
+    panel.style.left = `${Math.max(8, left)}px`;
+    panel.style.maxHeight = "none";
+    const needed = panel.scrollHeight;
+    const below = window.innerHeight - box.bottom - 12;
+    const above = box.top - 12;
+    const openUp = needed > below && above > below;
+    panel.style.maxHeight = `${Math.min(360, Math.max(120, openUp ? above : below))}px`;
+    if (openUp) {
+      panel.style.top = "auto";
+      panel.style.bottom = `${window.innerHeight - box.top + 6}px`;
+      return;
+    }
+    panel.style.bottom = "auto";
+    panel.style.top = `${box.bottom + 6}px`;
+  };
+  const close = () => {
+    if (panel.matches(":popover-open")) panel.hidePopover();
+    trigger.setAttribute("aria-expanded", "false");
+    document.removeEventListener("click", onDoc, true);
+  };
+  const onDoc = (event: Event) => {
+    if (!panel.isConnected) {
+      document.removeEventListener("click", onDoc, true);
+      return;
+    }
+    const target = event.target;
+    if (target instanceof Node && (trigger.contains(target) || panel.contains(target))) return;
+    close();
+  };
+  trigger.addEventListener("click", (event) => {
+    event.stopPropagation();
+    if (panel.matches(":popover-open")) {
+      close();
+      return;
+    }
+    panel.showPopover();
+    place();
+    trigger.setAttribute("aria-expanded", "true");
+    window.setTimeout(() => document.addEventListener("click", onDoc, true), 0);
+  });
 }
 
 function markBadge(mark: string): HTMLElement {
@@ -590,35 +747,36 @@ function renderTile(result: Quote, id: string): HTMLElement {
   }
   button.append(top);
 
-  const shownQty = qty ?? tile.initial;
+  const shownQty = on ? (qty ?? tile.initial) : tile.initial;
   const shownHours = on && line ? line.openHours : tileHours(tile, shownQty);
   const includedLanguage = tile.id === "languages" && shownQty === 1 && shownHours === 0;
+  let hoursLabel: string | null = null;
   if (!tile.disabled && !includedLanguage) {
     const meta = el("span", "tile-meta");
     if (tile.hourInput) {
-      meta.append(el("span", undefined, on ? `${formatHours(shownQty)}h` : "Set the hours"));
-    } else if (tile.id === "blog-setups" && shownQty === 1 && shownHours === 0) {
+      if (on) hoursLabel = `${formatHours(shownQty)}h`;
+      else meta.append(el("span", undefined, "Set the hours"));
+    } else if (on && tile.id === "blog-setups" && shownQty === 1 && shownHours === 0) {
       meta.append(el("span", undefined, "Included"));
-    } else {
-      meta.append(el("span", undefined, `${formatHours(shownHours)}h`));
-      const shownMode = tile.modes?.[shownQty - 1]?.label;
-      if (shownMode) meta.append(el("span", "dot", "·"), el("span", undefined, shownMode));
-      else if (tile.stepped) {
-        meta.append(
-          el("span", "dot", "·"),
-          el("span", undefined, quantityLabel(tile.unit ?? "", shownQty)),
-        );
+    } else if (shownHours > 0) {
+      hoursLabel = `${formatHours(shownHours)}h`;
+      if (on && tile.stepped) {
+        meta.append(el("span", undefined, quantityLabel(tile.unit ?? "", shownQty)));
       }
     }
-    button.append(meta);
+    if (meta.childNodes.length > 0) button.append(meta);
   }
-  if (tile.summary) button.append(el("span", "tile-summary", tile.summary));
+  const summary = tile.modes?.[shownQty - 1]?.detail ?? tile.summary;
+  if (summary) button.append(el("span", "tile-summary", summary));
   if (tile.note) button.append(el("span", "tile-note", tile.note));
   card.append(button);
+  if (hoursLabel) {
+    const badge = hourBadge(hoursLabel, tile.bucket);
+    if (!on) badge.classList.add("is-idle");
+    card.append(badge);
+  }
   if (cornerMark && tile.mark) {
-    const corner = markBadge(tile.mark);
-    corner.classList.add("is-corner");
-    card.append(corner);
+    card.append(cornerTier(tile.mark === "Ent" ? "enterprise" : "professional", tile.mark));
   }
 
   if (on && !blocked && tile.modes && qty !== undefined)
@@ -648,7 +806,7 @@ function renderTile(result: Quote, id: string): HTMLElement {
   if (tile.badge === "planned") {
     card.classList.add("is-planned");
     const cover = el("div", "tile-cover");
-    cover.append(el("span", "badge badge-planned", badgeLabel.planned));
+    cover.append(el("span", "badge badge-planned is-md is-bl is-corner", badgeLabel.planned));
     card.append(cover);
   }
 
@@ -711,25 +869,12 @@ function renderDetails(result: Quote): HTMLElement {
   section.dataset.quoteHours = String(result.hours);
   section.dataset.quoteEdition = result.edition;
   section.dataset.quoteShape = result.shape;
-  section.append(el("h2", "details-title", "Details"));
-
-  section.append(
-    el("p", "rule", `${result.label} is the lowest package that covers every selected option.`),
-  );
-
-  const pages =
-    result.selection.websitePages > starterPageCap
-      ? "More than 30 website pages"
-      : "30 website pages or fewer";
-  section.append(el("p", "counts", pages));
 
   const facts = el("details", "facts");
   facts.open = true;
-  facts.append(el("summary", undefined, "Included with this edition"));
-  facts.append(el("p", "facts-note", "These come with the licence. They do not add build hours."));
-  const factList = el("ul");
-  for (const fact of editionFacts[result.edition]) factList.append(el("li", undefined, fact));
-  facts.append(factList);
+  facts.append(el("summary", undefined, "Always included"));
+  facts.append(el("p", "facts-note", inclusionNote(result.edition)));
+  appendInclusions(facts, result);
   section.append(facts);
 
   section.append(renderBreakdown(result));
@@ -753,6 +898,49 @@ function renderEdition(result: Quote): HTMLElement {
   }
   if (result.usualEditionWarning) section.append(el("p", "warning", result.usualEditionWarning));
   return section;
+}
+
+function appendInclusions(parent: HTMLElement, result: Quote): void {
+  const list = el("ul", "included-list");
+  for (const item of inclusionsFor(result.shape)) list.append(renderInclusionItem(item));
+  parent.append(list);
+}
+
+function renderInclusionItem(label: string): HTMLElement {
+  const item = el("li");
+  const note = inclusionPopovers[label];
+  if (note === undefined) {
+    item.textContent = label;
+    return item;
+  }
+  const button = el("button", "included-pop-btn");
+  button.type = "button";
+  button.textContent = label;
+  const panel = el("div", "included-pop-panel");
+  if (note.text) panel.append(el("p", "included-pop-copy", note.text));
+  if (note.items) {
+    panel.classList.add("is-list");
+    const variants = el("ul", "included-pop-list");
+    for (const variant of note.items) variants.append(el("li", undefined, variant));
+    panel.append(variants);
+  }
+  const demoHref = note.demo;
+  if (typeof demoHref === "string") {
+    const demo = el("a", "included-demo");
+    demo.textContent = "Demo";
+    demo.href = demoHref;
+    demo.target = "_blank";
+    demo.rel = "noopener noreferrer";
+    panel.append(demo);
+  } else if (demoHref) {
+    const demo = el("button", "included-demo");
+    demo.type = "button";
+    demo.textContent = "Demo";
+    panel.append(demo);
+  }
+  bindClickPopover(button, panel);
+  item.append(button, panel);
+  return item;
 }
 
 function renderRail(result: Quote): HTMLElement {
@@ -800,8 +988,22 @@ function renderSpeed(result: Quote): HTMLElement {
     gauge("Security", result.pageSpeed.security),
   );
   section.append(top, bottom);
-  section.append(el("div", "speed-cover"), el("span", "badge badge-planned", badgeLabel.planned));
+  section.append(
+    el("div", "speed-cover"),
+    el("span", "badge badge-planned is-md is-bl is-corner", badgeLabel.planned),
+  );
   return section;
+}
+
+function lineName(line: HourLine): string {
+  if (line.mode && line.unit && line.unit !== "hours") {
+    return `${line.label} · ${line.mode} · ${quantityLabel(line.unit, line.qty)}`;
+  }
+  if (line.mode) return `${line.label} · ${line.mode}`;
+  if (line.unit && line.unit !== "hours") {
+    return `${line.label} · ${quantityLabel(line.unit, line.qty)}`;
+  }
+  return line.label;
 }
 
 function renderBreakdown(result: Quote): HTMLElement {
@@ -809,25 +1011,23 @@ function renderBreakdown(result: Quote): HTMLElement {
   details.open = true;
   details.append(el("summary", undefined, "Hours"));
   const list = el("ul", "lines");
-  for (const line of result.lines) {
-    if (line.bucket === "content") continue;
-    if (line.openHours === 0) continue;
-    const row = el("li", line.extra ? "line is-extra" : "line");
-    let name = line.label;
-    if (line.mode && line.unit && line.unit !== "hours") {
-      name = `${line.label} · ${line.mode} · ${quantityLabel(line.unit, line.qty)}`;
-    } else if (line.mode) name = `${line.label} · ${line.mode}`;
-    else if (line.unit && line.unit !== "hours")
-      name = `${line.label} · ${quantityLabel(line.unit, line.qty)}`;
-    row.append(el("span", undefined, name));
-    row.append(el("span", "line-hours", `${formatHours(line.openHours)}h`));
-    list.append(row);
-  }
-  if (result.contentHours > 0) {
-    const content = el("li", "line");
-    content.append(el("span", undefined, "Content"));
-    content.append(el("span", "line-hours", `${formatHours(result.contentHours)}h`));
-    list.append(content);
+  const groups = [
+    { key: "design", bucket: "design", label: "Design" },
+    { key: "build", bucket: "implementation", label: "Implementation" },
+    { key: "content", bucket: "content", label: "Content" },
+  ] as const;
+  for (const group of groups) {
+    const rows = result.lines.filter((line) => line.bucket === group.bucket && line.openHours > 0);
+    if (rows.length === 0) continue;
+    const head = el("li", `line-head is-${group.key}`);
+    head.append(el("span", "totals-dot"), el("span", undefined, group.label));
+    list.append(head);
+    for (const line of rows) {
+      const row = el("li", line.extra ? "line is-extra" : "line");
+      row.append(el("span", undefined, lineName(line)));
+      row.append(el("span", "line-hours", `${formatHours(line.openHours)}h`));
+      list.append(row);
+    }
   }
   const total = el("li", "line is-total");
   total.append(el("span", undefined, "Total"));

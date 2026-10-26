@@ -6,8 +6,11 @@
  */
 
 import {
+  aiDesignParts,
+  aiDesignSets,
   alwaysOnTileIds,
   type BlogSetupMode,
+  type DesignInput,
   defaultWebsitePages,
   designParts,
   type Edition,
@@ -16,6 +19,7 @@ import {
   getParcel,
   getStartingPoint,
   getTile,
+  groups,
   type HourBucket,
   type HubId,
   hubName,
@@ -29,6 +33,7 @@ import {
   startingPoints,
   tileHours,
   tiles,
+  tilesInGroup,
 } from "./catalog.ts";
 
 export type { BlogSetupMode };
@@ -143,12 +148,37 @@ function blogTemplateCount(selection: Selection, countId: string): number {
   return selection.tiles[countId] ?? 1;
 }
 
+function designInputFor(selection: Selection): DesignInput {
+  const blog = selection.tiles["blog-setups"] !== undefined;
+  return {
+    templates: selection.tiles.templates ?? 0,
+    landing: selection.tiles["landing-templates"] ?? 0,
+    sections: selection.tiles.sections ?? 0,
+    menu: selection.tiles.menu ?? 0,
+    header: selection.tiles.header !== undefined,
+    footer: selection.tiles.footer !== undefined,
+    customForms: selection.tiles["custom-forms"] !== undefined,
+    search: selection.tiles.search ?? 0,
+    systemPages: selection.tiles.system !== undefined,
+    setup: selection.tiles.setup !== undefined,
+    listTemplates: blog ? blogTemplateCount(selection, "blog-list-count") : 0,
+    listAdvanced: selection.tiles["blog-list"] === 2,
+    postTemplates: blog ? blogTemplateCount(selection, "blog-post-count") : 0,
+    postAdvanced: selection.tiles["blog-post"] === 2,
+    recentPosts: selection.tiles["blog-recent"] !== undefined,
+    hubdb: selection.tiles.hubdb ?? 0,
+    catalogue: selection.tiles["product-catalogue"] ?? 0,
+    favoriteProducts: selection.tiles["favorite-products"] ?? 0,
+    relatedProducts: selection.tiles["related-products"] !== undefined,
+  };
+}
+
 function hoursFor(item: ReturnType<typeof getTile>, qty: number, selection: Selection): number {
   if (item.id === "blog-list" || item.id === "blog-post") {
     const countId = item.id === "blog-list" ? "blog-list-count" : "blog-post-count";
     return blogTemplateCount(selection, countId) * (qty >= 2 ? 8 : 4);
   }
-  if (item.id === "custom-design") return 0;
+  if (item.id === "custom-design" || item.id === "ai-design") return 0;
   return tileHours(item, qty);
 }
 
@@ -198,6 +228,22 @@ export function normalize(selection: Selection): Selection {
     delete next["blog-list-count"];
     delete next["blog-post-count"];
     delete next["blog-recent"];
+  }
+  if (next["ai-design"] !== undefined && next["custom-design"] !== undefined) {
+    delete next["custom-design"];
+    delete next["design-feedback"];
+  }
+  if (next["ai-design"] !== undefined) {
+    if (next["ai-feedback"] === undefined) next["ai-feedback"] = getTile("ai-feedback").initial;
+  } else {
+    delete next["ai-feedback"];
+  }
+  if (next["custom-design"] !== undefined) {
+    if (next["design-feedback"] === undefined) {
+      next["design-feedback"] = getTile("design-feedback").initial;
+    }
+  } else {
+    delete next["design-feedback"];
   }
   if (next["product-catalogue"] === undefined) {
     delete next["favorite-products"];
@@ -257,6 +303,14 @@ export function setTile(selection: Selection, tileId: string, on: boolean): Sele
   const next = { ...selection.tiles };
   if (on) {
     next[tileId] = piece.initial;
+    if (tileId === "ai-design") {
+      delete next["custom-design"];
+      delete next["design-feedback"];
+    }
+    if (tileId === "custom-design") {
+      delete next["ai-design"];
+      delete next["ai-feedback"];
+    }
     return normalize({ ...selection, tiles: next });
   }
   for (const id of dependentsOf(tileId, selection.tiles)) delete next[id];
@@ -314,13 +368,11 @@ export function selectionForShape(
       sections: 8,
       menu: 1,
       languages: 1,
-      forms: 2,
-      system: 1,
       header: 1,
       footer: 1,
       setup: 1,
-      launch: 1,
-      "custom-design": 1,
+      "ai-design": 2,
+      "ai-feedback": 1,
     },
   });
 }
@@ -338,14 +390,13 @@ function raisePackage(
 export function packageFor(selection: Selection): Exclude<ShapeId, "custom"> {
   let pack: Exclude<ShapeId, "custom"> = "essential";
   const selected = selection.tiles;
-  if ((selected.templates ?? 0) >= 4) pack = raisePackage(pack, "growth");
+  if ((selected.templates ?? 0) >= 5) pack = raisePackage(pack, "growth");
   if ((selected.sections ?? 0) >= 11) pack = raisePackage(pack, "growth");
   if ((selected.menu ?? 1) >= 2) pack = raisePackage(pack, "growth");
   if ((selected.languages ?? 1) >= 2) pack = raisePackage(pack, "growth");
   const landing = selected["landing-templates"];
   if (landing !== undefined && landing >= 3) pack = raisePackage(pack, "growth");
   if (selected.search === 2) pack = raisePackage(pack, "growth");
-  if (selected["blog-recent"] === 2) pack = raisePackage(pack, "growth");
   if (selected["custom-forms"] !== undefined) pack = raisePackage(pack, "growth");
   if (selected.hubdb !== undefined) pack = raisePackage(pack, "growth");
   if ((selected["blog-setups"] ?? 0) >= 2) pack = raisePackage(pack, "growth");
@@ -385,48 +436,60 @@ function price(selection: Selection): Priced {
   let listOpen = 0;
   let side = 0;
 
-  for (const item of tiles) {
-    const qty = selection.tiles[item.id];
-    if (qty === undefined) continue;
-    const open = hoursFor(item, qty, selection);
-    listOpen += open;
-    const isContent = item.bucket === "content";
-    if (isContent) side += open;
-    else parcelOpen += open;
-    const mode = modeLabel(item, qty);
-    const counted =
-      item.id === "blog-list" || item.id === "blog-post"
-        ? blogTemplateCount(
-            selection,
-            item.id === "blog-list" ? "blog-list-count" : "blog-post-count",
-          )
-        : qty;
-    const unit = item.id === "blog-list" || item.id === "blog-post" ? "templates" : item.unit;
-    lines.push({
-      id: item.id,
-      label: item.label,
-      qty: counted,
-      ...(unit ? { unit } : {}),
-      ...(mode ? { mode } : {}),
-      openHours: roundHours(open),
-      billedHours: roundHours(open),
-      extra: false,
-      bucket: item.bucket,
-    });
+  for (const group of groups) {
+    for (const item of tilesInGroup(group.id)) {
+      const qty = selection.tiles[item.id];
+      if (qty === undefined) continue;
+      const open = hoursFor(item, qty, selection);
+      listOpen += open;
+      const isContent = item.bucket === "content";
+      if (isContent) side += open;
+      else parcelOpen += open;
+      const mode = modeLabel(item, qty);
+      const counted =
+        item.id === "blog-list" || item.id === "blog-post"
+          ? blogTemplateCount(
+              selection,
+              item.id === "blog-list" ? "blog-list-count" : "blog-post-count",
+            )
+          : qty;
+      const unit = item.id === "blog-list" || item.id === "blog-post" ? "templates" : item.unit;
+      lines.push({
+        id: item.id,
+        label: item.label,
+        qty: counted,
+        ...(unit ? { unit } : {}),
+        ...(mode ? { mode } : {}),
+        openHours: roundHours(open),
+        billedHours: roundHours(open),
+        extra: false,
+        bucket: item.bucket,
+      });
+    }
   }
 
+  const pushFeedback = (id: string, included: number, rate: number) => {
+    const qty = selection.tiles[id];
+    if (qty === undefined) return;
+    const extra = Math.max(0, qty - included);
+    const hours = extra * rate;
+    if (hours <= 0) return;
+    listOpen += hours;
+    parcelOpen += hours;
+    lines.push({
+      id,
+      label: getTile(id).label,
+      qty: extra,
+      unit: "extra rounds",
+      openHours: hours,
+      billedHours: hours,
+      extra: false,
+      bucket: "design",
+    });
+  };
+  const designInput = designInputFor(selection);
   if (selection.tiles["custom-design"] !== undefined) {
-    const blog = selection.tiles["blog-setups"] !== undefined;
-    for (const part of designParts({
-      templates: selection.tiles.templates ?? 0,
-      landing: selection.tiles["landing-templates"] ?? 0,
-      sections: selection.tiles.sections ?? 0,
-      listTemplates: blog ? blogTemplateCount(selection, "blog-list-count") : 0,
-      listAdvanced: selection.tiles["blog-list"] === 2,
-      postTemplates: blog ? blogTemplateCount(selection, "blog-post-count") : 0,
-      postAdvanced: selection.tiles["blog-post"] === 2,
-      recentPosts: selection.tiles["blog-recent"] !== undefined,
-    })) {
+    for (const part of designParts(designInput)) {
       listOpen += part.hours;
       parcelOpen += part.hours;
       lines.push({
@@ -434,6 +497,7 @@ function price(selection: Selection): Priced {
         label: part.label,
         qty: part.qty,
         ...(part.unit ? { unit: part.unit } : {}),
+        ...(part.mode ? { mode: part.mode } : {}),
         openHours: part.hours,
         billedHours: part.hours,
         extra: false,
@@ -441,6 +505,26 @@ function price(selection: Selection): Priced {
       });
     }
   }
+  const aiVariants = selection.tiles["ai-design"];
+  if (aiVariants !== undefined) {
+    for (const part of aiDesignParts(designInput, aiDesignSets(aiVariants))) {
+      listOpen += part.hours;
+      parcelOpen += part.hours;
+      lines.push({
+        id: part.id,
+        label: part.label,
+        qty: part.qty,
+        ...(part.unit ? { unit: part.unit } : {}),
+        ...(part.mode ? { mode: part.mode } : {}),
+        openHours: part.hours,
+        billedHours: part.hours,
+        extra: false,
+        bucket: "design",
+      });
+    }
+  }
+  pushFeedback("design-feedback", 2, 6);
+  pushFeedback("ai-feedback", 1, 3);
 
   const hours = roundHours(parcelOpen + side);
   const designHours = sumBucket(lines, "design");
@@ -488,7 +572,7 @@ function pageHits(selection: Selection): { edition: Edition; reason: string }[] 
   return [
     {
       edition: "professional",
-      reason: `${selection.websitePages} website pages need Content Hub Professional`,
+      reason: "30+ website pages need Content Hub Professional",
     },
   ];
 }
@@ -572,20 +656,9 @@ function pageSpeedOf(selection: Selection): PageSpeed {
     desktop -= 2;
     notes.push("Performance: a long run of sections weighs more on a phone.");
   }
-  if (selection.tiles["blog-recent"] === 2) {
-    mobile -= 4;
-    desktop -= 1;
-    accessibility -= 5;
-    notes.push("Accessibility: a carousel needs a pause control and a keyboard path.");
-  }
-  if ((selection.tiles.forms ?? 0) > 0 || (selection.tiles["custom-forms"] ?? 0) > 0) {
+  if ((selection.tiles["custom-forms"] ?? 0) > 0) {
     accessibility -= 1;
     notes.push("Accessibility: forms need labels, errors, and a visible focus state.");
-  }
-  if ((selection.tiles.ctas ?? 0) > 2) {
-    mobile -= 2;
-    accessibility -= 2;
-    notes.push("Several CTAs compete. One primary action per view is easier to use.");
   }
   if (selection.tiles["blog-post"] !== undefined) seo += 2;
   if (selection.tiles.redirects !== undefined) {
