@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "bun --hot src/server.ts",
     "start": "bun src/server.ts",
+    "build": "bun scripts/build.ts",
     "test": "bun test",
     "check": "tsc --noEmit && biome check ."
   },
