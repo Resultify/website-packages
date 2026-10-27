@@ -37,6 +37,7 @@ const app = document.querySelector("#app");
 if (!(app instanceof HTMLElement)) throw new Error("Missing #app");
 
 let selection: Selection = decodeSelection(location.hash) ?? selectionForShape("essential");
+let includedOpen = true;
 
 function commit(next: Selection): void {
   selection = quote(next).selection;
@@ -161,6 +162,7 @@ function renderNav(result: Quote): HTMLElement {
   share.dataset.action = "share";
   share.dataset.focus = "share";
   share.textContent = "Share";
+  const copy = copyHoursButton("nav-btn", "copy-hours-nav");
   const json = el("button", "nav-btn");
   json.type = "button";
   json.disabled = true;
@@ -173,7 +175,7 @@ function renderNav(result: Quote): HTMLElement {
   login.type = "button";
   login.disabled = true;
   login.textContent = "Login";
-  tools.append(reset, share, json, save, login);
+  tools.append(reset, share, copy, json, save, login);
   header.append(brand, tools);
   return header;
 }
@@ -871,7 +873,10 @@ function renderDetails(result: Quote): HTMLElement {
   section.dataset.quoteShape = result.shape;
 
   const facts = el("details", "facts");
-  facts.open = true;
+  facts.open = includedOpen;
+  facts.addEventListener("toggle", () => {
+    includedOpen = facts.open;
+  });
   facts.append(el("summary", undefined, "Always included"));
   facts.append(el("p", "facts-note", inclusionNote(result.edition)));
   appendInclusions(facts, result);
@@ -1006,18 +1011,44 @@ function lineName(line: HourLine): string {
   return line.label;
 }
 
+const breakdownGroups = [
+  { key: "design", bucket: "design", label: "Design", total: "designHours" },
+  { key: "build", bucket: "implementation", label: "Implementation", total: "implementationHours" },
+  { key: "content", bucket: "content", label: "Content", total: "contentHours" },
+] as const;
+
+function groupRows(result: Quote, bucket: HourLine["bucket"]): HourLine[] {
+  return result.lines.filter((line) => line.bucket === bucket && line.openHours > 0);
+}
+
+function hoursText(result: Quote): string {
+  const out = [`Hours: ${result.label}`];
+  for (const group of breakdownGroups) {
+    const rows = groupRows(result, group.bucket);
+    if (rows.length === 0) continue;
+    out.push(`- ${group.label}: ${formatHours(result[group.total])}h`);
+    for (const line of rows) out.push(`  - ${lineName(line)}: ${formatHours(line.openHours)}h`);
+  }
+  out.push(`- Total: ${formatHours(result.hours)}h`);
+  return out.join("\n");
+}
+
+function copyHoursButton(className: string, focus: string): HTMLButtonElement {
+  const button = el("button", className);
+  button.type = "button";
+  button.dataset.action = "copy-hours";
+  button.dataset.focus = focus;
+  button.textContent = "Copy";
+  return button;
+}
+
 function renderBreakdown(result: Quote): HTMLElement {
   const details = el("details", "breakdown");
   details.open = true;
   details.append(el("summary", undefined, "Hours"));
   const list = el("ul", "lines");
-  const groups = [
-    { key: "design", bucket: "design", label: "Design" },
-    { key: "build", bucket: "implementation", label: "Implementation" },
-    { key: "content", bucket: "content", label: "Content" },
-  ] as const;
-  for (const group of groups) {
-    const rows = result.lines.filter((line) => line.bucket === group.bucket && line.openHours > 0);
+  for (const group of breakdownGroups) {
+    const rows = groupRows(result, group.bucket);
     if (rows.length === 0) continue;
     const head = el("li", `line-head is-${group.key}`);
     head.append(el("span", "totals-dot"), el("span", undefined, group.label));
@@ -1033,7 +1064,7 @@ function renderBreakdown(result: Quote): HTMLElement {
   total.append(el("span", undefined, "Total"));
   total.append(el("span", "line-hours", `${formatHours(result.hours)}h`));
   list.append(total);
-  details.append(list);
+  details.append(list, copyHoursButton("copy-hours", "copy-hours-rail"));
   return details;
 }
 
@@ -1054,6 +1085,20 @@ function copyText(value: string): Promise<void> {
   return navigator.clipboard.writeText(value).catch(() => legacy());
 }
 
+function copyWithFeedback(button: HTMLButtonElement, value: string): void {
+  const label = button.textContent;
+  const flash = (text: string) => {
+    button.textContent = text;
+    window.setTimeout(() => {
+      button.textContent = label;
+    }, 1600);
+  };
+  void copyText(value).then(
+    () => flash("Copied"),
+    () => flash("Copy failed"),
+  );
+}
+
 app.addEventListener("click", (event) => {
   const target = event.target;
   if (!(target instanceof Element)) return;
@@ -1066,20 +1111,11 @@ app.addEventListener("click", (event) => {
     return;
   }
   if (action === "share") {
-    void copyText(location.href).then(
-      () => {
-        button.textContent = "Copied";
-        window.setTimeout(() => {
-          button.textContent = "Share";
-        }, 1600);
-      },
-      () => {
-        button.textContent = "Copy failed";
-        window.setTimeout(() => {
-          button.textContent = "Share";
-        }, 1600);
-      },
-    );
+    copyWithFeedback(button, location.href);
+    return;
+  }
+  if (action === "copy-hours") {
+    copyWithFeedback(button, hoursText(quote(selection)));
     return;
   }
   if (action === "pages-over") {
