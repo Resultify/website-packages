@@ -32,6 +32,45 @@ another port.
 | `bun run check` | Type-check with `tsc` and lint/format-check with Biome |
 | `bun run build` | Build the static site into `docs/`                    |
 
+## How the estimate works
+
+- **Package.** Essential, Growth and Platform are not chosen directly. The
+  package is the lowest tier that covers every selected option (see
+  `packageFor` in `src/quote.ts`). For example, 5 or more page templates, a
+  second language or HubDB raises it to Growth, and a product catalogue raises
+  it to Platform.
+- **HubSpot edition.** Each tile has an edition rule. The estimate shows the
+  highest edition any selected tile needs. More than 30 website pages needs
+  Professional.
+- **Hours.** A tile costs its base hours plus per-unit hours for each unit
+  above the ones included in the base. Some tiles use fixed modes or their own
+  formula (languages, redirects).
+- **Design and content hours** are reported separately from build hours.
+  Design hours count only while Custom design is on.
+- **Sharing.** The selection is written to the URL hash (`#s=…&w=…&b=…&t=…`).
+  Copy the address to share or reopen an estimate.
+
+## Changing hours and options
+
+Everything priced lives in `src/catalog.ts`:
+
+- `tiles` defines each option: its group, `baseHours`, `perUnitHours`,
+  `includedInBase`, quantity limits and edition `rule`.
+- `packageName` and `editionLabel` hold the display names.
+- `starterPageCap` and `defaultWebsitePages` control the website-page limits.
+
+Package thresholds live in `packageFor` in `src/quote.ts`. After changing
+either file, run `bun test` and update the expectations in
+`test/quote.test.ts` if the numbers moved on purpose.
+
+## Contributing
+
+1. Branch from an up-to-date `main`, e.g. `feat/…`, `fix/…` or `docs/…`.
+2. Make the change and run `bun test` and `bun run check`.
+3. If `src/` changed, run `bun run build` and commit `docs/` too.
+4. Open a pull request against `main`. Use commit messages like
+   `feat: …`, `fix: …`, `docs: …` or `build: …`.
+
 ## Project layout
 
 ```
