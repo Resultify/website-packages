@@ -1027,6 +1027,8 @@ function hoursText(result: Quote): string {
     const rows = groupRows(result, group.bucket);
     if (rows.length === 0) continue;
     out.push(`- ${group.label}: ${formatHours(result[group.total])}h`);
+    const onlyRepeatsGroup = rows.length === 1 && rows[0]?.label === group.label;
+    if (onlyRepeatsGroup) continue;
     for (const line of rows) out.push(`  - ${lineName(line)}: ${formatHours(line.openHours)}h`);
   }
   out.push(`- Total: ${formatHours(result.hours)}h`);
