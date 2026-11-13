@@ -1,13 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import { packageName } from "../src/catalog.ts";
 import {
+  aiVariantCost,
   decodeSelection,
   encodeSelection,
+  packageRules,
   quote,
   selectionForShape,
   setQuantity,
   setTile,
   setWebsitePages,
+  stepHours,
 } from "../src/quote.ts";
 
 const essential = () => selectionForShape("essential");
@@ -239,12 +242,23 @@ describe("blog, languages, and content", () => {
     expect(content.hours).toBe(88);
   });
 
+  test("page migration and blog import are hours you enter, counted as content", () => {
+    const pages = setQuantity(setTile(essential(), "migrate-pages", true), "migrate-pages", 12);
+    const both = quote(setQuantity(setTile(pages, "migrate-posts", true), "migrate-posts", 5));
+    expect(both.shape).toBe("essential");
+    expect(both.implementationHours).toBe(60);
+    expect(both.contentHours).toBe(17);
+    expect(stepHours(both, "content")).toBe(17);
+    expect(both.hours).toBe(95);
+  });
+
   test("a planned tile cannot be added", () => {
     const priced = quote(setTile(essential(), "membership", true));
     expect(priced.selection.tiles.membership).toBeUndefined();
     expect(priced.hours).toBe(78);
     const three = quote(setQuantity(essential(), "ai-design", 3));
-    expect(three.lines.find((line) => line.id === "ai-templates")?.openHours).toBe(4.5);
+    expect(three.lines.find((line) => line.id === "ai-templates")?.openHours).toBe(3);
+    expect(three.lines.find((line) => line.id === "ai-variants")?.openHours).toBe(9);
     expect(three.designHours).toBe(27);
     const aiFeedback = quote(setQuantity(essential(), "ai-feedback", 2));
     expect(aiFeedback.lines.find((line) => line.id === "ai-feedback")?.openHours).toBe(3);
@@ -266,5 +280,120 @@ describe("links", () => {
     expect(decodeSelection(`#${encodeSelection(selected)}`)).toEqual(selected);
     expect(decodeSelection("")).toBeNull();
     expect(decodeSelection("#s=nimbly-lite&w=25&b=same&t=")).toBeNull();
+  });
+});
+
+describe("package explanations", () => {
+  const atRule = (tileId: string, at: number) => {
+    if (tileId === "favorite-products" || tileId === "related-products") {
+      const catalogue = setQuantity(
+        setTile(essential(), "product-catalogue", true),
+        "product-catalogue",
+        2,
+      );
+      return setQuantity(setTile(catalogue, tileId, true), tileId, at);
+    }
+    if (tileId === "blog-list" || tileId === "blog-post") {
+      return setQuantity(setTile(essential(), "blog-setups", true), tileId, at);
+    }
+    return setQuantity(setTile(essential(), tileId, true), tileId, at);
+  };
+
+  test("Essential has no reasons", () => {
+    expect(quote(essential()).packageReasons).toEqual([]);
+  });
+
+  for (const rule of packageRules) {
+    test(`${rule.tileId} at ${rule.at} gives its reason`, () => {
+      const priced = quote(atRule(rule.tileId, rule.at));
+      expect(priced.shape).toBe(rule.package);
+      expect(priced.packageReasons.some((line) => line.startsWith(rule.reason(rule.at)))).toBe(
+        true,
+      );
+    });
+  }
+
+  test("only the reasons for the winning package are listed", () => {
+    const both = setTile(setQuantity(essential(), "templates", 6), "product-catalogue", true);
+    expect(quote(both).packageReasons).toEqual(["Product catalogue → Platform"]);
+  });
+});
+
+describe("custom catalogue hours", () => {
+  const custom = () =>
+    setQuantity(setTile(essential(), "product-catalogue", true), "product-catalogue", 5);
+
+  test("the entered hours are the catalogue's build hours, with no design hours", () => {
+    const priced = quote(setQuantity(custom(), "catalogue-custom", 25));
+    expect(priced.lines.find((line) => line.id === "product-catalogue")?.openHours).toBe(0);
+    expect(priced.lines.find((line) => line.id === "catalogue-custom")?.openHours).toBe(25);
+    expect(priced.lines.find((line) => line.id === "ai-catalogue")).toBeUndefined();
+    expect(priced.shape).toBe("platform");
+  });
+
+  test("leaving Custom drops the entered hours", () => {
+    const entered = setQuantity(custom(), "catalogue-custom", 25);
+    expect(
+      quote(setQuantity(entered, "product-catalogue", 2)).selection.tiles["catalogue-custom"],
+    ).toBeUndefined();
+    expect(
+      quote(setTile(entered, "product-catalogue", false)).selection.tiles["catalogue-custom"],
+    ).toBeUndefined();
+  });
+
+  test("a share link keeps the entered hours", () => {
+    const entered = quote(setQuantity(custom(), "catalogue-custom", 25));
+    const decoded = decodeSelection(`#${encodeSelection(entered.selection)}`);
+    if (!decoded) throw new Error("Could not decode");
+    expect(quote(decoded).hours).toBe(entered.hours);
+  });
+});
+
+describe("extra AI variants", () => {
+  test("two variants are included and add no line", () => {
+    const priced = quote(essential());
+    expect(priced.lines.find((line) => line.id === "ai-variants")).toBeUndefined();
+    expect(aiVariantCost(priced)).toBe(9);
+  });
+
+  test("each extra variant adds half the base design, rounded up", () => {
+    const base = setTile(essential(), "hubdb", true);
+    expect(quote(base).designHours).toBe(19);
+    const three = quote(setQuantity(base, "ai-design", 3));
+    expect(three.lines.find((line) => line.id === "ai-variants")?.openHours).toBe(10);
+    expect(three.designHours).toBe(29);
+    const five = quote(setQuantity(base, "ai-design", 5));
+    expect(five.lines.find((line) => line.id === "ai-variants")?.openHours).toBe(30);
+    expect(five.designHours).toBe(49);
+    expect(aiVariantCost(five)).toBe(10);
+  });
+
+  test("hours stay whole and add up for every variant count", () => {
+    for (const id of ["hubdb", "search", "blog-setups", "product-catalogue"]) {
+      for (let variants = 2; variants <= 10; variants += 1) {
+        const priced = quote(setQuantity(setTile(essential(), id, true), "ai-design", variants));
+        expect(Number.isInteger(priced.hours)).toBe(true);
+        expect(Number.isInteger(priced.designHours)).toBe(true);
+        for (const line of priced.lines) expect(Number.isInteger(line.openHours)).toBe(true);
+        expect(priced.hours).toBe(
+          priced.designHours + priced.implementationHours + priced.contentHours,
+        );
+      }
+    }
+  });
+});
+
+describe("step hours", () => {
+  test("steps add up to the total", () => {
+    const decoded = decodeSelection(
+      "#s=cms-react&w=40&b=same&t=ai-design.3,ai-feedback.2,blog-recent.1,blog-setups.2,blog-list.2,blog-post.1,blog-list-count.2,blog-post-count.1,favorite-products.2,footer.1,header.1,hubdb.2,landing-templates.3,languages.3,menu.2,product-catalogue.3,related-products.1,search.2,sections.14,setup.1,system.1,custom-forms.1,templates.6,content-hours.25",
+    );
+    if (!decoded) throw new Error("Could not decode");
+    const priced = quote(decoded);
+    const steps = ["design", "basics", "addons", "languages", "content"] as const;
+    const sum = steps.reduce((total, step) => total + stepHours(priced, step), 0);
+    expect(sum).toBeCloseTo(priced.hours);
+    expect(stepHours(priced, "languages")).toBe(20);
+    expect(stepHours(priced, "content")).toBe(25);
   });
 });
