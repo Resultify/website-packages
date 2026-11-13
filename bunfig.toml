@@ -1,0 +1,5 @@
+[fmt]
+# The repo's line length; everything else is Bun's default (Prettier style)
+printWidth = 100
+# docs/ is the built site, minified by bun run build
+ignorePatterns = ["docs/**"]
