@@ -7,9 +7,10 @@
 
 import {
   aiDesignParts,
-  aiDesignSets,
+  aiVariantHours,
   alwaysOnTileIds,
   type BlogSetupMode,
+  basicsTileIds,
   type DesignInput,
   defaultWebsitePages,
   designParts,
@@ -29,6 +30,7 @@ import {
   type ShapeId,
   type StartingPoint,
   type StartingPointId,
+  type StepId,
   starterPageCap,
   startingPoints,
   tileHours,
@@ -114,6 +116,7 @@ export type Quote = {
   packageOpenHours: number;
   packageHours: number;
   contentHours: number;
+  packageReasons: string[];
   edition: Edition;
   editionReasons: string[];
   usualEditionWarning: string | null;
@@ -244,6 +247,10 @@ export function normalize(selection: Selection): Selection {
     }
   } else {
     delete next["design-feedback"];
+  }
+  if (next["product-catalogue"] !== 5) delete next["catalogue-custom"];
+  else if (next["catalogue-custom"] === undefined) {
+    next["catalogue-custom"] = getTile("catalogue-custom").initial;
   }
   if (next["product-catalogue"] === undefined) {
     delete next["favorite-products"];
@@ -386,26 +393,56 @@ function raisePackage(
   return packageRank[next] > packageRank[current] ? next : current;
 }
 
+type PackageId = Exclude<ShapeId, "custom">;
+
+/** Each rule raises the package once the tile reaches `at`. */
+export type PackageRule = {
+  tileId: string;
+  at: number;
+  package: PackageId;
+  reason: (qty: number) => string;
+};
+
+export const packageRules: readonly PackageRule[] = [
+  { tileId: "templates", at: 5, package: "growth", reason: (qty) => `${qty} page templates` },
+  { tileId: "sections", at: 11, package: "growth", reason: (qty) => `${qty} sections` },
+  { tileId: "menu", at: 2, package: "growth", reason: () => "Advanced menu" },
+  { tileId: "languages", at: 2, package: "growth", reason: (qty) => `${qty} languages` },
+  {
+    tileId: "landing-templates",
+    at: 3,
+    package: "growth",
+    reason: (qty) => `${qty} landing templates`,
+  },
+  { tileId: "search", at: 2, package: "growth", reason: () => "Advanced search" },
+  { tileId: "custom-forms", at: 1, package: "growth", reason: () => "Custom forms" },
+  { tileId: "hubdb", at: 1, package: "growth", reason: () => "HubDB based section" },
+  { tileId: "blog-setups", at: 2, package: "growth", reason: (qty) => `${qty} blogs` },
+  { tileId: "blog-list", at: 2, package: "growth", reason: () => "Advanced blog list" },
+  { tileId: "blog-post", at: 2, package: "growth", reason: () => "Advanced blog post" },
+  { tileId: "product-catalogue", at: 1, package: "platform", reason: () => "Product catalogue" },
+  { tileId: "favorite-products", at: 1, package: "platform", reason: () => "Favorite products" },
+  { tileId: "related-products", at: 1, package: "platform", reason: () => "Related products" },
+];
+
+function matchedRules(selection: Selection): PackageRule[] {
+  return packageRules.filter((rule) => (selection.tiles[rule.tileId] ?? 0) >= rule.at);
+}
+
 /** Lowest package that satisfies every selected option. The highest need wins. */
-export function packageFor(selection: Selection): Exclude<ShapeId, "custom"> {
-  let pack: Exclude<ShapeId, "custom"> = "essential";
-  const selected = selection.tiles;
-  if ((selected.templates ?? 0) >= 5) pack = raisePackage(pack, "growth");
-  if ((selected.sections ?? 0) >= 11) pack = raisePackage(pack, "growth");
-  if ((selected.menu ?? 1) >= 2) pack = raisePackage(pack, "growth");
-  if ((selected.languages ?? 1) >= 2) pack = raisePackage(pack, "growth");
-  const landing = selected["landing-templates"];
-  if (landing !== undefined && landing >= 3) pack = raisePackage(pack, "growth");
-  if (selected.search === 2) pack = raisePackage(pack, "growth");
-  if (selected["custom-forms"] !== undefined) pack = raisePackage(pack, "growth");
-  if (selected.hubdb !== undefined) pack = raisePackage(pack, "growth");
-  if ((selected["blog-setups"] ?? 0) >= 2) pack = raisePackage(pack, "growth");
-  if (selected["blog-list"] === 2) pack = raisePackage(pack, "growth");
-  if (selected["blog-post"] === 2) pack = raisePackage(pack, "growth");
-  if (selected["product-catalogue"] !== undefined) pack = raisePackage(pack, "platform");
-  if (selected["favorite-products"] !== undefined) pack = raisePackage(pack, "platform");
-  if (selected["related-products"] !== undefined) pack = raisePackage(pack, "platform");
-  return pack;
+export function packageFor(selection: Selection): PackageId {
+  return matchedRules(selection).reduce<PackageId>(
+    (pack, rule) => raisePackage(pack, rule.package),
+    "essential",
+  );
+}
+
+/** What holds the package at its current level. Empty for Essential. */
+export function packageReasonsFor(selection: Selection): string[] {
+  const pack = packageFor(selection);
+  return matchedRules(selection)
+    .filter((rule) => rule.package === pack)
+    .map((rule) => `${rule.reason(selection.tiles[rule.tileId] ?? 0)} → ${getParcel(pack).label}`);
 }
 
 type Priced = {
@@ -426,6 +463,9 @@ type Priced = {
   contentHours: number;
   lines: HourLine[];
 };
+
+const includedAiVariants = 2;
+const aiVariantsLineId = "ai-variants";
 
 function price(selection: Selection): Priced {
   const parcel = getParcel(packageFor(selection));
@@ -507,7 +547,8 @@ function price(selection: Selection): Priced {
   }
   const aiVariants = selection.tiles["ai-design"];
   if (aiVariants !== undefined) {
-    for (const part of aiDesignParts(designInput, aiDesignSets(aiVariants))) {
+    const parts = aiDesignParts(designInput);
+    for (const part of parts) {
       listOpen += part.hours;
       parcelOpen += part.hours;
       lines.push({
@@ -518,6 +559,23 @@ function price(selection: Selection): Priced {
         ...(part.mode ? { mode: part.mode } : {}),
         openHours: part.hours,
         billedHours: part.hours,
+        extra: false,
+        bucket: "design",
+      });
+    }
+    const extraVariants = Math.max(0, aiVariants - includedAiVariants);
+    const baseDesign = parts.reduce((sum, part) => sum + part.hours, 0);
+    const variantHours = extraVariants * aiVariantHours(baseDesign);
+    if (variantHours > 0) {
+      listOpen += variantHours;
+      parcelOpen += variantHours;
+      lines.push({
+        id: aiVariantsLineId,
+        label: "Extra design variants",
+        qty: extraVariants,
+        unit: "variants",
+        openHours: variantHours,
+        billedHours: variantHours,
         extra: false,
         bucket: "design",
       });
@@ -702,6 +760,7 @@ export function quote(input: Selection): Quote {
   }
 
   const restore = null;
+  const packageReasons = packageReasonsFor(selection);
 
   return {
     selection,
@@ -721,6 +780,7 @@ export function quote(input: Selection): Quote {
     packageOpenHours: priced.packageOpenHours,
     packageHours: priced.packageHours,
     contentHours: priced.contentHours,
+    packageReasons,
     edition,
     editionReasons: reasons,
     usualEditionWarning,
@@ -729,6 +789,34 @@ export function quote(input: Selection): Quote {
     restore,
     pageSpeed: pageSpeedOf(selection),
   };
+}
+
+function stepOfLine(line: HourLine): StepId {
+  if (line.bucket === "design") return "design";
+  if (line.bucket === "content") return "content";
+  if (line.id === "languages") return "languages";
+  return basicsTileIds.some((id) => id === line.id) ? "basics" : "addons";
+}
+
+/** Step totals add up to the quote total, so the page reads as one sum. */
+export function stepHours(result: Quote, step: StepId): number {
+  return roundHours(
+    result.lines
+      .filter((line) => stepOfLine(line) === step)
+      .reduce((sum, line) => sum + line.openHours, 0),
+  );
+}
+
+/** What one more AI design variant costs for this scope. */
+export function aiVariantCost(result: Quote): number {
+  const base = result.lines.filter(
+    (line) =>
+      line.bucket === "design" &&
+      line.id.startsWith("ai-") &&
+      line.id !== "ai-feedback" &&
+      line.id !== aiVariantsLineId,
+  );
+  return aiVariantHours(base.reduce((sum, line) => sum + line.openHours, 0));
 }
 
 export function encodeSelection(selection: Selection): string {
