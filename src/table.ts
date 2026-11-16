@@ -23,10 +23,10 @@ export const columns = [
   "start",
   "max",
   "build-ai",
-  "build-design",
+  "build-nimbly",
   "build-custom",
   "design-ai",
-  "design-design",
+  "design-nimbly",
   "design-custom",
   "package",
   "tier",
@@ -37,11 +37,11 @@ export type Column = (typeof columns)[number];
 export type Row = Record<Column, string>;
 
 /** The design choices of an estimate. */
-export const choices = ["ai", "design", "custom", "none"] as const;
+export const choices = ["ai", "nimbly", "custom", "none"] as const;
 export type Choice = (typeof choices)[number];
 /** The choices that have their own hours: build and design hours for each. With no design, the
     build hours are Custom's. */
-export const designKinds = ["ai", "design", "custom"] as const;
+export const designKinds = ["ai", "nimbly", "custom"] as const;
 export type DesignKind = (typeof designKinds)[number];
 
 /** Whose build hours a design choice uses. */
@@ -163,8 +163,7 @@ export function applyCells(rows: readonly Row[], cells: Cells): Row[] {
 
 /* ---------- The rules ---------- */
 
-/** Every rule, in the order the file lists them. Empty means not set: the Design option's feedback
-    is empty until the estimator offers it. */
+/** Every rule, in the order the file lists them. */
 export const ruleNames = [
   "ai-variants-included",
   "ai-variants-max",
@@ -172,12 +171,17 @@ export const ruleNames = [
   "ai-feedback-included",
   "ai-feedback-each",
   "ai-feedback-max",
-  "design-feedback-included",
-  "design-feedback-each",
-  "design-feedback-max",
+  "nimbly-feedback-included",
+  "nimbly-feedback-each",
+  "nimbly-feedback-max",
   "custom-feedback-included",
   "custom-feedback-each",
   "custom-feedback-max",
+  "ai-package",
+  "nimbly-package",
+  "custom-package",
+  "none-package",
+  "pm-percent",
   "languages-included",
   "languages-second",
   "languages-each",

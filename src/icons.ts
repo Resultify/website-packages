@@ -15,6 +15,7 @@ const paths = {
   rocket:
     '<path d="M12 3c4 2 5 6 4 10l-4 4-4-4C7 9 8 5 12 3z"/><circle cx="12" cy="9" r="1.6"/><path d="M8 17l-2 3M16 17l2 3"/>',
   feedback: '<path d="M5 5h14v10H10l-5 4z"/>',
+  calendar: '<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>',
   variants: '<rect x="4" y="8" width="11" height="11" rx="2"/><path d="M9 5h9a2 2 0 0 1 2 2v9"/>',
   tick: '<path d="m5 12.5 4.2 4.2L19 7"/>',
   cross: '<path d="M7 7l10 10M17 7 7 17"/>',

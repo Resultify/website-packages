@@ -1,23 +1,30 @@
 /* The files (src/estimator.csv, rules.csv, link-codes.csv), drafts of them, and the short link. No
-   browser needed. */
+   browser needed. "The files" reads src/; the rest prices with the frozen copy in test/fixtures, so
+   a change made on the calculations page changes none of the numbers here. */
 import { describe, expect, test } from "bun:test";
 import {
   buildCatalog,
   catalogueSources,
+  designChoices,
   getTile,
   modeLabel,
+  partsOf,
+  sourceTiles,
+  tierMark,
   tiles,
   withCatalog,
 } from "../src/catalog.ts";
-import { blockedShelfIds, laneIds } from "../src/controls.ts";
+import { lineName, ruleFor, shelfGroupOf, shelfLanes } from "../src/controls.ts";
 import { packLink, unpackLink } from "../src/link.ts";
 import {
   decodeSelection,
   encodeSelection,
+  type HourLine,
   quote,
   type Selection,
   selectionForShape,
   setQuantity,
+  setSource,
   setTile,
   setWebsitePages,
 } from "../src/quote.ts";
@@ -41,10 +48,21 @@ import {
   withCodes,
 } from "../src/table.ts";
 
-const rows = parseTable(liveText);
-const rules = parseRules(liveRulesText);
-const codes = parseCodes(liveCodesText);
+import { codes, rows, rules, useFixture } from "./fixture.ts";
+
+useFixture();
+
+/** The files in src/, as the app is built with them. */
+const live = {
+  rows: parseTable(liveText),
+  rules: parseRules(liveRulesText),
+  codes: parseCodes(liveCodesText),
+};
+const liveCatalog = () => buildCatalog(live.rows, live.rules, live.codes);
+/** The starting estimate: Nimbly design. */
 const essential = () => selectionForShape("essential");
+/** The starting estimate with AI generated design. */
+const ai = () => setTile(essential(), "ai-design", true);
 const catalog = (table: readonly Row[], changed: Partial<Rules> = {}) =>
   buildCatalog(table, { ...rules, ...changed }, codes);
 const drafted = (cells: Cells, changed: Partial<Rules> = {}) =>
@@ -55,18 +73,27 @@ const row = (cells: Partial<Row>): Row => ({
 });
 const allBuild = (hours: string) => ({
   "build-ai": hours,
-  "build-design": hours,
+  "build-nimbly": hours,
   "build-custom": hours,
 });
 
-/** The estimate used across these tests: landing templates, system templates and 50h of content. */
-const example = "BBkE_0kABIMIAwgCMg";
+/** The estimate used across these tests: the starting estimate with AI generated design, landing
+    templates, system templates and 50h of content. */
+const example = "-FMRqQVcGc";
+/** The options every source of the Product catalogue has. */
+const catalogueOptions = [
+  "Module based",
+  "Dynamic pages: Simple",
+  "Dynamic pages: Filtered",
+  "Dynamic pages: Multi-level",
+  "Custom",
+];
 
 describe("the files", () => {
   test("are written exactly as they are read, so a change to one cell changes one line", () => {
-    expect(serializeTable(rows)).toBe(liveText);
-    expect(serializeRules(rules)).toBe(liveRulesText);
-    expect(serializeCodes(codes)).toBe(liveCodesText);
+    expect(serializeTable(live.rows)).toBe(liveText);
+    expect(serializeRules(live.rules)).toBe(liveRulesText);
+    expect(serializeCodes(live.codes)).toBe(liveCodesText);
   });
 
   test("quoted cells keep their commas, quotes and line breaks", () => {
@@ -77,6 +104,7 @@ describe("the files", () => {
   });
 
   test("every item has its own code, and every option its own number", () => {
+    const { tiles } = liveCatalog();
     const numbers = tiles.map((tile) => tile.code);
     expect(new Set(numbers).size).toBe(numbers.length);
     for (const tile of tiles) {
@@ -96,13 +124,45 @@ describe("the files", () => {
     });
   });
 
+  test("every item and option in src/ can be priced with every design, and an estimate's hours add up", () => {
+    withCatalog(liveCatalog(), () => {
+      for (const choice of designChoices) {
+        const start = quote(setTile(essential(), choice.id, true));
+        expect(start.selection.tiles[choice.id]).toBeDefined();
+        for (const tile of tiles) {
+          if (tile.hidden || tile.disabled || tile.place === "design") continue;
+          const levels = tile.modes
+            ? tile.modes.map((_, index) => index + 1)
+            : [tile.min, tile.max];
+          for (const level of levels) {
+            const priced = quote(
+              setQuantity(setTile(start.selection, tile.id, true), tile.id, level),
+            );
+            for (const line of priced.lines) expect(line.openHours).toBeGreaterThanOrEqual(0);
+            expect(priced.hours).toBeCloseTo(
+              priced.designHours +
+                priced.implementationHours +
+                priced.contentHours +
+                priced.projectHours,
+            );
+            /* With no design, no design hours */
+            if (choice.kind === "none") expect(priced.designHours).toBe(0);
+            expect(decodeSelection(encodeSelection(priced.selection))).toEqual(priced.selection);
+          }
+        }
+      }
+    });
+  });
+
   test("the estimates on the calculations page are links the app reads", () => {
     const links = parseCsv(scenarioText).slice(1);
     expect(links.length).toBeGreaterThan(0);
-    for (const [name, link] of links) {
-      expect(name).toBeTruthy();
-      expect(decodeSelection(link ?? "")).not.toBeNull();
-    }
+    withCatalog(liveCatalog(), () => {
+      for (const [name, link] of links) {
+        expect(name).toBeTruthy();
+        expect(decodeSelection(link ?? "")).not.toBeNull();
+      }
+    });
   });
 
   test("an option written as Group: Option sits under that heading", () => {
@@ -117,23 +177,96 @@ describe("the files", () => {
   });
 });
 
+describe("an item of the shelf, on its own", () => {
+  /* Every item and option live, those coming soon too: an item made live on the calculations page
+     must behave as the others do */
+  const everyLive = (table: readonly Row[]) =>
+    table.map((item) => (item.status === "soon" ? { ...item, status: "" } : item));
+  const catalogs = {
+    "the files in src/": () => buildCatalog(everyLive(live.rows), live.rules, live.codes),
+    "the frozen files": () => buildCatalog(everyLive(rows), rules, codes),
+  };
+  /** What an item may bring with it: its own parts, the hours entered with it, and for the Product
+      catalogue its sources. */
+  const ownOf = (id: string): Set<string> => {
+    const own = new Set([id, ...(partsOf[id] ?? [])]);
+    if (id === "product-catalogue") for (const item of sourceTiles()) own.add(item.id);
+    for (const item of [...own]) {
+      const entered = getTile(item).designInput;
+      if (entered) own.add(entered);
+    }
+    return own;
+  };
+  /** Each way an item can be in: each option, or its least and its most. */
+  const levelsOf = (id: string) => {
+    const tile = getTile(id);
+    return tile.modes ? tile.modes.map((_, index) => index + 1) : [tile.min, tile.max];
+  };
+  const changed = (before: Record<string, number>, after: Record<string, number>) =>
+    [...new Set([...Object.keys(before), ...Object.keys(after)])].filter(
+      (id) => before[id] !== after[id],
+    );
+
+  for (const [name, make] of Object.entries(catalogs)) {
+    test(`with ${name}, adding one brings only it and its own parts, and taking it out takes only those`, () => {
+      withCatalog(make(), () => {
+        const { laneIds } = shelfLanes();
+        expect(laneIds).toContain("external-forms");
+        const start = quote(essential()).selection;
+        for (const id of laneIds) {
+          for (const level of levelsOf(id)) {
+            const added = quote(setQuantity(setTile(start, id, true), id, level)).selection;
+            const own = ownOf(id);
+            /* Nothing else comes in, or changes */
+            expect(changed(start.tiles, added.tiles).filter((other) => !own.has(other))).toEqual(
+              [],
+            );
+            /* And out again, the estimate is as it was */
+            expect(quote(setTile(added, id, false)).selection.tiles).toEqual(start.tiles);
+          }
+        }
+      });
+    });
+
+    test(`with ${name} and everything in, taking one out takes only it and its own parts`, () => {
+      withCatalog(make(), () => {
+        const { laneIds } = shelfLanes();
+        const all = laneIds.reduce((selection, id) => setTile(selection, id, true), essential());
+        const full = quote(all).selection;
+        for (const id of laneIds) expect(Object.keys(full.tiles)).toContain(id);
+        for (const id of laneIds) {
+          const without = quote(setTile(full, id, false)).selection;
+          const own = ownOf(id);
+          expect(changed(full.tiles, without.tiles).filter((other) => !own.has(other))).toEqual([]);
+        }
+      });
+    });
+  }
+});
+
 describe("a draft", () => {
   test("prices an estimate with its own cells, and leaves the published files as they were", () => {
-    expect(quote(essential()).hours).toBe(78);
-    /* Sections with AI design: 4h each becomes 5h, for 8 sections */
-    const draft = drafted({ "sections build-ai": "5" });
-    expect(withCatalog(draft, () => quote(essential()).hours)).toBe(86);
-    expect(quote(essential()).hours).toBe(78);
+    expect(quote(essential()).hours).toBe(124);
+    /* Sections with Nimbly design: 4h each becomes 5h, for 8 sections. Project management grows
+       with them: 15% of 41h + 68h, 16.35, so 17h; with the kick-off and training, 75h */
+    const draft = drafted({ "sections build-nimbly": "5" });
+    expect(withCatalog(draft, () => quote(essential()).hours)).toBe(41 + 75 + 17);
+    expect(quote(essential()).hours).toBe(124);
   });
 
   test("build hours follow the design choice of the estimate: no design takes Custom's", () => {
-    const draft = drafted({ "sections build-custom": "6" });
+    const draft = drafted({
+      "sections build-ai": "3",
+      "sections build-nimbly": "5",
+      "sections build-custom": "6",
+    });
     const custom = setTile(essential(), "custom-design", true);
-    const none = setTile(essential(), "ai-design", false);
+    const none = setTile(essential(), "no-design", true);
     withCatalog(draft, () => {
       const line = (selection: Selection) =>
         quote(selection).lines.find((item) => item.id === "sections")?.openHours;
-      expect(line(essential())).toBe(32);
+      expect(line(ai())).toBe(24);
+      expect(line(essential())).toBe(40);
       expect(line(custom)).toBe(48);
       expect(line(none)).toBe(48);
     });
@@ -154,33 +287,80 @@ describe("a draft", () => {
       withCatalog(drafted({}, { "pages-professional-from": "41" }), () => quote(pages).edition),
     ).toBe("starter");
     const two = setQuantity(essential(), "languages", 2);
+    const languages = () => quote(two).lines.find((line) => line.id === "languages")?.openHours;
     expect(quote(two).shape).toBe("growth");
-    expect(quote(two).hours).toBe(78 + 14);
+    expect(languages()).toBe(14);
     withCatalog(drafted({}, { "languages-growth-from": "3", "languages-second": "10" }), () => {
       expect(quote(two).shape).toBe("essential");
-      expect(quote(two).hours).toBe(78 + 10);
+      expect(languages()).toBe(10);
     });
   });
 
-  test("feedback rounds and variants come from the rules", () => {
-    const rounds = setQuantity(essential(), "ai-feedback", 3);
-    expect(quote(rounds).hours).toBe(78 + 2 * 3);
-    expect(withCatalog(drafted({}, { "ai-feedback-each": "5" }), () => quote(rounds).hours)).toBe(
-      78 + 2 * 5,
-    );
-    const variants = setQuantity(essential(), "ai-design", 3);
-    /* One extra variant: half of the 18h of AI design, rounded up */
-    expect(quote(variants).hours).toBe(78 + 9);
+  test("feedback rounds, variants and project management come from the rules", () => {
+    const hours = (selection: Selection, id: string) =>
+      quote(selection).lines.find((line) => line.id === id)?.openHours;
+    /* 4 rounds: 1 included, 3 extra */
+    const rounds = setQuantity(ai(), "ai-feedback", 4);
+    expect(hours(rounds, "ai-feedback")).toBe(3 * 3);
     expect(
-      withCatalog(drafted({}, { "ai-variant-percent": "100" }), () => quote(variants).hours),
-    ).toBe(78 + 18);
+      withCatalog(drafted({}, { "ai-feedback-each": "5" }), () => hours(rounds, "ai-feedback")),
+    ).toBe(3 * 5);
+    const nimbly = setQuantity(essential(), "nimbly-feedback", 3);
+    expect(hours(nimbly, "nimbly-feedback")).toBe(2 * 3);
+    expect(
+      withCatalog(drafted({}, { "nimbly-feedback-included": "3" }), () =>
+        hours(nimbly, "nimbly-feedback"),
+      ),
+    ).toBe(0);
+    const variants = setQuantity(ai(), "ai-design", 3);
+    /* One extra variant: half of the 18h of AI design, rounded up */
+    expect(hours(variants, "ai-variants")).toBe(9);
+    expect(
+      withCatalog(drafted({}, { "ai-variant-percent": "100" }), () =>
+        hours(variants, "ai-variants"),
+      ),
+    ).toBe(18);
+    /* Project management: 15% of 101h is 15.15, so 16h; 10% is 10.1, so 11h, whatever the design */
+    expect(hours(essential(), "project-management")).toBe(16);
+    withCatalog(drafted({}, { "pm-percent": "10" }), () => {
+      expect(hours(essential(), "project-management")).toBe(11);
+      for (const choice of designChoices) {
+        const priced = quote(setTile(essential(), choice.id, true));
+        expect(priced.lines.find((line) => line.id === "project-management")?.mode).toStartWith(
+          "10% of ",
+        );
+      }
+    });
+    expect(() => drafted({}, { "pm-percent": "" })).toThrow("Rule pm-percent");
+  });
+
+  test("the package a design needs comes from the rules: Custom and None need Growth", () => {
+    const shape = (id: string) => quote(setTile(essential(), id, true)).shape;
+    expect(shape("nimbly-design")).toBe("essential");
+    expect(shape("ai-design")).toBe("essential");
+    expect(shape("custom-design")).toBe("growth");
+    expect(shape("no-design")).toBe("growth");
+    expect(quote(setTile(essential(), "no-design", true)).packageReasons).toEqual([
+      "No design → Growth",
+    ]);
+    withCatalog(drafted({}, { "custom-package": "", "nimbly-package": "platform" }), () => {
+      expect(shape("custom-design")).toBe("essential");
+      expect(quote(essential()).shape).toBe("platform");
+      expect(quote(essential()).packageReasons).toEqual(["Nimbly design → Platform"]);
+    });
+    expect(() => drafted({}, { "none-package": "big" })).toThrow(
+      "Rule none-package must be growth, platform or empty",
+    );
   });
 
   test("changes the hours of one option only", () => {
     const advanced = setQuantity(essential(), "menu", 2);
-    const draft = drafted({ "menu·Advanced build-ai": "14" });
-    expect(withCatalog(draft, () => quote(advanced).hours)).toBe(quote(advanced).hours + 2);
-    expect(withCatalog(draft, () => quote(essential()).hours)).toBe(78);
+    const draft = drafted({ "menu·Advanced build-nimbly": "14" });
+    const menu = (selection: Selection) =>
+      quote(selection).lines.find((line) => line.id === "menu")?.openHours;
+    expect(menu(advanced)).toBe(12);
+    expect(withCatalog(draft, () => menu(advanced))).toBe(14);
+    expect(withCatalog(draft, () => quote(essential()).hours)).toBe(124);
   });
 
   test("a cell or rule the app cannot take is an error that names it", () => {
@@ -205,8 +385,9 @@ describe("a draft", () => {
       item: "Events calendar",
       place: "shelf",
       ...allBuild("12"),
-      "design-custom": "4",
       "design-ai": "1",
+      "design-nimbly": "4",
+      "design-custom": "4",
       package: "growth",
     });
     const added = catalog([...rows, events]);
@@ -216,8 +397,10 @@ describe("a draft", () => {
     withCatalog(added, () => {
       const priced = quote(setTile(essential(), "events", true));
       expect(priced.lines.find((line) => line.id === "events")?.openHours).toBe(12);
-      expect(priced.lines.find((line) => line.id === "ai-events")?.openHours).toBe(1);
-      expect(priced.hours).toBe(78 + 12 + 1);
+      expect(priced.lines.find((line) => line.id === "nimbly-events")?.openHours).toBe(4);
+      /* 41h + 4h of design, 60h + 12h of build: 15% of 117h is 17.55, so 18h; the kick-off and
+         training, 7h */
+      expect(priced.hours).toBe(45 + 72 + 7 + 18);
       expect(priced.packageReasons).toEqual(["Events calendar → Growth"]);
       const link = encodeSelection(priced.selection);
       expect(decodeSelection(link)?.tiles.events).toBe(1);
@@ -229,16 +412,15 @@ describe("a draft", () => {
   });
 
   test("a hidden item is nowhere, and a coming one is on the shelf, locked", () => {
+    const { laneIds, blockedShelfIds } = shelfLanes();
     expect(laneIds).toContain("system");
-    expect(blockedShelfIds).toEqual([
-      "crm-section",
-      "crm-custom-section",
-      "external-forms",
-      "membership",
-    ]);
+    /* In the table's order */
+    expect(blockedShelfIds).toEqual(["external-forms", "crm-section", "crm-custom-section"]);
     withCatalog(drafted({ "system status": "hidden", "hubdb status": "soon" }), () => {
       expect(getTile("system").hidden).toBe(true);
       expect(getTile("hubdb").disabled).toBe(true);
+      expect(shelfLanes().laneIds).not.toContain("system");
+      expect(shelfLanes().blockedShelfIds).toContain("hubdb");
       /* An estimate that had it loses it */
       expect(quote(setTile(essential(), "system", true)).selection.tiles.system).toBeUndefined();
       expect(quote(decodeSelection(example) as Selection).selection.tiles.system).toBeUndefined();
@@ -252,7 +434,7 @@ describe("a draft", () => {
       expect(getTile("menu").modes?.map((mode) => mode.label)).toEqual(["Simple"]);
       /* A link that had it opens with the option the item starts with */
       expect(decodeSelection(link)?.tiles.menu).toBe(1);
-      expect(quote(decodeSelection(link) as Selection).hours).toBe(78);
+      expect(quote(decodeSelection(link) as Selection).hours).toBe(124);
     });
     withCatalog(drafted({ "menu·Advanced status": "soon" }), () => {
       expect(getTile("menu").modes?.map((mode) => [mode.label, !!mode.disabled])).toEqual([
@@ -273,7 +455,7 @@ describe("a draft", () => {
       drafted({ "search·Simple status": "hidden", "search·Advanced status": "hidden" }),
       () => expect(getTile("search").hidden).toBe(true),
     );
-    /* Forms + external data: HubDB live, External API still coming */
+    /* Forms with external data: HubDB live, External API still coming */
     withCatalog(drafted({ "external-forms·HubDB status": "" }), () => {
       expect(getTile("external-forms").disabled).toBeUndefined();
       expect(getTile("external-forms").modes?.[1]?.disabled).toBe(true);
@@ -285,26 +467,38 @@ describe("a draft", () => {
     expect(getTile("landing-templates").place).toBe("shelf");
     expect(getTile("blog-list").place).toBe("blog");
     expect(getTile("favorite-products").place).toBe("catalogue");
-    /* The shelf in the estimator: its items in the table's order, then the Blog and the Product
-       catalogue, then content */
-    expect(laneIds).toEqual([
+    expect(getTile("membership-groups").place).toBe("membership");
+    /* The shelf in the estimator: its items, the Blog, the Product catalogue and Memberships, in
+       the table's order (in these files, content after the rest of the shelf, then the Blog) */
+    expect(shelfLanes().laneIds).toEqual([
       "landing-templates",
       "search",
       "custom-forms",
+      "cookie-banner",
       "system",
       "hubdb",
-      "blog-setups",
-      "product-catalogue",
+      "custom-integration",
       "content-hours",
       "migrate-pages",
       "migrate-posts",
+      "blog-setups",
+      "product-catalogue",
+      "membership",
     ]);
+    /* Moving a row moves the item on the shelf: the Blog first */
+    const blogFirst = [
+      ...rows.filter((item) => item.place === "blog"),
+      ...rows.filter((item) => item.place !== "blog"),
+    ];
+    withCatalog(catalog(blogFirst), () => expect(shelfLanes().laneIds[0]).toBe("blog-setups"));
     /* Content: its hours are content hours, wherever the row is */
     withCatalog(drafted({ "landing-templates type": "content" }), () => {
       expect(getTile("landing-templates").bucket).toBe("content");
       const priced = quote(setTile(essential(), "landing-templates", true));
       expect(priced.contentHours).toBe(3);
-      expect(priced.hours).toBe(78 + 3 + 1);
+      /* Its design hours stay design hours; project management counts its content hours: 15% of
+         43h + 60h + 3h is 15.9, so 16h. With the kick-off and training, 67h */
+      expect(priced.hours).toBe(43 + 67 + 16 + 3);
     });
     expect(() => drafted({ "templates place": "shelf" })).toThrow("place must be basics");
     expect(() =>
@@ -313,26 +507,189 @@ describe("a draft", () => {
     expect(() => drafted({ "hubdb place": "garden" })).toThrow("place must be one of");
     expect(() => drafted({ "blog-recent type": "content" })).toThrow("items of the shelf only");
     expect(() => drafted({ "hubdb type": "words" })).toThrow(
-      "type must be empty (build) or content",
+      "type must be empty (build), content or project",
     );
   });
 
-  test("the Product catalogue's sources come from the table: HubDB with its options, the rest to come", () => {
-    const names = (list: readonly { source?: string }[]) => list.map((item) => item.source);
-    expect(getTile("product-catalogue").label).toBe("Product catalogue");
-    expect(getTile("product-catalogue").source).toBe("HubDB");
-    withCatalog(drafted({}), () =>
-      expect(names(catalogueSources())).toEqual(["HubDB", "CRM Object", "Custom Object"]),
+  test("Project: the kick-off and training by their type, and project management, apart from Build", () => {
+    expect(getTile("kickoff").bucket).toBe("project");
+    expect(getTile("training").bucket).toBe("project");
+    const start = quote(essential());
+    /* Project management: 15% of 101h of design and build, not of the kick-off and training */
+    expect(start.projectHours).toBe(3 + 4 + 16);
+    expect(start.implementationHours).toBe(60);
+    /* An item of the site basics or the shelf can be Project; its design hours stay Design */
+    withCatalog(drafted({ "header type": "project", "landing-templates type": "project" }), () => {
+      const priced = quote(setTile(essential(), "landing-templates", true));
+      expect(priced.lines.find((line) => line.id === "header")?.bucket).toBe("project");
+      expect(priced.lines.find((line) => line.id === "nimbly-header")?.bucket).toBe("design");
+      expect(priced.implementationHours).toBe(60 - 3);
+      /* Header 3h and Landing templates 3h join the kick-off and training: project management is
+         15% of 43h of design and 57h of build, 15h; Project's own hours are not counted */
+      expect(priced.projectHours).toBe(3 + 3 + 3 + 4 + 15);
+      expect(priced.hours).toBe(43 + 57 + 28);
+    });
+    expect(() => drafted({ "blog-recent type": "project" })).toThrow(
+      "site basics and the shelf only",
     );
-    withCatalog(drafted({ "catalogue-objects status": "hidden" }), () =>
+  });
+
+  test("the Product catalogue's sources come from the table, each with the same options", () => {
+    const names = (list: readonly { source?: string }[]) => list.map((item) => item.source);
+    const options = (id: string) =>
+      getTile(id).modes?.map((mode) => (mode.group ? `${mode.group}: ${mode.label}` : mode.label));
+    expect(getTile("product-catalogue").label).toBe("Product catalogue (HubDB)");
+    expect(getTile("product-catalogue").source).toBe("HubDB");
+    expect(names(catalogueSources())).toEqual(["HubDB", "CRM Object", "Custom Object"]);
+    expect(options("catalogue-crm")).toEqual(options("product-catalogue"));
+    expect(options("catalogue-objects")).toEqual(options("product-catalogue"));
+    /* CRM Object and Custom Object: every option coming, so the source is too */
+    expect(getTile("catalogue-crm").disabled).toBe(true);
+    expect(getTile("catalogue-objects").disabled).toBe(true);
+    const hidden = Object.fromEntries(
+      (getTile("catalogue-objects").modes ?? []).map((mode) => [
+        `catalogue-objects·${mode.group ? `${mode.group}: ${mode.label}` : mode.label} status`,
+        "hidden",
+      ]),
+    );
+    withCatalog(drafted(hidden), () =>
       expect(names(catalogueSources())).toEqual(["HubDB", "CRM Object"]),
     );
-    /* A source to come has nothing to offer yet, so it cannot be live */
-    expect(() => drafted({ "catalogue-crm status": "" })).toThrow("status must be soon or hidden");
-    /* Its reasons name the catalogue, not the source */
+    /* A source with no options has nothing to offer yet, so it cannot be live */
+    const salesforce = row({ id: "catalogue-sf", item: "Salesforce", place: "catalogue" });
+    expect(() => catalog([...rows, salesforce])).toThrow("status must be soon or hidden");
+    withCatalog(catalog([...rows, { ...salesforce, status: "soon" }]), () =>
+      expect(names(catalogueSources())).toEqual([
+        "HubDB",
+        "CRM Object",
+        "Custom Object",
+        "Salesforce",
+      ]),
+    );
+    /* Its reasons name the catalogue and its source */
     expect(quote(setTile(essential(), "product-catalogue", true)).packageReasons).toEqual([
-      "Product catalogue → Platform",
+      "Product catalogue (HubDB) → Platform",
     ]);
+  });
+
+  test("Recent blog posts, Favorite products and Related products have a status of their own", () => {
+    const catalogue = setTile(essential(), "product-catalogue", true);
+    const both = setTile(setTile(catalogue, "favorite-products", true), "related-products", true);
+    const link = encodeSelection(quote(both).selection);
+    withCatalog(drafted({ "favorite-products status": "soon" }), () => {
+      expect(getTile("favorite-products").disabled).toBe(true);
+      /* Locked: it cannot be added, and an estimate that had it loses it */
+      expect(
+        quote(setTile(catalogue, "favorite-products", true)).selection.tiles,
+      ).not.toHaveProperty("favorite-products");
+      expect(decodeSelection(link)?.tiles).not.toHaveProperty("favorite-products");
+      expect(decodeSelection(link)?.tiles["related-products"]).toBe(1);
+    });
+    withCatalog(drafted({ "related-products status": "hidden" }), () => {
+      expect(getTile("related-products").hidden).toBe(true);
+      expect(quote(both).selection.tiles).not.toHaveProperty("related-products");
+    });
+    withCatalog(drafted({ "blog-recent status": "soon" }), () => {
+      const blog = setTile(essential(), "blog-setups", true);
+      expect(quote(setTile(blog, "blog-recent", true)).selection.tiles).not.toHaveProperty(
+        "blog-recent",
+      );
+    });
+    /* The parts always in their item have none: the Blog's templates have one on each option */
+    expect(() => drafted({ "header status": "soon" })).toThrow("This one is always shown");
+    expect(() => drafted({ "catalogue-custom status": "soon" })).toThrow(
+      "This one is always shown",
+    );
+  });
+
+  test("the tier badge is the tier of the option or quantity in use, as the estimate's tier is", () => {
+    const external = drafted({
+      "external-forms·HubDB status": "",
+      "external-forms·External API status": "",
+    });
+    withCatalog(external, () => {
+      const forms = getTile("external-forms");
+      expect([tierMark(forms, 1), tierMark(forms, 2)]).toEqual(["Pro", "Ent"]);
+      /* On the shelf: the option it starts with */
+      expect(tierMark(forms)).toBe("Pro");
+      const api = quote(
+        setQuantity(setTile(essential(), "external-forms", true), "external-forms", 2),
+      );
+      expect(api.edition).toBe("enterprise");
+    });
+    /* From a quantity on: Memberships' access groups need Enterprise from 3 */
+    const groups = getTile("membership-groups");
+    expect([tierMark(groups, 2), tierMark(groups, 3)]).toEqual([undefined, "Ent"]);
+    /* Each source of the catalogue has its own */
+    expect(tierMark(getTile("product-catalogue"))).toBe("Pro");
+    expect(tierMark(getTile("catalogue-objects"))).toBe("Ent");
+    /* Every item and option: its badge is the tier the starting estimate needs with it in */
+    const mark = {
+      free: undefined,
+      starter: undefined,
+      professional: "Pro",
+      enterprise: "Ent",
+    } as const;
+    for (const tile of tiles) {
+      if (tile.hidden || tile.disabled || tile.place === "design" || tile.designOf) continue;
+      if (tile.place === "basics") continue;
+      const levels = tile.modes ? tile.modes.map((_, index) => index + 1) : [tile.min, tile.max];
+      for (const level of levels) {
+        const priced = quote(setQuantity(setTile(essential(), tile.id, true), tile.id, level));
+        if (priced.selection.tiles[tile.id] !== level) continue;
+        expect([tile.id, level, tierMark(tile, level)]).toEqual([
+          tile.id,
+          level,
+          mark[priced.edition],
+        ]);
+      }
+    }
+  });
+
+  test("an item that needs a package as soon as it is in sits in that package's shelf group, hours entered too", () => {
+    expect(shelfGroupOf("custom-integration")).toBe("Any package");
+    withCatalog(drafted({ "custom-integration package": "platform" }), () => {
+      expect(shelfGroupOf("custom-integration")).toBe("Needs Platform");
+      const priced = quote(setTile(essential(), "custom-integration", true));
+      /* In with no hours yet, it needs Platform already, and has no "from" hint */
+      expect(priced.shape).toBe("platform");
+      expect(ruleFor("custom-integration", priced)).toBeUndefined();
+    });
+    /* From a quantity on, it stays where it is, with its hint */
+    withCatalog(drafted({ "custom-integration package": "platform from 40" }), () => {
+      expect(shelfGroupOf("custom-integration")).toBe("Any package");
+      expect(ruleFor("custom-integration", quote(essential()))?.text).toBe("40+ → Platform");
+    });
+  });
+
+  test("the shelf has the Product catalogue while any of its sources is live; it comes with the first", () => {
+    const every = (id: string, status: string) =>
+      Object.fromEntries(catalogueOptions.map((option) => [`${id}·${option} status`, status]));
+    expect(shelfLanes().laneIds).toContain("product-catalogue");
+    withCatalog(
+      drafted({ ...every("product-catalogue", "soon"), ...every("catalogue-crm", "") }),
+      () => {
+        expect(shelfLanes().laneIds).toContain("product-catalogue");
+        const added = quote(setTile(essential(), "product-catalogue", true)).selection.tiles;
+        expect(added).not.toHaveProperty("product-catalogue");
+        expect(added["catalogue-crm"]).toBe(2);
+      },
+    );
+    withCatalog(drafted(every("product-catalogue", "soon")), () => {
+      expect(shelfLanes().laneIds).not.toContain("product-catalogue");
+      expect(shelfLanes().blockedShelfIds).toContain("product-catalogue");
+    });
+    withCatalog(
+      drafted({
+        ...every("product-catalogue", "hidden"),
+        ...every("catalogue-crm", "hidden"),
+        ...every("catalogue-objects", "hidden"),
+      }),
+      () => {
+        expect(shelfLanes().laneIds).not.toContain("product-catalogue");
+        expect(shelfLanes().blockedShelfIds).not.toContain("product-catalogue");
+      },
+    );
   });
 
   test("a table without an item the page is built around is refused", () => {
@@ -346,10 +703,13 @@ describe("a draft", () => {
 });
 
 describe("the short link", () => {
-  test("these links keep meaning these estimates: a change here breaks links already sent", () => {
-    expect(encodeSelection(essential())).toBe("BBkC_wGDAAMIAg");
+  test("these links mean these estimates: a change here breaks links already sent", () => {
+    expect(encodeSelection(essential())).toBe("ONiNI");
+    expect(decodeSelection("ONiNI")).toEqual(essential());
     const priced = quote(decodeSelection(example) as Selection);
-    expect(priced.hours).toBe(139);
+    /* Design 20h, build 77h, content 50h, the kick-off and training 7h, and project management:
+       15% of 147h is 22.05, so 23h */
+    expect(priced.hours).toBe(20 + 77 + 50 + 7 + 23);
     expect(priced.selection.tiles).toEqual({
       templates: 3,
       sections: 8,
@@ -358,6 +718,8 @@ describe("the short link", () => {
       header: 1,
       footer: 1,
       setup: 1,
+      kickoff: 1,
+      training: 2,
       "ai-design": 2,
       "ai-feedback": 1,
       "landing-templates": 1,
@@ -367,16 +729,21 @@ describe("the short link", () => {
     expect(encodeSelection(priced.selection)).toBe(example);
   });
 
-  test("is short: 14 letters for the starting estimate, under 50 with everything at its highest", () => {
-    expect(encodeSelection(essential()).length).toBe(14);
+  test("is short: 5 letters for the starting estimate, under 60 with everything at its highest", () => {
+    expect(encodeSelection(essential()).length).toBe(5);
+    /* An item adds its code and its number: a few letters */
+    expect(encodeSelection(setTile(essential(), "system", true)).length).toBeLessThanOrEqual(7);
     const all: Record<string, number> = {};
     for (const tile of tiles) {
-      if (!tile.disabled && tile.id !== "custom-design") all[tile.id] = tile.max;
+      /* One design: AI generated, with its variants and rounds */
+      if (!tile.disabled && !["nimbly-design", "custom-design", "no-design"].includes(tile.id)) {
+        all[tile.id] = tile.max;
+      }
     }
     all["product-catalogue"] = 5;
     const most = quote({ startingPoint: "cms-react", websitePages: 200, tiles: all }).selection;
     expect(Object.keys(most.tiles).length).toBeGreaterThan(24);
-    expect(encodeSelection(most).length).toBeLessThan(50);
+    expect(encodeSelection(most).length).toBeLessThan(60);
     expect(decodeSelection(encodeSelection(most))).toEqual(most);
   });
 
@@ -409,16 +776,23 @@ describe("the short link", () => {
     expect(decodeSelection(`https://example.com/packages/calc/?draft#${example}`)).toEqual(want);
   });
 
-  test("anything else is not a link", () => {
+  test("a link cut short, mistyped or made up is not a link", () => {
     for (const text of [
       "",
       "#",
+      "A",
       "hello",
       "#s=cms-react&w=25&b=same&t=templates.3",
       example.slice(0, -1),
       example.slice(0, -3),
+      `${example}A`,
       `${example}AA`,
       `C${example.slice(1)}`,
+      /* One letter changed, anywhere */
+      ...[...example].map(
+        (letter, index) =>
+          `${example.slice(0, index)}${letter === "A" ? "B" : "A"}${example.slice(index + 1)}`,
+      ),
     ]) {
       expect(decodeSelection(text)).toBeNull();
     }
@@ -484,38 +858,46 @@ describe("the short link", () => {
     });
   });
 
-  test("the bytes hold any code and number, and nothing after them", () => {
+  /** As many fixed numbers as the tests' links have: two, whatever the design. */
+  const two = () => 2;
+
+  test("the bits hold the pages, the design, any number from 1, any code, and nothing after them", () => {
     const packed = {
-      mode: 3,
-      pages: 200,
+      over: true,
+      design: 3,
+      fixed: [1, 70000],
       entries: [
         [255, 400],
         [1, 1],
-        [9, 0],
+        [9, 2],
         [64, 70000],
       ] as const,
     };
-    expect(unpackLink(packLink(packed))).toEqual({
-      mode: 3,
-      pages: 200,
+    expect(unpackLink(packLink(packed), two)).toEqual({
+      over: true,
+      design: 3,
+      fixed: [1, 70000],
       entries: [
         [1, 1],
-        [9, 0],
+        [9, 2],
         [64, 70000],
         [255, 400],
       ],
     });
-    expect(unpackLink(packLink({ mode: 0, pages: 25, entries: [] }))).toEqual({
-      mode: 0,
-      pages: 25,
-      entries: [],
-    });
+    for (const design of [0, 1, 2, 3]) {
+      const empty = { over: false, design, fixed: [1, 1], entries: [] };
+      expect(unpackLink(packLink(empty), two)).toEqual(empty);
+    }
+    /* The design says how many fixed numbers follow; a design the app has not is no link */
+    const text = packLink({ over: false, design: 2, fixed: [1, 1], entries: [] });
+    expect(unpackLink(text, (design) => (design === 2 ? -1 : 2))).toBeNull();
   });
 
   test("has no highest code, and stays short when an estimate has a few high ones", () => {
     const low = {
-      mode: 0,
-      pages: 25,
+      over: false,
+      design: 1,
+      fixed: [1, 3],
       entries: [
         [1, 3],
         [2, 8],
@@ -523,18 +905,35 @@ describe("the short link", () => {
         [8, 2],
       ] as [number, number][],
     };
-    /* Low codes: a bit for each, as every link so far */
-    expect(packLink(low).startsWith("BB")).toBe(true);
+    const short = packLink(low);
+    expect(unpackLink(short, two)).toEqual(low);
     for (const high of [256, 1000, 70000]) {
       const packed = { ...low, entries: [...low.entries, [high, 2]] as [number, number][] };
       const text = packLink(packed);
-      expect(unpackLink(text)).toEqual(packed);
+      expect(unpackLink(text, two)).toEqual(packed);
       /* The codes as steps instead of a bit for every code up to the highest */
-      expect(text.length).toBeLessThan(24);
+      expect(text.length).toBeLessThan(short.length + 8);
     }
     /* A thousand tasks, all in */
     const all = Array.from({ length: 1000 }, (_, index) => [index + 1, 1] as [number, number]);
-    expect(unpackLink(packLink({ mode: 1, pages: 3, entries: all }))?.entries).toEqual(all);
+    expect(
+      unpackLink(packLink({ over: false, design: 0, fixed: [1, 1], entries: all }), two)?.entries,
+    ).toEqual(all);
+  });
+
+  test("leaves out what every estimate has as it is, and writes the usual numbers in a bit", () => {
+    /* The header, footer, setup and launch and kick-off are in every estimate, once: no code */
+    const start = quote(essential()).selection;
+    for (const id of ["header", "footer", "setup", "kickoff"]) {
+      const without = { ...start, tiles: { ...start.tiles } };
+      delete without.tiles[id];
+      expect(encodeSelection(without)).toBe(encodeSelection(start));
+    }
+    /* Two website pages, as the estimator offers them: up to what Starter takes, or more */
+    const over = quote(setWebsitePages(essential(), 31)).selection;
+    expect(quote(setWebsitePages(essential(), 120)).selection.websitePages).toBe(31);
+    expect(decodeSelection(encodeSelection(over))?.websitePages).toBe(31);
+    expect(encodeSelection(over).length).toBe(encodeSelection(start).length);
   });
 
   test("a new item gets the next code ever given, a new option the next number, and none is reused", () => {
@@ -555,10 +954,100 @@ describe("the short link", () => {
         item.id === "menu" ? { ...item, options: [...item.options, "Mega"] } : item,
       ),
     );
-    expect(entry("blog-list-count")?.code).toBe(20);
+    const gone = withCodes(
+      codes,
+      rows
+        .filter((item) => item.id !== "system")
+        .map((item) => ({ id: item.id, option: item.option })),
+    );
+    expect(gone.find((item) => item.id === "system")?.code).toBe(
+      codes.find((item) => item.id === "system")?.code,
+    );
     /* A renamed option is a new one: links with the old name fall back to the first option */
     const renamed = applyCells(rows, { "menu·Advanced option": "Mega" });
     const built = catalog(renamed);
     expect(built.byId.get("menu")?.modes?.map((mode) => mode.value)).toEqual([1, 3]);
+  });
+});
+
+describe("the Product catalogue from another source", () => {
+  /** CRM Object with every option live, and 30h to build Filtered with Nimbly; Custom Object with
+      Module based only. */
+  const sources = () =>
+    drafted({
+      ...Object.fromEntries(
+        catalogueOptions.map((option) => [`catalogue-crm·${option} status`, ""]),
+      ),
+      "catalogue-crm·Dynamic pages: Filtered build-nimbly": "30",
+      "catalogue-objects·Module based status": "",
+    });
+  const catalogue = () => setTile(essential(), "product-catalogue", true);
+  const filtered = () => setQuantity(catalogue(), "product-catalogue", 3);
+
+  test("switching source keeps the option; the hours, package and tier are the source's", () => {
+    withCatalog(sources(), () => {
+      const crm = quote(setSource(filtered(), "catalogue-crm"));
+      expect(crm.selection.tiles["catalogue-crm"]).toBe(3);
+      expect(crm.selection.tiles).not.toHaveProperty("product-catalogue");
+      const line = crm.lines.find((item) => item.id === "catalogue-crm");
+      expect(line?.openHours).toBe(30);
+      expect(lineName(line as HourLine)).toBe("Product catalogue (CRM Object) · Filtered");
+      expect(crm.lines.find((item) => item.id === "nimbly-catalogue-crm")?.openHours).toBe(18);
+      expect([crm.shape, crm.edition]).toEqual(["platform", "professional"]);
+      /* A link keeps the source and its option */
+      expect(decodeSelection(encodeSelection(crm.selection))?.tiles["catalogue-crm"]).toBe(3);
+      /* Back to HubDB: its own hours */
+      const back = quote(setSource(crm.selection, "product-catalogue"));
+      expect(back.selection.tiles["product-catalogue"]).toBe(3);
+      expect(back.lines.find((item) => item.id === "product-catalogue")?.openHours).toBe(28);
+      /* Custom Object has Module based only: it takes the option it can, and Related products
+         go, as with Module based from any source */
+      const related = setTile(crm.selection, "related-products", true);
+      expect(related.tiles["related-products"]).toBe(1);
+      const objects = quote(setSource(related, "catalogue-objects"));
+      expect(objects.selection.tiles["catalogue-objects"]).toBe(1);
+      expect(objects.selection.tiles).not.toHaveProperty("related-products");
+      expect(objects.edition).toBe("enterprise");
+      expect(
+        quote(setTile(objects.selection, "related-products", true)).selection.tiles,
+      ).not.toHaveProperty("related-products");
+    });
+  });
+
+  test("a source with no live option cannot be chosen", () => {
+    const crm = setSource(filtered(), "catalogue-crm");
+    expect(crm.tiles["product-catalogue"]).toBe(3);
+    expect(crm.tiles).not.toHaveProperty("catalogue-crm");
+  });
+
+  test("the hours entered for Custom stay with the catalogue when its source changes", () => {
+    withCatalog(sources(), () => {
+      const custom = setQuantity(
+        setQuantity(catalogue(), "product-catalogue", 5),
+        "catalogue-custom",
+        25,
+      );
+      const crm = quote(setSource(custom, "catalogue-crm"));
+      expect(crm.selection.tiles["catalogue-crm"]).toBe(5);
+      expect(crm.lines.find((item) => item.id === "catalogue-custom")?.openHours).toBe(25);
+      expect(
+        quote(setQuantity(crm.selection, "catalogue-crm", 2)).selection.tiles,
+      ).not.toHaveProperty("catalogue-custom");
+    });
+  });
+
+  test("taking the catalogue out takes its source and its parts; an estimate has one source", () => {
+    withCatalog(sources(), () => {
+      const crm = setTile(setSource(filtered(), "catalogue-crm"), "favorite-products", true);
+      const out = quote(setTile(crm, "product-catalogue", false)).selection.tiles;
+      expect(out).not.toHaveProperty("catalogue-crm");
+      expect(out).not.toHaveProperty("favorite-products");
+      /* A link with two sources keeps the first of the table's */
+      const two = { ...crm, tiles: { ...crm.tiles, "product-catalogue": 2 } };
+      const kept = quote(two).selection.tiles;
+      expect(kept["product-catalogue"]).toBe(2);
+      expect(kept).not.toHaveProperty("catalogue-crm");
+      expect(kept["favorite-products"]).toBe(1);
+    });
   });
 });

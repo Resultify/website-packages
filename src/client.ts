@@ -1,8 +1,10 @@
 /* The client: draws the page on every change, moves items between the columns, and runs the page's own
    actions: Copy hours, Share link, and Reset with ten seconds to undo. */
-import { getTile } from "./catalog.ts";
+/* First: a preview puts the calculations page's files in use before anything reads them */
+import "./preview.ts";
+import { getTile, isPart } from "./catalog.ts";
 import { bindActions, commit, hoursText, setRedraw, store, syncOrder } from "./controls.ts";
-import { type PageState, render } from "./estimator.ts";
+import { fitHeads, type PageState, render } from "./estimator.ts";
 import { decodeSelection, encodeSelection, quote, selectionForShape } from "./quote.ts";
 
 const root = document.querySelector("#app");
@@ -63,10 +65,18 @@ function focusOn(key: string, reveal = false): void {
 
 /* ---------- Copy hours waits for hours you meant to enter ---------- */
 
-/** Content, Page migration or Blog import in the estimate with no hours: a copy now would leave them
-    out without a word. */
+/** An item whose hours are entered (Content, Page migration, Custom integration…) in the estimate
+    with none: a copy now would leave it out without a word. One with design hours entered too needs
+    one of the two. */
 function emptyEntries(): string[] {
-  return store.order.filter((id) => getTile(id).hourInput && !store.selection.tiles[id]);
+  const tiles = store.selection.tiles;
+  /* Parts whose hours are entered count too: Member area, and the Product catalogue's Custom
+     option */
+  const parts = Object.keys(tiles).filter((id) => isPart(id) && getTile(id).hourInput);
+  return [...store.order, ...parts].filter((id) => {
+    const tile = getTile(id);
+    return tile.hourInput && !tiles[id] && !(tile.designInput && tiles[tile.designInput]);
+  });
 }
 
 /** After a refused copy the cards say so, until each has hours or is taken out. */
@@ -76,13 +86,17 @@ let warning: string | null = null;
 const listed = (names: string[]) =>
   names.length < 2 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
 
+/** What the warning calls a place for hours: the catalogue's custom hours are its Custom option. */
+const entryName = (id: string) =>
+  id === "catalogue-custom" ? "the Product catalogue's Custom option" : getTile(id).label;
+
 /** Copy hours and Hours breakdown ask first. With an item still at 0 they say which, mark it, and
     put you in its hours field; `then` ends the warning with what you were about to do. */
 function hoursReady(then: string): boolean {
   const empty = emptyEntries();
   if (!empty.length) return true;
   marked = true;
-  const text = `Add hours to ${listed(empty.map((id) => getTile(id).label))}, or take ${
+  const text = `Add hours to ${listed(empty.map(entryName))}, or take ${
     empty.length === 1 ? "it" : "them"
   } out of the estimate, then ${then}.`;
   warning = text;
@@ -144,7 +158,9 @@ const state: PageState = {
   },
   copyHours,
   hoursReady,
-  shareLink: () => copyAction("share", location.href, "Link copied"),
+  /* The estimate, without ?preview: a link holds the estimate, not the files it is priced with */
+  shareLink: () =>
+    copyAction("share", `${location.origin}${location.pathname}${location.hash}`, "Link copied"),
   reset,
   undoReset,
 };
@@ -339,6 +355,7 @@ function draw(): void {
   app.dataset.quoteLabel = result.label;
   app.dataset.quoteEdition = result.edition;
   app.replaceChildren(render(result, state));
+  fitHeads(app);
   for (const node of document.querySelectorAll<HTMLElement>("[data-keep-scroll]")) {
     node.scrollTop = scroll.get(node.dataset.keepScroll ?? "") ?? 0;
   }
@@ -353,6 +370,9 @@ function draw(): void {
 
 setRedraw(draw);
 bindActions(app);
+/* The heads' labels show where they fit: look again when the room or the fonts change */
+window.addEventListener("resize", () => fitHeads(app));
+void document.fonts?.ready.then(() => fitHeads(app));
 
 window.addEventListener("hashchange", () => {
   const decoded = decodeSelection(location.hash);

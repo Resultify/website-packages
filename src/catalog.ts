@@ -21,6 +21,7 @@ import {
   type CodeEntry,
   type Column,
   type DesignKind,
+  designKinds,
   liveCodesText,
   liveRulesText,
   liveText,
@@ -71,6 +72,8 @@ export const alwaysOnTileIds = [
   "header",
   "footer",
   "setup",
+  "kickoff",
+  "training",
 ] as const;
 
 export function isAlwaysOn(id: string): boolean {
@@ -248,11 +251,16 @@ export const startingPoints: readonly StartingPoint[] = [
 ];
 
 export type GroupId =
-  "design" | "site" | "blog" | "features" | "languages" | "catalogue" | "content";
+  "design" | "site" | "blog" | "features" | "languages" | "catalogue" | "membership" | "content";
 
 export type GroupLayout = "pair" | "tiles" | "wide" | "three";
 
-export type HourBucket = "design" | "implementation" | "content";
+/** Design, Build ("implementation"), Content, and Project: the work around the site, the kick-off,
+    training and project management. */
+export type HourBucket = "design" | "implementation" | "content" | "project";
+
+/** What the hours that are not Design, Build or Content are called on the page and in a quote. */
+export const projectName = "Project";
 
 export const groups: readonly {
   id: GroupId;
@@ -266,6 +274,7 @@ export const groups: readonly {
   { id: "features", label: "Extra features", layout: "tiles" },
   { id: "blog", label: "Blog", layout: "tiles" },
   { id: "catalogue", label: "", layout: "tiles" },
+  { id: "membership", label: "Memberships", layout: "tiles" },
   { id: "content", label: "Content", layout: "tiles" },
 ];
 
@@ -286,6 +295,8 @@ export const basicsTileIds = [
   "header",
   "footer",
   "setup",
+  "kickoff",
+  "training",
 ] as const;
 
 export const addOnTileIds = [
@@ -367,23 +378,28 @@ export type Tile = {
   stepped: boolean;
   /** The number entered is the hour estimate, not a quantity of items. */
   hourInput?: boolean;
+  /** Its design hours are entered too, in this item of their own (unit "build and design hours"). */
+  designInput?: string;
+  /** The item whose design hours this one holds: in the estimate with it, never on its own. */
+  designOf?: string;
+  /** How many of it the estimate has, when it can have more than one: an item of its own. Its hours
+      count once for each. */
+  countedBy?: string;
+  /** The item it counts: in the estimate with it, never on its own. */
+  counts?: string;
   /** Shown, but not selectable. No build hours. */
   disabled?: boolean;
   /** Not shown anywhere, and left out of every estimate. Its link code stays taken. */
   hidden?: boolean;
   modes?: readonly TileMode[];
   rule: EditionRule;
-  mark?: string;
   badge?: TileBadge;
   hub?: { id: HubId; edition: Edition; detail: string };
-  requires: readonly string[];
   note?: string;
   /** Design and content sit outside the package rate and the extra cap. */
   bucket: HourBucket;
   /** A task with modes keeps its design hours on each mode. */
   design: DesignRate;
-  /** What its design line is called, before "design" lines get their "AI " in front. */
-  designLabel: string;
 };
 
 export type ShapeId = "essential" | "growth" | "platform" | "custom";
@@ -491,6 +507,9 @@ export type Catalog = {
   pages: PageRule;
   /** Extra AI variants: this share of the AI design hours each, in percent. */
   variantPercent: number;
+  /** Project management: this share of the estimate's design, build and content hours, in percent, whatever the
+      design. */
+  managementPercent: number;
   /** The link codes with every item of the table in them: what Save and the build write. */
   codes: readonly CodeEntry[];
 };
@@ -502,19 +521,91 @@ const ruleEditions = ["professional", "enterprise"] as const;
     basics     in every estimate (the page is built around them, so the list is fixed)
     shelf      added when the site needs it, on its own
     blog       the Blog: the number of blogs, and its templates
-    catalogue  the Product catalogue: its sources, and what goes with them */
-export const places = ["basics", "shelf", "blog", "catalogue"] as const;
+    catalogue  the Product catalogue: its sources, and what goes with them
+    membership Memberships: how members sign in, their access groups, and what goes with them */
+export const places = ["basics", "shelf", "blog", "catalogue", "membership"] as const;
 export type Place = (typeof places)[number] | "design";
 
-/** What the Blog and the Product catalogue are called. They are places, not rows of the table. */
-export const placeName = { blog: "Blog", catalogue: "Product catalogue" } as const;
+/** What the Blog, the Product catalogue and Memberships are called. They are places, not rows of
+    the table. */
+export const placeName = {
+  blog: "Blog",
+  catalogue: "Product catalogue",
+  membership: "Memberships",
+} as const;
 
-/** The catalogue's source with options, the only one an estimate can use for now. Any other
-    item of the catalogue that is not a part of it is a source to come: Coming soon, or Hidden. */
+/** The Product catalogue's first source, HubDB: the catalogue on the shelf, and in the estimate's
+    middle column, whichever source it has. Every item of the catalogue that is not one of its parts
+    is a source, with the same options: an estimate's catalogue has one of them. */
 export const catalogueId = "product-catalogue";
 
-/** Items the rules make, with what they are called. */
-const ruleTileIds = ["ai-design", "ai-feedback", "custom-design", "design-feedback", "languages"];
+/** A way the design gets made. Each is an item the rules make, and every estimate has one of them:
+    AI generated, Nimbly and Custom with their own build and design hours and feedback rounds; None
+    with no design hours, building as Custom. */
+export type DesignChoice = {
+  kind: Choice;
+  /** Its item: in the estimate while it is the choice. */
+  id: string;
+  /** Its feedback rounds, in the estimate with it. None has none. */
+  feedbackId?: string;
+  feedbackName?: string;
+  /** On its button. */
+  label: string;
+  /** In the hours and the reasons for the package. */
+  name: string;
+  note: string;
+};
+
+export const designChoices: readonly DesignChoice[] = [
+  {
+    kind: "ai",
+    id: "ai-design",
+    feedbackId: "ai-feedback",
+    feedbackName: "AI feedback",
+    label: "AI generated",
+    name: "AI generated design",
+    note: "AI generates variants from Nimbly's default templates and the client's brief. The client picks one.",
+  },
+  {
+    kind: "nimbly",
+    id: "nimbly-design",
+    feedbackId: "nimbly-feedback",
+    feedbackName: "Nimbly feedback",
+    label: "Nimbly",
+    name: "Nimbly design",
+    note: "A designer adapts Nimbly's default templates to the client's brief.",
+  },
+  {
+    kind: "custom",
+    id: "custom-design",
+    feedbackId: "custom-feedback",
+    feedbackName: "Custom feedback",
+    label: "Custom",
+    name: "Custom design",
+    note: "A designer creates a fully custom design from the client's brief.",
+  },
+  {
+    kind: "none",
+    id: "no-design",
+    label: "None",
+    name: "No design",
+    note: "The client provides the design. No design hours; build hours as for Custom.",
+  },
+];
+
+/** The design a new estimate starts with. */
+export const startingDesign = designChoices.find(
+  (choice) => choice.kind === "nimbly",
+) as DesignChoice;
+
+/** Items the rules make. */
+const ruleTileIds: readonly string[] = [
+  ...designChoices.flatMap((choice) => [
+    choice.id,
+    ...(choice.feedbackId ? [choice.feedbackId] : []),
+  ]),
+  "languages",
+];
 
 /** Items the page is built around: the basics. A table without one of them cannot be used. */
 const neededIds = basicsTileIds;
@@ -523,13 +614,44 @@ const neededIds = basicsTileIds;
 export const partsOf: Record<string, readonly string[]> = {
   "blog-setups": ["blog-list", "blog-post", "blog-recent"],
   "product-catalogue": ["catalogue-custom", "favorite-products", "related-products"],
+  membership: ["membership-groups", "membership-social", "membership-area"],
 };
 
-/** Items whose status can be Coming soon or Hidden: what sits on the shelf, not the basics that
-    every estimate has, nor the parts of another item. The catalogue's CRM sources show inside it,
-    as coming. */
+/** The items with parts, and the place they and their parts are in. */
+const cardPlaces: Record<string, (typeof places)[number]> = {
+  "blog-setups": "blog",
+  "product-catalogue": "catalogue",
+  membership: "membership",
+};
+
+/** Parts added to their item on their own, each with a status of its own. */
+export const optionalPartIds: readonly string[] = [
+  "blog-recent",
+  "favorite-products",
+  "related-products",
+  "membership-social",
+  "membership-area",
+];
+
+/** Parts always in the estimate with their item: the Blog's templates (a status on each option)
+    and Memberships' access groups. The catalogue's custom hours go with its Custom option. */
+export function requiredPartsOf(id: string): string[] {
+  return (partsOf[id] ?? []).filter(
+    (part) => !optionalPartIds.includes(part) && part !== "catalogue-custom",
+  );
+}
+
+/** The item a part is in. */
+export function ownerOf(id: string): string | undefined {
+  return Object.entries(partsOf).find(([, parts]) => parts.includes(id))?.[0];
+}
+
+/** Items whose status can be Coming soon or Hidden: what sits on the shelf, the sources of the
+    Product catalogue and the parts added on their own; not the basics that every estimate has. */
 export function hasStatus(id: string): boolean {
-  return !isAlwaysOn(id) && !isPart(id) && !ruleTileIds.includes(id);
+  return (
+    !isAlwaysOn(id) && !ruleTileIds.includes(id) && (!isPart(id) || optionalPartIds.includes(id))
+  );
 }
 
 /** A part of the Blog or of the Product catalogue: in the estimate with it, never on its own. */
@@ -537,10 +659,9 @@ export function isPart(id: string): boolean {
   return Object.values(partsOf).some((parts) => parts.includes(id));
 }
 
-/** A source of products to come: an item of the catalogue that is neither its source with options
-    nor one of its parts. */
-export function isComingSource(id: string, place: string): boolean {
-  return place === "catalogue" && id !== catalogueId && !isPart(id);
+/** A source of the Product catalogue: an item of the catalogue that is not one of its parts. */
+export function isSource(id: string, place: string): boolean {
+  return place === "catalogue" && !isPart(id);
 }
 
 function fail(row: Row, message: string): never {
@@ -624,14 +745,14 @@ export function fillNote(text: string, build: BuildRate, choice: Choice): string
   return text.replaceAll("{build}", String(build[buildKind(choice)]));
 }
 
-const noBuild: BuildRate = { ai: 0, design: 0, custom: 0 };
-const noDesign: DesignRate = { ai: 0, design: 0, custom: 0 };
-const same = (hours: number): BuildRate => ({ ai: hours, design: hours, custom: hours });
+const noBuild: BuildRate = { ai: 0, nimbly: 0, custom: 0 };
+const noDesign: DesignRate = { ai: 0, nimbly: 0, custom: 0 };
+const same = (hours: number): BuildRate => ({ ai: hours, nimbly: hours, custom: hours });
 
 function buildRate(row: Row): BuildRate {
   return {
     ai: number(row, "build-ai", 0),
-    design: number(row, "build-design", 0),
+    nimbly: number(row, "build-nimbly", 0),
     custom: number(row, "build-custom", 0),
   };
 }
@@ -639,17 +760,17 @@ function buildRate(row: Row): BuildRate {
 function designRate(row: Row): DesignRate {
   return {
     ai: number(row, "design-ai", 0),
-    design: number(row, "design-design", 0),
+    nimbly: number(row, "design-nimbly", 0),
     custom: number(row, "design-custom", 0),
   };
 }
 
 const hourColumns = [
   "build-ai",
-  "build-design",
+  "build-nimbly",
   "build-custom",
   "design-ai",
-  "design-design",
+  "design-nimbly",
   "design-custom",
 ] as const;
 
@@ -658,29 +779,27 @@ function placeOf(row: Row): (typeof places)[number] {
   const place = places.find((item) => item === row.place);
   if (!place) fail(row, `place must be one of ${places.join(", ")}. It is "${row.place}"`);
   const basic = basicsTileIds.some((id) => id === row.id);
-  const blogIds = ["blog-setups", ...(partsOf["blog-setups"] ?? [])];
-  const catalogueIds = [catalogueId, ...(partsOf[catalogueId] ?? [])];
-  const expected = basic
-    ? "basics"
-    : blogIds.includes(row.id)
-      ? "blog"
-      : catalogueIds.includes(row.id)
-        ? "catalogue"
-        : null;
+  const owner = cardPlaces[row.id] ? row.id : ownerOf(row.id);
+  const expected = basic ? "basics" : owner ? (cardPlaces[owner] ?? null) : null;
   if (expected && place !== expected) fail(row, `place must be ${expected}. It is ${place}`);
-  if (!expected && (place === "basics" || place === "blog")) {
-    fail(
-      row,
+  /* The catalogue takes more sources; the basics, the Blog and Memberships are fixed */
+  if (!expected && place !== "shelf" && place !== "catalogue") {
+    const fixed =
       place === "basics"
-        ? `place cannot be basics: the basics are ${basicsTileIds.join(", ")}`
-        : `place cannot be blog: the Blog is ${blogIds.join(", ")}`,
-    );
+        ? [...basicsTileIds]
+        : Object.keys(cardPlaces)
+            .filter((id) => cardPlaces[id] === place)
+            .flatMap((id) => [id, ...(partsOf[id] ?? [])]);
+    fail(row, `place cannot be ${place}: it holds ${fixed.join(", ")}`);
   }
-  if (row.type !== "" && row.type !== "content") {
-    fail(row, `type must be empty (build) or content. It is "${row.type}"`);
+  if (row.type !== "" && row.type !== "content" && row.type !== "project") {
+    fail(row, `type must be empty (build), content or project. It is "${row.type}"`);
   }
   if (row.type === "content" && place !== "shelf") {
     fail(row, "type can be content on items of the shelf only");
+  }
+  if (row.type === "project" && place !== "shelf" && place !== "basics") {
+    fail(row, "type can be project on items of the site basics and the shelf only");
   }
   return place;
 }
@@ -691,31 +810,40 @@ function groupOf(row: Row, place: (typeof places)[number]): GroupId {
   return place;
 }
 
-function bucketOf(group: GroupId): HourBucket {
+/** Where an item's hours count: Content and Project by its type, Build otherwise. Its design
+    hours are always Design. */
+function bucketOf(group: GroupId, type = ""): HourBucket {
   if (group === "design") return "design";
+  if (type === "project") return "project";
   return group === "content" ? "content" : "implementation";
 }
 
 function statusOf(row: Row): { disabled?: true; badge?: TileBadge; hidden?: true } {
-  if (isComingSource(row.id, row.place) && row.status === "") {
+  if (isSource(row.id, row.place) && row.status === "") {
     fail(
       row,
-      "status must be soon or hidden: the estimator has no options for this source of products yet",
+      "status must be soon or hidden: a source of products is live with its options, and this one has none yet",
     );
   }
   if (row.status === "") return {};
   if (!hasStatus(row.id)) {
-    fail(row, "status can be set on items of the shelf only. This one is always shown");
+    fail(
+      row,
+      "status can be set on items of the shelf, sources of products and parts added on their own. This one is always shown",
+    );
   }
   if (row.status === "soon") return { disabled: true, badge: "planned" };
   if (row.status === "hidden") return { hidden: true };
   fail(row, `status must be empty (live), soon or hidden. It is "${row.status}"`);
 }
 
-function markOf(rule: EditionRule, min: number): { mark?: string } {
-  const edition = rule.at(min).edition;
-  if (edition === "professional") return { mark: "Pro" };
-  return edition === "enterprise" ? { mark: "Ent" } : {};
+/** The tier an item needs, as its badge says it, with the option or quantity it has: Pro, Ent, or
+    none for Starter. An item that needs another tier with another option or from a quantity on
+    shows that one: Forms with external data is Pro with HubDB and Ent with External API. */
+export function tierMark(item: Tile, qty: number = item.initial): "Pro" | "Ent" | undefined {
+  const edition = item.rule.at(qty).edition;
+  if (edition === "professional") return "Pro";
+  return edition === "enterprise" ? "Ent" : undefined;
 }
 
 function steppedRule(steps: readonly { name: Edition; at: number; reason: string }[]): EditionRule {
@@ -731,12 +859,71 @@ function steppedRule(steps: readonly { name: Edition; at: number; reason: string
   };
 }
 
+/** The unit of an item whose build hours and design hours are both entered in the estimate. */
+export const designInputUnit = "build and design hours";
+/** The item that holds the design hours entered for another. */
+export const designInputId = (id: string) => `${id}-design`;
+
+/** The design hours entered for an item: an item of their own, so a link holds them, in the
+    estimate with it. Counted as design hours whatever the design. */
+function designInputTile(item: Tile, code: number): Tile {
+  return {
+    ...item,
+    id: designInputId(item.id),
+    code,
+    designInput: undefined,
+    designOf: item.id,
+    summary: "",
+    bucket: "design",
+    initial: 0,
+    rule: steppedRule([]),
+    badge: undefined,
+  };
+}
+
+/** The Blog's parts the blogs may need more than one of, each with the item that counts it and what
+    it counts: with more than one blog, a blog may need a list or post template of its own, or a
+    recent posts section of its own design. The count is never more than the blogs; one, the one
+    they all share, is no count at all. */
+export const templateCounts: Readonly<Record<string, { id: string; unit: string }>> = {
+  "blog-list": { id: "blog-list-count", unit: "templates" },
+  "blog-post": { id: "blog-post-count", unit: "templates" },
+  "blog-recent": { id: "blog-recent-count", unit: "versions" },
+};
+
+/** How many of an item the estimate has: an item of its own, so a link holds it, with no hours of
+    its own. It multiplies the item's. */
+function countTile(item: Tile, id: string, unit: string, code: number): Tile {
+  return {
+    id,
+    place: item.place,
+    code,
+    label: item.label,
+    group: item.group,
+    summary: "",
+    build: noBuild,
+    includedInBase: 0,
+    unit,
+    min: 1,
+    max: 100,
+    initial: 1,
+    step: 1,
+    stepped: true,
+    counts: item.id,
+    rule: steppedRule([]),
+    bucket: item.bucket,
+    design: noDesign,
+  };
+}
+
 /** A task with one row: a switch, a quantity, or hours you enter. */
 function plainTile(row: Row, code: number, rules: PackageRule[]): Tile {
   if (!row.item) fail(row, "item is empty");
   const place = placeOf(row);
   const group = groupOf(row, place);
-  const unit = row.unit || undefined;
+  /* "build and design hours": both entered, the design hours in an item of their own */
+  const withDesign = row.unit === designInputUnit;
+  const unit = withDesign ? "hours" : row.unit || undefined;
   const hourInput = unit === "hours";
   const min = hourInput ? 0 : 1;
   const max = number(row, "max", unit ? Number.NaN : 1, true);
@@ -748,7 +935,11 @@ function plainTile(row: Row, code: number, rules: PackageRule[]): Tile {
   if (min > max) fail(row, `max ${max} is less than ${min}`);
   if (initial < min || initial > max) fail(row, `start ${initial} is outside ${min} to ${max}`);
   if (hourInput) blank(row, hourColumns, "its hours are entered in the estimate");
-  const label = row.item;
+  if (withDesign && row.type !== "") {
+    fail(row, "type must be empty: build and design hours are build hours and design hours");
+  }
+  const source = isSource(row.id, place);
+  const label = source ? `${placeName.catalogue} (${row.item})` : row.item;
 
   const pack = needs<PackageId>(row, "package", rulePackages);
   if (pack) {
@@ -768,7 +959,7 @@ function plainTile(row: Row, code: number, rules: PackageRule[]): Tile {
   return {
     id: row.id,
     place,
-    ...(isComingSource(row.id, place) ? { source: label } : {}),
+    ...(source ? { source: row.item } : {}),
     code,
     label,
     group,
@@ -782,13 +973,11 @@ function plainTile(row: Row, code: number, rules: PackageRule[]): Tile {
     step: 1,
     stepped: !!unit && !hourInput,
     ...(hourInput ? { hourInput: true } : {}),
+    ...(withDesign ? { designInput: designInputId(row.id) } : {}),
     ...statusOf(row),
     rule,
-    ...markOf(rule, min),
-    requires: [],
-    bucket: bucketOf(group),
+    bucket: bucketOf(group, row.type),
     design: designRate(row),
-    designLabel: `${label} design`,
   };
 }
 
@@ -814,9 +1003,9 @@ function modeTile(rows: readonly Row[], entry: CodeEntry, rules: PackageRule[]):
   if (!task.item) fail(first, "item is empty");
   const place = placeOf(task);
   const group = groupOf(task, place);
-  /* The catalogue's rows are its source: the item is the Product catalogue, from that source */
-  const isCatalogue = first.id === catalogueId;
-  const itemLabel = isCatalogue ? placeName.catalogue : task.item;
+  /* A source's rows are the Product catalogue from that source: "Product catalogue (HubDB)" */
+  const isCatalogue = isSource(first.id, place);
+  const itemLabel = isCatalogue ? `${placeName.catalogue} (${task.item})` : task.item;
   const names = new Set<string>();
   let starts = "";
   for (const row of rows) {
@@ -914,11 +1103,8 @@ function modeTile(rows: readonly Row[], entry: CodeEntry, rules: PackageRule[]):
     ...itemStatus,
     modes,
     rule,
-    ...markOf(rule, 1),
-    requires: [],
-    bucket: bucketOf(group),
+    bucket: bucketOf(group, task.type),
     design: noDesign,
-    designLabel: `${itemLabel} design`,
   };
 }
 
@@ -963,10 +1149,8 @@ function roundsTile(
     step: 1,
     stepped: true,
     rule: steppedRule([]),
-    requires: [],
     bucket: "design",
     design: noDesign,
-    designLabel: `${label} design`,
   };
 }
 
@@ -986,23 +1170,25 @@ function choiceTile(id: string, code: number, label: string, summary: string): T
     step: 1,
     stepped: false,
     rule: steppedRule([]),
-    requires: [],
     bucket: "design",
     design: noDesign,
-    designLabel: `${label} design`,
   };
 }
 
 const roundsNote = (included: number, each: number) => `${included} included, then ${each}h each`;
 
+/** A package a rule names: empty for none, growth or platform. */
+function rulePackage(rules: Rules, name: RuleName): PackageId | null {
+  const text = rules[name].trim();
+  if (text === "") return null;
+  const found = rulePackages.find((item) => item === text);
+  if (!found) throw new Error(`Rule ${name} must be growth, platform or empty. It is "${text}"`);
+  return found;
+}
+
 /** Design and Languages: the items the rules make. */
 function ruleTiles(rules: Rules, codeOf: (id: string) => number, packages: PackageRule[]): Tile[] {
   const variants = rule(rules, "ai-variants-included");
-  const percent = rule(rules, "ai-variant-percent");
-  const aiRounds = rule(rules, "ai-feedback-included");
-  const aiEach = rule(rules, "ai-feedback-each", false);
-  const customRounds = rule(rules, "custom-feedback-included");
-  const customEach = rule(rules, "custom-feedback-each", false);
   const included = rule(rules, "languages-included");
   const second = rule(rules, "languages-second", false);
   const each = rule(rules, "languages-each", false);
@@ -1026,46 +1212,49 @@ function ruleTiles(rules: Rules, codeOf: (id: string) => number, packages: Packa
       reason: "{qty} languages need Content Hub Professional",
     },
   ]);
-  const share = percent === 50 ? "half" : `${percent}%`;
+  /* Each design, with the package it needs, then its feedback rounds: so many included, each one
+     past them charged */
+  const designs = designChoices.flatMap((choice): Tile[] => {
+    const needs = rulePackage(rules, `${choice.kind}-package`);
+    if (needs) {
+      packages.push({
+        tileId: choice.id,
+        at: 1,
+        exact: false,
+        package: needs,
+        reason: () => choice.name,
+      });
+    }
+    const design =
+      choice.kind === "ai"
+        ? roundsTile(
+            choice.id,
+            codeOf(choice.id),
+            choice.name,
+            "variants",
+            variants,
+            rule(rules, "ai-variants-max"),
+            0,
+            choice.note,
+          )
+        : choiceTile(choice.id, codeOf(choice.id), choice.name, choice.note);
+    if (choice.kind === "none" || !choice.feedbackId) return [design];
+    const rounds = rule(rules, `${choice.kind}-feedback-included`);
+    const each = rule(rules, `${choice.kind}-feedback-each`, false);
+    const feedback = roundsTile(
+      choice.feedbackId,
+      codeOf(choice.feedbackId),
+      choice.feedbackName ?? `${choice.label} feedback`,
+      "rounds",
+      rounds,
+      rule(rules, `${choice.kind}-feedback-max`),
+      each,
+      roundsNote(rounds, each),
+    );
+    return [design, feedback];
+  });
   return [
-    {
-      ...roundsTile(
-        "ai-design",
-        codeOf("ai-design"),
-        "AI generated design",
-        "variants",
-        variants,
-        rule(rules, "ai-variants-max"),
-        0,
-        `Generates design variants from the features included and how many of each. ${variants === 2 ? "Two" : variants} variants are the starting cost. Each variant after that adds ${share} of that cost, rounded up.`,
-      ),
-    },
-    roundsTile(
-      "ai-feedback",
-      codeOf("ai-feedback"),
-      "AI feedback",
-      "rounds",
-      aiRounds,
-      rule(rules, "ai-feedback-max"),
-      aiEach,
-      roundsNote(aiRounds, aiEach),
-    ),
-    choiceTile(
-      "custom-design",
-      codeOf("custom-design"),
-      "Custom design",
-      "Design depends on the features included and how many of each.",
-    ),
-    roundsTile(
-      "design-feedback",
-      codeOf("design-feedback"),
-      "Custom feedback",
-      "rounds",
-      customRounds,
-      rule(rules, "custom-feedback-max"),
-      customEach,
-      roundsNote(customRounds, customEach),
-    ),
+    ...designs,
     {
       id: "languages",
       place: "basics",
@@ -1083,11 +1272,8 @@ function ruleTiles(rules: Rules, codeOf: (id: string) => number, packages: Packa
       step: 1,
       stepped: true,
       rule: languageRule,
-      ...markOf(languageRule, 1),
-      requires: [],
       bucket: "implementation",
       design: noDesign,
-      designLabel: "Languages design",
     },
   ];
 }
@@ -1117,10 +1303,20 @@ export function buildCatalog(
     if (list) list.push(row);
     else byId.set(row.id, [row]);
   }
-  /* Every item and option has a link code: one given before, or the next one */
+  /* Every item and option has a link code: one given before, or the next one. A link names the
+     items of the shelf and their parts by code, so they come first, in the table's order, each with
+     what goes with it; the basics and the designs, which a link holds otherwise, come last */
+  const linked = rows.filter((row) => !basicsTileIds.some((id) => id === row.id));
   const merged = withCodes(codes, [
+    ...linked.flatMap((row) => [
+      { id: row.id, option: row.option },
+      ...(row.unit === designInputUnit ? [{ id: designInputId(row.id), option: "" }] : []),
+      ...(templateCounts[row.id] ? [{ id: templateCounts[row.id]?.id ?? "", option: "" }] : []),
+    ]),
     ...ruleTileIds.map((id) => ({ id, option: "" })),
-    ...rows.map((row) => ({ id: row.id, option: row.option })),
+    ...rows
+      .filter((row) => basicsTileIds.some((id) => id === row.id))
+      .map((row) => ({ id: row.id, option: row.option })),
   ]);
   const entryOf = new Map(merged.map((entry) => [entry.id, entry]));
   const codeOf = (id: string) => entryOf.get(id)?.code ?? 0;
@@ -1133,11 +1329,23 @@ export function buildCatalog(
       fail(first, `${id} has ${own.length} rows. An item has one row, or one for each option`);
     }
     const entry = entryOf.get(id) as CodeEntry;
-    list.push(
-      first.option
-        ? modeTile(own, entry, packageRules)
-        : plainTile(first, entry.code, packageRules),
-    );
+    const item = first.option
+      ? modeTile(own, entry, packageRules)
+      : plainTile(first, entry.code, packageRules);
+    list.push(item);
+    if (item.designInput) {
+      if (byId.has(item.designInput)) {
+        fail(first, `${item.designInput} cannot be an id: it holds ${id}'s design hours`);
+      }
+      list.push(designInputTile(item, codeOf(item.designInput)));
+    }
+    const count = templateCounts[id];
+    if (count) {
+      if (byId.has(count.id))
+        fail(first, `${count.id} cannot be an id: it holds how many ${id} there are`);
+      item.countedBy = count.id;
+      list.push(countTile(item, count.id, count.unit, codeOf(count.id)));
+    }
   }
 
   const tileById = new Map(list.map((item) => [item.id, item]));
@@ -1146,8 +1354,8 @@ export function buildCatalog(
     const taken = byCode.get(item.code);
     if (taken) throw new Error(`${item.label} and ${taken.label} have the same code, ${item.code}`);
     byCode.set(item.code, item);
-    /* A design line is named after its task: "ai-menu". No task may already have that name. */
-    for (const name of [`ai-${item.id}`, `design-${item.id}`]) {
+    /* A design line is named after its kind and task: "ai-menu". No task may have that name. */
+    for (const name of designKinds.map((kind) => `${kind}-${item.id}`)) {
       if (tileById.has(name)) throw new Error(`${item.id} cannot be an id: ${name} is one already`);
     }
   }
@@ -1175,6 +1383,7 @@ export function buildCatalog(
     packageRules,
     pages: pageRule(rules),
     variantPercent: rule(rules, "ai-variant-percent"),
+    managementPercent: rule(rules, "pm-percent", false),
     codes: merged,
   };
 }
@@ -1238,22 +1447,37 @@ export function isShown(id: string): boolean {
   return !!found && !found.hidden;
 }
 
-/** What the shelf offers, in the table's order: its items, the Blog and the Product catalogue.
-    Hidden ones are left out. */
+/** What the shelf offers, in the table's order: its items, the Blog, the Product catalogue and
+    Memberships. Hidden ones are left out; the Product catalogue is shown while any of its sources
+    is. */
 export function shelfTiles(): Tile[] {
-  return tiles.filter(
-    (item) =>
-      !item.hidden &&
-      (item.place === "shelf" || item.id === "blog-setups" || item.id === catalogueId),
+  return tiles.filter((item) =>
+    item.id === catalogueId
+      ? catalogueSources().length > 0
+      : !item.hidden &&
+        !item.designOf &&
+        (item.place === "shelf" || cardPlaces[item.id] !== undefined),
   );
 }
 
-/** The Product catalogue's sources, as its Source buttons show them: the one with options first,
-    then those to come. Hidden ones are left out. */
-export function catalogueSources(): Tile[] {
+/** An item of the shelf that can be added: not coming soon. The Product catalogue can while any of
+    its sources is live. */
+export function isReady(item: Tile): boolean {
+  return item.id === catalogueId
+    ? catalogueSources().some((source) => !source.disabled)
+    : !item.disabled && !item.hidden;
+}
+
+/** The Product catalogue's sources, every one, in the table's order: HubDB first. */
+export function sourceTiles(): Tile[] {
   return tiles
-    .filter((item) => item.source !== undefined && !item.hidden)
+    .filter((item) => item.source !== undefined)
     .sort((a, b) => Number(b.id === catalogueId) - Number(a.id === catalogueId));
+}
+
+/** The sources its Source buttons show: the hidden ones are left out. */
+export function catalogueSources(): Tile[] {
+  return sourceTiles().filter((item) => !item.hidden);
 }
 
 export function tileByCode(code: number): Tile | undefined {
@@ -1311,6 +1535,8 @@ export function modeLabel(item: Tile, qty: number): string | undefined {
 
 export type DesignPart = {
   id: string;
+  /** The item it is the design of. */
+  item: string;
   label: string;
   qty: number;
   unit?: string;
@@ -1318,53 +1544,72 @@ export type DesignPart = {
   hours: number;
 };
 
+/** Project management's share of the estimate's design, build and content hours, in percent. */
+export function managementPercent(): number {
+  return active.managementPercent;
+}
+
 /** One variant beyond the included ones: a share of the base design, rounded up to a whole hour. */
 export function aiVariantHours(baseHours: number): number {
   return Math.ceil((baseHours * active.variantPercent) / 100);
 }
 
-/** How much of a task is in the estimate: its quantity or mode. */
-export type Amount = { qty: number };
+/** How much of a task is in the estimate: its quantity or mode, and how many of it with what that
+    counts (the Blog's templates or recent posts versions, with more than one blog). */
+export type Amount = { qty: number; times?: number; unit?: string };
 
 /**
- * Design hours, one line for each task that has a design rate and is in the estimate. Custom
- * design is charged only while Custom design is on; AI design is one set of these lines.
+ * Design hours of one kind, one line for each task that has a design rate and is in the estimate:
+ * "nimbly-menu", named as the item. Only the estimate's design choice is charged.
  */
 export function designParts(
   kind: DesignKind,
   amountOf: (item: Tile) => Amount | undefined,
 ): DesignPart[] {
-  const prefix = kind === "ai" ? "ai" : "design";
   const parts: DesignPart[] = [];
   for (const group of groups) {
     for (const item of tilesInGroup(group.id)) {
       if (item.hidden || item.disabled) continue;
       const amount = amountOf(item);
       if (!amount) continue;
-      const id = `${prefix}-${item.id}`;
-      const label = `${kind === "ai" ? "AI " : ""}${item.designLabel}`;
+      const id = `${kind}-${item.id}`;
+      const label = item.label;
       let part: DesignPart;
+      /* How many, when more than one, as its build line says */
+      const times = amount.times ?? 1;
+      const counted = times > 1 && amount.unit ? { unit: amount.unit } : {};
       if (item.modes && item.modes.length > 0) {
         const mode = modeAt(item, amount.qty);
         const rate = mode?.design[kind] ?? 0;
-        /* The mode is named only when it changes the hours */
-        const named = item.modes.some((other) => other.design[kind] !== rate);
+        /* Named with its option, as its build line is */
         part = {
           id,
+          item: item.id,
           label,
-          qty: 1,
-          ...(named && mode ? { mode: mode.label } : {}),
-          hours: rate,
+          qty: times,
+          ...counted,
+          ...(mode ? { mode: mode.label } : {}),
+          hours: rate * times,
         };
       } else if (item.stepped) {
         part = {
           id,
+          item: item.id,
           label,
           qty: amount.qty,
           ...(item.unit ? { unit: item.unit } : {}),
           hours: item.design[kind] * amount.qty,
         };
-      } else part = { id, label, qty: 1, hours: item.design[kind] };
+      } else {
+        part = {
+          id,
+          item: item.id,
+          label,
+          qty: times,
+          ...counted,
+          hours: item.design[kind] * times,
+        };
+      }
       if (part.hours > 0) parts.push(part);
     }
   }

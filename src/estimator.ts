@@ -7,13 +7,22 @@
 import {
   catalogueId,
   catalogueSources,
+  currentCatalog,
+  type DesignChoice,
+  designChoices,
+  managementPercent,
   editionLabel,
   fillNote,
   getTile,
+  partsOf,
+  ownerOf,
   placeName,
+  projectName,
   shapeChoices,
   starterPageCap,
   type Tile,
+  tierMark,
+  tileMode,
 } from "./catalog.ts";
 import {
   stepper as appStepper,
@@ -23,6 +32,7 @@ import {
   designFor,
   fixedHours,
   fixedIds,
+  projectIds,
   hoursInput,
   hoursLabel,
   includedCount,
@@ -41,14 +51,20 @@ import {
 } from "./controls.ts";
 import { h, type Kid } from "./dom.ts";
 import { type IconName, icon, logo, sprocket } from "./icons.ts";
+import { inPreview } from "./preview.ts";
 import {
+  aiDesignHours,
   aiVariantCost,
   choiceOf,
-  isModuleBased,
+  designOf,
+  managementLineId,
+  isIn,
+  isBlocked,
   formatHours,
   type Quote,
   quote,
   setTile,
+  sourceIn,
   stepHours,
 } from "./quote.ts";
 
@@ -74,18 +90,21 @@ export type PageState = {
 
 /* ---------- Words and lists ---------- */
 
-const designNote = {
-  ai: "Generated from the features in your scope, with two variants to choose from.",
-  custom:
-    "Designed for this site. Hours follow the features you pick and show in the Design column.",
-  none: "No design work in this estimate.",
-} as const;
 /** The Blog and the Product catalogue are named after their place; every other item by its row. */
 const laneNames: Record<string, string> = {
   "blog-setups": placeName.blog,
   [catalogueId]: placeName.catalogue,
 };
-const basicsIds = ["templates", "sections", "menu", "header", "footer", "setup"];
+const basicsIds = [
+  "templates",
+  "sections",
+  "menu",
+  "header",
+  "footer",
+  "setup",
+  "kickoff",
+  "training",
+];
 const shelfGroups = [
   ["Any package", "Any package"],
   ["Needs Growth", "Growth"],
@@ -108,8 +127,11 @@ const rankOf = (shape: string) => shapeChoices.findIndex((item) => item.id === s
 
 /* ---------- Small parts ---------- */
 
-function tag(tile: Tile): HTMLElement | null {
-  return tile.mark === "Pro" || tile.mark === "Ent" ? h("span", { class: "tag" }, tile.mark) : null;
+/** The tier badge: for the option or quantity the item has in the estimate, or starts with on the
+    shelf. */
+function tag(tile: Tile, qty: number = tile.initial): HTMLElement | null {
+  const mark = tierMark(tile, qty);
+  return mark ? h("span", { class: "tag" }, mark) : null;
 }
 
 /** The package a choice moves you to ("5+ → Growth"), shown only while it would move you there. Its
@@ -149,19 +171,59 @@ function reserved<T extends Element>(node: T, unused: boolean): T {
   return node;
 }
 
-/** Build over Design, the same column everywhere. A row that never has design hours keeps one line. */
-function hrs(build: number | null, design: number, signed = false, one = false): HTMLElement {
+/** Build over Design, the same column everywhere. A row that never has design hours keeps one line.
+    project: its hours are Project, not Build, and have Project's colour. */
+function hrs(
+  build: number | null,
+  design: number,
+  signed = false,
+  one = false,
+  project = false,
+): HTMLElement {
   const format = signed ? plus : hoursLabel;
   return h(
     "span",
     { class: one ? "hrs one" : "hrs" },
-    h("span", { class: "hb" }, build === null ? "" : format(build)),
+    h("span", { class: project ? "hb hp" : "hb" }, build === null ? "" : format(build)),
     h("span", { class: "hd" }, design > 0 ? format(design) : ""),
   );
 }
 
-/** The figures on a column title's line, each after its label. */
-function sums(build: number | null, design: number | null, designCaption = "Design"): HTMLElement {
+/** A head's leading figure keeps its label while the title still fits on its line. Where it does
+    not, the label goes, and the figure's colour says what it is. Below 1340px it never shows. */
+export function fitHeads(root: ParentNode): void {
+  for (const head of root.querySelectorAll<HTMLElement>(".sh")) {
+    if (!head.querySelector(":scope > .hrs.sum.c, :scope > .hrs.sum.p")) continue;
+    head.classList.remove("is-tight");
+    const title = head.querySelector("h2");
+    if (!title) continue;
+    const line = Number.parseFloat(getComputedStyle(title).lineHeight) || 22;
+    if (title.getBoundingClientRect().height > line + 1) head.classList.add("is-tight");
+  }
+}
+
+/** The figure that leads a column title's line, before Build and Design, in its own colour: Content
+    in the estimate, Project in the site basics. Its label shows where there is room. */
+function lead(kind: "c" | "p", name: string, hours: number): HTMLElement {
+  return h(
+    "span",
+    {
+      class: `hrs sum ${kind}`,
+      title: `${name} hours`,
+      "aria-label": `${name} ${hoursLabel(hours)}`,
+    },
+    h("span", null, h("small", null, name), hoursLabel(hours)),
+  );
+}
+
+/** The figures on a column title's line, each after its label: Build, Design, and Project when
+    there is some. */
+function sums(
+  build: number | null,
+  design: number | null,
+  designCaption = "Design",
+  project: number | null = null,
+): HTMLElement {
   return h(
     "span",
     { class: "hrs sum" },
@@ -175,6 +237,9 @@ function sums(build: number | null, design: number | null, designCaption = "Desi
       { class: "hd" },
       design === null ? "" : [h("small", null, designCaption), hoursLabel(design)],
     ),
+    project === null
+      ? null
+      : h("span", { class: "hp" }, h("small", null, projectName), hoursLabel(project)),
   );
 }
 
@@ -182,6 +247,8 @@ type RowOptions = {
   /** The lead mark. Left out, the row has no lead column: its name starts where the hairline does. */
   lead?: Kid;
   name: Kid;
+  /** More about the row, over it while the pointer or the focus is on its name. */
+  info?: { id: string; content: Kid };
   note?: Kid;
   hint?: Kid;
   control?: Kid;
@@ -200,7 +267,22 @@ function row(options: RowOptions): HTMLElement {
     h(
       "div",
       { class: "tx" },
-      h("b", null, options.name),
+      h(
+        "b",
+        null,
+        options.info
+          ? h(
+              "span",
+              { class: "has-info", tabindex: "0", "aria-describedby": `info-${options.info.id}` },
+              options.name,
+              h(
+                "span",
+                { class: "info-pop", role: "tooltip", id: `info-${options.info.id}` },
+                options.info.content,
+              ),
+            )
+          : options.name,
+      ),
       options.note || options.hint
         ? h("small", null, options.note ? h("span", null, options.note) : null, options.hint)
         : null,
@@ -279,23 +361,93 @@ function stacked(node: HTMLElement): HTMLElement {
   return node;
 }
 
-/** What adding an item would add, from the app's own quote. */
+/** What adding an item would add, from the app's own quote: its own hours, as its row shows them
+    once it is in. Project management grows with it, in the site basics. */
 function cue(result: Quote, id: string): { build: number; design: number } {
   const next = quote(setTile(result.selection, id, true));
   const design = next.designHours - result.designHours;
-  return { build: next.hours - result.hours - design, design };
+  const management = lineHours(next, managementLineId) - lineHours(result, managementLineId);
+  return { build: next.hours - result.hours - design - management, design };
 }
 
 /* ---------- Design and Site basics ---------- */
 
+/** What feedback rounds are, and what each design includes and charges for them. */
+function feedbackInfo(chosen: DesignChoice): Kid {
+  const max = getTile(chosen.feedbackId ?? "").max;
+  return [
+    h("span", { class: "info-title" }, "Feedback rounds"),
+    h(
+      "span",
+      { class: "info-p" },
+      "One round: the client reviews the design, and the designer makes the changes.",
+    ),
+    h(
+      "span",
+      { class: "info-list" },
+      designChoices.map((choice) => {
+        if (!choice.feedbackId) return null;
+        const rounds = getTile(choice.feedbackId);
+        return h(
+          "span",
+          { class: choice === chosen ? "is-on" : null },
+          h("span", null, choice.label),
+          h("span", null, `${rounds.includedInBase} included, then ${rounds.build.custom}h each`),
+        );
+      }),
+    ),
+    h("span", { class: "info-p" }, `Up to ${max} rounds.`),
+  ];
+}
+
+/** Project management, in the Project fold of the site basics: one share, whatever the design. */
+function managementRow(result: Quote): HTMLElement {
+  const line = result.lines.find((item) => item.id === managementLineId);
+  return row({
+    className: "part",
+    name: "Project management",
+    info: {
+      id: "management",
+      content: [
+        h("span", { class: "info-title" }, "Project management"),
+        h(
+          "span",
+          { class: "info-p" },
+          `Planning, meetings and coordination for the whole project: ${formatHours(managementPercent())}% of its design, build and content hours, rounded up. The kick-off and training are not counted.`,
+        ),
+      ],
+    },
+    note: line?.mode ?? "",
+    hours: hrs(line?.openHours ?? 0, 0, false, false, true),
+  });
+}
+
+/** What AI variants are, and what one more costs for this estimate. */
+function variantsInfo(result: Quote): Kid {
+  const variants = getTile("ai-design");
+  const percent = currentCatalog().variantPercent;
+  return [
+    h("span", { class: "info-title" }, "Variants"),
+    h(
+      "span",
+      { class: "info-p" },
+      "Whole designs the AI generates from the templates and the brief, for the client to choose one.",
+    ),
+    h(
+      "span",
+      { class: "info-p" },
+      `${variants.includedInBase} included. Each one more is ${percent}% of the AI design hours of this estimate, rounded up: ${percent}% of ${hoursLabel(aiDesignHours(result))} is ${hoursLabel(aiVariantCost(result))}. Up to ${variants.max}.`,
+    ),
+  ];
+}
+
 function designPart(result: Quote): HTMLElement[] {
   const tiles = result.selection.tiles;
-  const isAi = tiles["ai-design"] !== undefined;
-  const on = isAi || tiles["custom-design"] !== undefined;
-  const feedbackId = isAi ? "ai-feedback" : "design-feedback";
+  const chosen = designOf(result.selection);
+  const feedbackId = chosen.feedbackId;
   /* Only extra feedback rounds and extra variants add hours here; every other design hour sits with
      its item */
-  const extra = on ? lineHours(result, feedbackId) + lineHours(result, "ai-variants") : 0;
+  const extra = (feedbackId ? lineHours(result, feedbackId) : 0) + lineHours(result, "ai-variants");
   const out: HTMLElement[] = [
     h(
       "div",
@@ -310,31 +462,31 @@ function designPart(result: Quote): HTMLElement[] {
       h(
         "div",
         { class: "choices", role: "radiogroup", "aria-label": "Design" },
-        designChoice(result, "ai-design", "AI generated"),
-        designChoice(result, "custom-design", "Custom"),
-        designChoice(result, null, "None"),
+        designChoices.map((choice) => designChoice(result, choice.id, choice.label)),
       ),
-      h("small", null, designNote[isAi ? "ai" : on ? "custom" : "none"]),
+      h("small", null, getTile(chosen.id).summary),
     ),
   ];
-  if (on) {
+  if (feedbackId) {
     const feedback = getTile(feedbackId);
     out.push(
       row({
         lead: icon("feedback"),
         name: "Feedback",
+        info: { id: "feedback", content: feedbackInfo(chosen) },
         note: noteOf(feedback, result),
         control: stepper(feedback, tiles[feedbackId] ?? feedback.initial),
         hours: hrs(null, lineHours(result, feedbackId)),
       }),
     );
   }
-  if (isAi) {
+  if (chosen.kind === "ai") {
     const variants = getTile("ai-design");
     out.push(
       row({
         lead: icon("variants"),
         name: "Variants",
+        info: { id: "variants", content: variantsInfo(result) },
         note: `${variants.includedInBase} included, then ${hoursLabel(aiVariantCost(result))} each`,
         control: stepper(variants, tiles["ai-design"] ?? variants.initial),
         hours: hrs(null, lineHours(result, "ai-variants")),
@@ -349,7 +501,7 @@ function basicRow(result: Quote, id: string, lead: IconName): HTMLElement {
   const qty = result.selection.tiles[id] ?? tile.initial;
   return row({
     lead: icon(lead),
-    name: tile.label,
+    name: [tile.label, tag(tile, qty)],
     note: stack(modeNotes(tile, result), tile.modes ? qty - 1 : 0),
     hint: hint(id, result),
     control: tile.modes ? stacked(modes(id, tile.modes, qty)) : stepper(tile, qty),
@@ -358,42 +510,87 @@ function basicRow(result: Quote, id: string, lead: IconName): HTMLElement {
   });
 }
 
-/** Header, footer, setup and launch: always in, one line that opens to its three parts. */
-function launch(result: Quote): HTMLElement {
-  const fold = h("details", { class: "fold", open: store.open.has("fixed") });
-  fold.addEventListener("toggle", () => {
-    if (fold.open) store.open.add("fixed");
-    else store.open.delete("fixed");
+/** A row of the site basics that is always in, one line that opens to its parts. Open unless it was
+    closed. */
+function fold(
+  key: string,
+  head: { lead: IconName; name: string; note: string; hours: HTMLElement },
+  parts: HTMLElement[],
+): HTMLElement {
+  const closed = `${key}-closed`;
+  const node = h("details", { class: "fold", open: !store.open.has(closed), data: { fold: key } });
+  node.addEventListener("toggle", () => {
+    if (node.open) store.open.delete(closed);
+    else store.open.add(closed);
   });
-  fold.append(
+  node.append(
     h(
       "summary",
-      { class: "r", data: { focus: "fold-fixed" } },
-      h("span", { class: "lead" }, icon("rocket")),
-      h(
-        "div",
-        { class: "tx" },
-        h("b", null, "Header, footer, setup and launch"),
-        h("small", null, "Always part of the build"),
-      ),
+      { class: "r", data: { focus: `fold-${key}` } },
+      h("span", { class: "lead" }, icon(head.lead)),
+      h("div", { class: "tx" }, h("b", null, head.name), h("small", null, head.note)),
       h("div", { class: "ctl" }, icon("chevron", "ic chev")),
-      hrs(fixedHours(result), designFor(result, ...fixedIds)),
+      head.hours,
     ),
-    h(
-      "div",
-      { class: "fold-body" },
-      fixedIds.map((id) => {
-        const tile = getTile(id);
-        return row({
-          className: "part",
-          name: tile.label,
-          note: noteOf(tile, result),
-          hours: hrs(lineHours(result, id), designFor(result, id)),
-        });
-      }),
-    ),
+    h("div", { class: "fold-body" }, parts),
   );
-  return fold;
+  return node;
+}
+
+/** One part of a fold: its hours in Project's colour when they are Project. */
+function foldPart(result: Quote, id: string): HTMLElement {
+  const tile = getTile(id);
+  return row({
+    className: "part",
+    name: tile.label,
+    note: noteOf(tile, result),
+    ...(tile.stepped ? { control: stepper(tile, result.selection.tiles[id] ?? tile.initial) } : {}),
+    hours: hrs(
+      lineHours(result, id),
+      designFor(result, id),
+      false,
+      false,
+      tile.bucket === "project",
+    ),
+  });
+}
+
+/** Header, footer, setup and launch: always in. */
+function launch(result: Quote): HTMLElement {
+  return fold(
+    "fixed",
+    {
+      lead: "rocket",
+      name: "Header, footer and launch",
+      note: "Always in: on every page, and the go-live",
+      hours: hrs(fixedHours(result), designFor(result, ...fixedIds)),
+    },
+    fixedIds.map((id) => foldPart(result, id)),
+  );
+}
+
+/** Project: the kick-off, training and project management, always in. Their hours are Project. */
+function project(result: Quote): HTMLElement {
+  const ids = projectIds();
+  return fold(
+    "project",
+    {
+      lead: "calendar",
+      name: projectName,
+      note: "Always in: kick-off, training, project management",
+      hours: hrs(
+        ids.reduce((sum, id) => sum + lineHours(result, id), 0),
+        designFor(result, ...ids),
+        false,
+        false,
+        true,
+      ),
+    },
+    [
+      ...ids.filter((id) => id !== managementLineId).map((id) => foldPart(result, id)),
+      managementRow(result),
+    ],
+  );
 }
 
 function basicsPart(result: Quote): HTMLElement[] {
@@ -402,9 +599,11 @@ function basicsPart(result: Quote): HTMLElement[] {
       "div",
       { class: "sh" },
       h("h2", null, "Site basics"),
-      h("span"),
+      /* Project first, as Content heads the estimate: the kick-off, training and project
+         management. Then Build and Design */
+      lead("p", projectName, stepHours(result, "basics", "project")),
       sums(
-        stepHours(result, "basics") + stepHours(result, "languages"),
+        stepHours(result, "basics", "implementation") + stepHours(result, "languages"),
         designFor(result, ...basicsIds),
       ),
     ),
@@ -419,6 +618,7 @@ function basicsPart(result: Quote): HTMLElement[] {
       control: stacked(pagesControl(result)),
     }),
     launch(result),
+    project(result),
   ];
 }
 
@@ -460,11 +660,17 @@ function plainItem(result: Quote, id: string): HTMLElement {
     id,
     row({
       lead: null,
-      name: [laneName(id), tag(tile)],
+      name: [laneName(id), tag(tile, qty)],
       note: stack(modeNotes(tile, result), tile.modes ? qty - 1 : 0),
       hint: hint(id, result),
       control,
-      hours: hrs(lineHours(result, id), designFor(result, id)),
+      hours: hrs(
+        lineHours(result, id),
+        designFor(result, id),
+        false,
+        false,
+        tile.bucket === "project",
+      ),
     }),
   );
 }
@@ -475,6 +681,7 @@ function enteredItem(result: Quote, id: string, missing: boolean): HTMLElement {
   const tile = getTile(id);
   const qty = result.selection.tiles[id] ?? 0;
   const name = laneName(id);
+  if (tile.designInput) return enteredBuildAndDesign(result, tile, missing);
   const input = hoursInput(tile.id, `${name} hours`, qty, tile.max);
   if (missing) input.setAttribute("aria-invalid", "true");
   /* When Copy hours found none, the warning takes the note's place; the place is as tall as the
@@ -502,21 +709,140 @@ function enteredItem(result: Quote, id: string, missing: boolean): HTMLElement {
   );
 }
 
-/** A part inside an item that can be added or taken out on its own. */
-function subItem(result: Quote, id: string, blockedNote?: string): HTMLElement {
+/** An item whose build hours and design hours are both entered, such as Custom integration: a field
+    for each, and its hours as Build over Design, as any item of the shelf has them. */
+function enteredBuildAndDesign(result: Quote, tile: Tile, missing: boolean): HTMLElement {
+  const name = laneName(tile.id);
+  const note = stack(
+    [noteOf(tile, result), "Add build or design hours, or take it out of the estimate"],
+    missing ? 1 : 0,
+  );
+  note.lastElementChild?.classList.add("warn");
+  return feat(
+    tile.id,
+    row({
+      className: missing ? "missing" : undefined,
+      lead: null,
+      name,
+      note,
+      control: buildAndDesignFields(result, tile, missing),
+      hours: hrs(lineHours(result, tile.id), designFor(result, tile.id)),
+    }),
+  );
+}
+
+/** A field for the build hours and one for the design hours of an item whose hours are entered. */
+function buildAndDesignFields(result: Quote, tile: Tile, missing: boolean): HTMLElement {
+  const name = laneName(tile.id);
+  const field = (id: string, label: string) => {
+    const input = hoursInput(
+      id,
+      `${name} ${label.toLowerCase()} hours`,
+      result.selection.tiles[id] ?? 0,
+      tile.max,
+    );
+    if (missing) input.setAttribute("aria-invalid", "true");
+    return h("label", { class: "duo" }, h("span", null, label), unitField(input));
+  };
+  return h(
+    "div",
+    { class: "duos" },
+    field(tile.id, "Build"),
+    tile.designInput ? field(tile.designInput, "Design") : null,
+  );
+}
+
+/** What a counted part of the Blog says while it can be counted. */
+const countNote = "Several blogs, each with its own design? One version for each";
+
+/** The most an item can be counted: the blogs, for the Blog's parts. */
+function countMost(result: Quote, tile: Tile): number {
+  if (!tile.countedBy) return 0;
+  const owner = ownerOf(tile.id);
+  return owner ? (result.selection.tiles[owner] ?? 0) : 0;
+}
+
+/** The counter of an item the blogs may need more than one of: up to one for each blog. With one
+    blog, or while the item is out, it keeps its place, unseen, so nothing moves. */
+function countField(result: Quote, tile: Tile, shown: boolean): HTMLElement | null {
+  if (!tile.countedBy) return null;
+  const count = getTile(tile.countedBy);
+  const most = countMost(result, tile);
+  const live = shown && most > 1;
+  const unit = count.unit ?? "";
+  return reserved(
+    h(
+      "div",
+      { class: "count-field", title: live ? `Up to one for each of the ${most} blogs` : null },
+      h("span", { class: "kick" }, unit.charAt(0).toUpperCase() + unit.slice(1)),
+      stepper({ ...count, max: Math.max(1, most) }, result.selection.tiles[count.id] ?? 1, !live),
+    ),
+    !live,
+  );
+}
+
+/** What a locked row says while the pointer is on it. */
+const inDevelopment = "In development. Not part of the estimate yet.";
+
+/** A part inside an item that can be added or taken out on its own. Its status is its own: hidden,
+    it is not shown; coming soon, it is shown locked. blockedNote: why it does not go with an option
+    of its item, shown while that is the option. missing: its hours are entered, and none are. */
+function subItem(
+  result: Quote,
+  id: string,
+  blockedNote?: string,
+  missing = false,
+): HTMLElement | null {
   const tile = getTile(id);
+  if (tile.hidden) return null;
   const qty = result.selection.tiles[id];
-  const blocked =
-    blockedNote !== undefined && isModuleBased(result.selection.tiles["product-catalogue"]);
+  if (tile.disabled) {
+    return row({
+      className: "sub blocked",
+      attrs: { "aria-disabled": "true", title: inDevelopment },
+      lead: h("span", { class: "lock" }, icon("lock")),
+      name: [tile.label, tag(tile)],
+      note: stack([noteOf(tile, result), "In development"], 1),
+      control: tile.stepped ? reserved(stepper(tile, tile.initial), true) : null,
+      hours: reserved(hrs(0, 1, true), true),
+    });
+  }
+  const blocked = blockedNote !== undefined && isBlocked(result.selection.tiles, id);
+  /* With more than one blog, Recent blog posts can be counted: say what a version is */
+  const counting = qty !== undefined && countMost(result, tile) > 1;
   /* The same note place and control place in every state, so switching a part on or off moves
      nothing */
-  const note = stack(
-    blockedNote === undefined ? [noteOf(tile, result)] : [noteOf(tile, result), blockedNote],
-    blocked ? 1 : 0,
-  );
+  const notes = [noteOf(tile, result)];
+  if (blockedNote !== undefined) notes.push(blockedNote);
+  /* Its own note first, then what a version is */
+  const counted = `${noteOf(tile, result)}. ${countNote}`;
+  if (tile.countedBy) notes.push(counted);
+  if (tile.hourInput) {
+    notes.push(
+      `Add ${tile.designInput ? "build or design hours" : "hours"}, or take it out of the estimate`,
+    );
+  }
+  const shownNote = blocked
+    ? 1
+    : missing
+      ? notes.length - 1
+      : counting
+        ? notes.indexOf(counted)
+        : 0;
+  const note = stack(notes, shownNote);
+  if (tile.hourInput) note.lastElementChild?.classList.add("warn");
+  /* Hours entered: their fields while it is in. A count: its counter, with more than one blog */
   const control = (on: boolean) =>
-    tile.stepped ? reserved(stepper(tile, qty ?? tile.initial), !on) : null;
-  const name = [tile.label, tag(tile)];
+    tile.countedBy
+      ? countField(result, tile, on)
+      : tile.hourInput
+        ? on
+          ? buildAndDesignFields(result, tile, missing)
+          : null
+        : tile.stepped
+          ? reserved(stepper(tile, qty ?? tile.initial), !on)
+          : null;
+  const name = [tile.label, tag(tile, qty ?? tile.initial)];
   if (blocked) {
     return row({
       className: "sub blocked",
@@ -530,7 +856,7 @@ function subItem(result: Quote, id: string, blockedNote?: string): HTMLElement {
   }
   if (qty !== undefined) {
     return row({
-      className: "sub is-on",
+      className: missing ? "sub is-on missing" : "sub is-on",
       attrs: { "data-press": ".take" },
       lead: take(id, tile.label),
       name,
@@ -556,28 +882,42 @@ function blogItem(result: Quote): HTMLElement {
   const tile = getTile("blog-setups");
   const blogs = tiles["blog-setups"] ?? tile.initial;
   const ids = ["blog-setups", "blog-list", "blog-post", "blog-recent"];
-  /* One list template and one post template, shared by every blog */
-  const parts = (["blog-list", "blog-post"] as const).map((id) => {
+  /* A list template and a post template, shared by every blog; with more than one blog, how many
+     of each, up to one for each blog. The counter keeps its place with one blog, unseen, so a
+     blog more or less moves nothing */
+  const counted = (id: string) => {
+    const count = getTile(id).countedBy;
+    return count ? (tiles[count] ?? 1) : 1;
+  };
+  const parts: (HTMLElement | null)[] = (["blog-list", "blog-post"] as const).map((id) => {
     const part = getTile(id);
     const qty = tiles[id] ?? part.initial;
+    const counter = countField(result, part, true);
     return row({
       className: "sub",
       name: part.label,
       note: stack(modeNotes(part, result), qty - 1),
       hint: hint(id, result),
-      control: stacked(modes(id, part.modes ?? [], qty)),
+      control: h("div", { class: "combo" }, counter, stacked(modes(id, part.modes ?? [], qty))),
       hours: hrs(lineHours(result, id), designFor(result, id)),
     });
   });
+  const lists = counted("blog-list");
+  const posts = counted("blog-post");
   parts.push(subItem(result, "blog-recent"));
   return feat(
     "blog-setups",
     row({
       lead: null,
-      name: "Blog",
+      name: ["Blog", tag(tile, blogs)],
       hint: hint("blog-setups", result),
       note: stack(
-        [noteOf(tile, result), `${blogs} blogs, with list and post templates`],
+        [
+          noteOf(tile, result),
+          lists + posts > 2
+            ? `${blogs} blogs, ${lists} list and ${posts} post templates`
+            : `${blogs} blogs, sharing a list and a post template`,
+        ],
         blogs > 1 ? 1 : 0,
       ),
       control: stepper(tile, blogs),
@@ -586,14 +926,13 @@ function blogItem(result: Quote): HTMLElement {
         designFor(result, ...ids),
       ),
     }),
-    parts,
+    parts.filter((part) => part !== null),
   );
 }
 
 /** Complexity in three controls, apart: Module based; the Dynamic pages modes, labelled above; and
     Custom, your own estimate, with its hours field. */
-function complexity(result: Quote, shown: number): HTMLElement {
-  const tile = getTile("product-catalogue");
+function complexity(result: Quote, tile: Tile, shown: number, missing = false): HTMLElement {
   const parts: {
     key: string;
     group?: string;
@@ -611,6 +950,13 @@ function complexity(result: Quote, shown: number): HTMLElement {
     part.buttons.push(modeButton(tile.id, mode.label, index + 1, shown, mode.disabled));
   });
   const hoursTile = getTile("catalogue-custom");
+  const field = hoursInput(
+    hoursTile.id,
+    "Custom catalogue hours",
+    result.selection.tiles[hoursTile.id] ?? 0,
+    hoursTile.max,
+  );
+  if (missing) field.setAttribute("aria-invalid", "true");
   return h(
     "div",
     { class: "complexity" },
@@ -620,55 +966,60 @@ function complexity(result: Quote, shown: number): HTMLElement {
         { class: "cpart" },
         part.group ? h("span", { class: "kicker", "aria-hidden": "true" }, part.group) : null,
         h("div", { class: "modes" }, part.buttons),
-        part.custom
-          ? reserved(
-              unitField(
-                hoursInput(
-                  hoursTile.id,
-                  "Custom catalogue hours",
-                  result.selection.tiles[hoursTile.id] ?? 0,
-                  hoursTile.max,
-                ),
-              ),
-              shown !== part.at,
-            )
-          : null,
+        part.custom ? reserved(unitField(field), shown !== part.at) : null,
       ),
     ),
   );
 }
 
-function catalogueItem(result: Quote): HTMLElement {
-  const tile = getTile("product-catalogue");
-  const shown = result.selection.tiles["product-catalogue"] ?? tile.initial;
-  const ids = ["product-catalogue", "catalogue-custom", "favorite-products", "related-products"];
-  /* The source with options is the one in use; the others are coming */
+/** The option's note; when Copy hours found the Custom option with no hours, what to do, in its
+    place, as tall as the longest so nothing moves. */
+function complexityNote(tile: Tile, result: Quote, shown: number, missing: boolean): HTMLElement {
+  const notes = [...modeNotes(tile, result), "Add hours, or choose another option"];
+  const note = stack(notes, missing ? notes.length - 1 : shown - 1);
+  note.lastElementChild?.classList.add("warn");
+  return note;
+}
+
+/** missing: its Custom option is chosen with no hours, after Copy hours found it so. */
+function catalogueItem(result: Quote, missing = false): HTMLElement {
+  const chosen = result.selection.tiles;
+  const tile = getTile(sourceIn(chosen) ?? catalogueId);
+  const shown = chosen[tile.id] ?? tile.initial;
+  /* Every source the Source buttons show; one with no live option is coming, and locked */
   const list = catalogueSources();
-  const coming = list.filter((source) => source.id !== catalogueId).map((source) => source.source);
+  const ids = [
+    ...list.map((source) => source.id),
+    "catalogue-custom",
+    "favorite-products",
+    "related-products",
+  ];
+  const coming = list.filter((source) => source.disabled).map((source) => source.source);
   const sources = h(
     "div",
     { class: "modes" },
     list.map((source) => {
-      const live = source.id === catalogueId;
+      const on = source.id === tile.id;
       return h(
         "button",
         {
           type: "button",
-          class: live ? "mode is-on" : "mode",
-          "aria-pressed": String(live),
-          disabled: !live,
-          title: live ? null : "In development",
+          class: on ? "mode is-on" : "mode",
+          "aria-pressed": String(on),
+          disabled: !!source.disabled,
+          title: source.disabled ? "In development" : null,
+          data: { action: "source", id: source.id, focus: `source-${source.id}` },
         },
         source.source,
       );
     }),
   );
   return feat(
-    "product-catalogue",
+    catalogueId,
     row({
       lead: null,
-      name: ["Product catalogue", tag(tile)],
-      hint: hint("product-catalogue", result),
+      name: [placeName.catalogue, tag(tile, shown)],
+      hint: hint(tile.id, result),
       note: `Catalogue with ${tile.source} as its source`,
       hours: hrs(
         ids.reduce((sum, id) => sum + lineHours(result, id), 0),
@@ -685,24 +1036,73 @@ function catalogueItem(result: Quote): HTMLElement {
         control: sources,
       }),
       row({
-        className: "sub wide",
+        className: missing ? "sub wide missing" : "sub wide",
         name: "Complexity",
-        note: stack(modeNotes(tile, result), shown - 1),
-        control: complexity(result, shown),
+        note: complexityNote(tile, result, shown, missing),
+        control: complexity(result, tile, shown, missing),
         hours: hrs(
-          lineHours(result, "product-catalogue") + lineHours(result, "catalogue-custom"),
-          designFor(result, "product-catalogue"),
+          lineHours(result, tile.id) + lineHours(result, "catalogue-custom"),
+          designFor(result, tile.id),
         ),
       }),
       subItem(result, "favorite-products"),
       subItem(result, "related-products", "Needs dynamic pages. Choose it under Complexity."),
-    ],
+    ].filter((part) => part !== null),
+  );
+}
+
+/** Memberships: how members sign in, the access groups (always in, Enterprise from 3), and the
+    parts added on their own: Social sign-in, and a Member area with its hours entered. */
+function membershipItem(result: Quote, missing: ReadonlySet<string>): HTMLElement {
+  const tile = getTile("membership");
+  const chosen = result.selection.tiles;
+  const shown = chosen.membership ?? tile.initial;
+  const ids = ["membership", ...(partsOf.membership ?? [])];
+  const groups = getTile("membership-groups");
+  const count = chosen["membership-groups"] ?? groups.initial;
+  return feat(
+    "membership",
+    row({
+      lead: null,
+      name: [laneName("membership"), tag(tile, shown)],
+      hint: hint("membership", result),
+      note: `${tileMode(tile, shown)?.label ?? ""}, ${count} ${count === 1 ? "access group" : "access groups"}`,
+      hours: hrs(
+        ids.reduce((sum, id) => sum + lineHours(result, id), 0),
+        designFor(result, ...ids),
+      ),
+    }),
+    [
+      row({
+        className: "sub wide",
+        name: "Sign-in",
+        note: stack(modeNotes(tile, result), shown - 1),
+        hint: hint("membership", result),
+        control: modes("membership", tile.modes ?? [], shown),
+        hours: hrs(lineHours(result, "membership"), designFor(result, "membership")),
+      }),
+      row({
+        className: "sub",
+        name: [groups.label, tag(groups, count)],
+        note: noteOf(groups, result),
+        hint: hint(groups.id, result),
+        control: stepper(groups, count),
+        hours: hrs(lineHours(result, groups.id), designFor(result, groups.id)),
+      }),
+      subItem(
+        result,
+        "membership-social",
+        "Not with SSO: the client's identity provider signs members in.",
+      ),
+      subItem(result, "membership-area", undefined, missing.has("membership-area")),
+    ].filter((part) => part !== null),
   );
 }
 
 function laneItem(result: Quote, id: string, state: PageState): HTMLElement {
   if (id === "blog-setups") return blogItem(result);
-  if (id === "product-catalogue") return catalogueItem(result);
+  if (id === catalogueId) return catalogueItem(result, state.missing.has("catalogue-custom"));
+  if (id === "membership") return membershipItem(result, state.missing);
   if (getTile(id).hourInput) return enteredItem(result, id, state.missing.has(id));
   return plainItem(result, id);
 }
@@ -717,7 +1117,7 @@ function toShelf(): void {
 
 function estimate(result: Quote, state: PageState): Kid[] {
   const tiles = result.selection.tiles;
-  const left = laneIds.filter((id) => tiles[id] === undefined).length;
+  const left = laneIds.filter((id) => !isIn(tiles, id)).length;
   const content = stepHours(result, "content");
   return [
     h(
@@ -729,17 +1129,14 @@ function estimate(result: Quote, state: PageState): Kid[] {
         "Features in the estimate",
         h("span", { class: "count" }, `${store.order.length} of ${laneIds.length}`),
       ),
-      /* Content: its figure only, in its own colour, before Build and Design */
-      h(
-        "span",
-        {
-          class: "hrs sum c",
-          title: "Content hours",
-          "aria-label": `Content ${hoursLabel(content)}`,
-        },
-        h("span", null, hoursLabel(content)),
+      /* Content, in its own colour, before Build and Design */
+      lead("c", "Content", content),
+      sums(
+        stepHours(result, "addons", "implementation"),
+        designFor(result, ...laneIds, ...partIds),
+        "Design",
+        stepHours(result, "addons", "project") || null,
       ),
-      sums(stepHours(result, "addons"), designFor(result, ...laneIds, ...partIds)),
     ),
     /* Items sit in the order they were added, Content too */
     store.order.length
@@ -807,20 +1204,24 @@ function blockedRow(id: string): HTMLElement {
       data: { key: id, lane: "blocked" },
     },
     h("span", { class: "lock" }, icon("lock")),
-    h("span", { class: "s-name" }, tile.label, tag(tile)),
+    h("span", { class: "s-name" }, laneName(id), tag(tile)),
     /* Shown over the row while the pointer is on it */
-    h("span", { class: "tip", role: "tooltip" }, "In development. Not part of the estimate yet."),
+    h("span", { class: "tip", role: "tooltip" }, inDevelopment),
   );
 }
 
 function shelf(result: Quote): HTMLElement {
-  const off = laneIds.filter((id) => result.selection.tiles[id] === undefined);
+  const off = laneIds.filter((id) => !isIn(result.selection.tiles, id));
   const groups: HTMLElement[] = [];
   /* These groups never change, so a package change cannot reshuffle the shelf */
   for (const [rule, name] of shelfGroups) {
-    const members = off.filter((id) => shelfGroupOf(id) === rule);
-    const blocked = rule === "Any package" ? blockedShelfIds : [];
-    if (!members.length && !blocked.length) continue;
+    /* In the table's order; what is coming soon sits locked at the end of the group of the
+       package it needs, in the table's order too */
+    const rows = [
+      ...off.filter((id) => shelfGroupOf(id) === rule),
+      ...blockedShelfIds.filter((id) => shelfGroupOf(id) === rule),
+    ];
+    if (!rows.length) continue;
     groups.push(
       h(
         "div",
@@ -838,8 +1239,7 @@ function shelf(result: Quote): HTMLElement {
               )
             : null,
         ),
-        members.map((id) => shelfRow(result, id)),
-        blocked.map(blockedRow),
+        rows.map((id) => (blockedShelfIds.includes(id) ? blockedRow(id) : shelfRow(result, id))),
       ),
     );
   }
@@ -903,7 +1303,7 @@ function badge(result: Quote): HTMLElement {
     "div",
     { class: "pop-head" },
     h("strong", { class: "pop-title" }, `Content Hub ${edition}`),
-    h("span", { class: "pop-status" }, "Your tier"),
+    h("span", { class: "pop-status" }, "This estimate"),
   );
   const wrap = besideSidebar(
     popover(
@@ -949,7 +1349,7 @@ function badge(result: Quote): HTMLElement {
 }
 
 /** One dot per hour, in four blocks of 50 that fill the width; past 200 hours a dot stands for more,
-    and the grid says so. Design first, then build, then content; the rest stay empty. */
+    and the grid says so. Design first, then build, content and project; the rest stay empty. */
 const blockCount = 4;
 const perBlock = 50;
 function dots(result: Quote): { unit: number; blocks: HTMLElement[] } {
@@ -961,6 +1361,7 @@ function dots(result: Quote): { unit: number; blocks: HTMLElement[] } {
     ["d", result.designHours],
     ["b", result.implementationHours],
     ["c", result.contentHours],
+    ["p", result.projectHours],
   ] as const) {
     for (let index = 0; index < Math.round(hours / unit) && cells.length < room; index += 1) {
       cells.push(kind);
@@ -1002,6 +1403,7 @@ function total(result: Quote): HTMLElement {
         h("li", { class: "d" }, "Design", h("b", null, hoursLabel(result.designHours))),
         h("li", { class: "b" }, "Build", h("b", null, hoursLabel(result.implementationHours))),
         h("li", { class: "c" }, "Content", h("b", null, hoursLabel(result.contentHours))),
+        h("li", { class: "p" }, projectName, h("b", null, hoursLabel(result.projectHours))),
       ),
     ),
     h(
@@ -1095,7 +1497,8 @@ function side(result: Quote, state: PageState): HTMLElement {
           state.hoursReady("open the breakdown"),
         ),
       ),
-      actButton(state, "share", "share", "Share link", "Share", "", state.shareLink),
+      /* A preview's prices are not saved anywhere: nothing to share */
+      actButton(state, "share", "share", "Share link", "Share", "", state.shareLink, inPreview),
       popAction(
         "included",
         "Always included",
