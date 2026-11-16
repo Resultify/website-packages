@@ -1,6 +1,5 @@
 /* State, actions and the controls of the page. Hours and rules come only from quote.ts. */
 import {
-  addOnTileIds,
   defaultWebsitePages,
   editionLabel,
   getTile,
@@ -9,6 +8,7 @@ import {
   packageName,
   type ShapeId,
   shapeChoices,
+  shelfTiles,
   starterPageCap,
   type Tile,
 } from "./catalog.ts";
@@ -91,31 +91,12 @@ export function lineHours(result: Quote, id: string): number {
   return result.lines.find((line) => line.id === id)?.openHours ?? 0;
 }
 
-/* Each design line belongs to one item. Feedback rounds belong to no item and stay in the Design block. */
-const designLineItem: Record<string, string> = {
-  templates: "templates",
-  landing: "landing-templates",
-  sections: "sections",
-  menu: "menu",
-  header: "header",
-  footer: "footer",
-  "custom-forms": "custom-forms",
-  search: "search",
-  system: "system",
-  setup: "setup",
-  "blog-list": "blog-list",
-  "blog-post": "blog-post",
-  recent: "blog-recent",
-  hubdb: "hubdb",
-  catalogue: "product-catalogue",
-  favorites: "favorite-products",
-  related: "related-products",
-};
-
+/* Each design line is named after its item: "ai-menu", "design-menu". Feedback rounds and extra
+   variants belong to no item and stay in the Design block. */
 export function designFor(result: Quote, ...ids: string[]): number {
   return result.lines
     .filter((line) => line.bucket === "design")
-    .filter((line) => ids.includes(designLineItem[line.id.replace(/^(ai|design)-/, "")] ?? ""))
+    .filter((line) => ids.includes(line.id.replace(/^(ai|design)-/, "")))
     .reduce((sum, line) => sum + line.openHours, 0);
 }
 
@@ -147,7 +128,13 @@ export function stepper(tile: Tile, qty: number, locked = false): HTMLElement {
   return wrap;
 }
 
-function modeButton(id: string, label: string, level: number, qty: number): HTMLButtonElement {
+function modeButton(
+  id: string,
+  label: string,
+  level: number,
+  qty: number,
+  soon = false,
+): HTMLButtonElement {
   const node = btn(level === qty ? "mode is-on" : "mode", label, {
     action: "mode",
     id,
@@ -155,13 +142,22 @@ function modeButton(id: string, label: string, level: number, qty: number): HTML
     focus: `mode-${id}-${level}`,
   });
   node.setAttribute("aria-pressed", level === qty ? "true" : "false");
+  /* Coming soon: shown, and its reason with it, but it cannot be chosen */
+  if (soon) {
+    node.disabled = true;
+    node.title = "In development";
+  }
   return node;
 }
 
-export function modes(id: string, list: readonly { label: string }[], qty: number): HTMLElement {
+export function modes(
+  id: string,
+  list: readonly { label: string; disabled?: boolean }[],
+  qty: number,
+): HTMLElement {
   const wrap = el("div", "modes");
   list.forEach((mode, index) => {
-    wrap.append(modeButton(id, mode.label, index + 1, qty));
+    wrap.append(modeButton(id, mode.label, index + 1, qty, mode.disabled));
   });
   return wrap;
 }
@@ -187,6 +183,8 @@ export function ruleFor(id: string, result: Quote): { text: string; on: boolean 
   if (!rule || rule.at === 1) return undefined;
   const name = packageName[rule.package];
   const mode = getTile(id).modes?.[rule.at - 1];
+  /* An option coming soon cannot be chosen, so it moves nothing yet */
+  if (mode?.disabled) return undefined;
   const rank = (shape: string) => shapeChoices.findIndex((item) => item.id === shape);
   return {
     text: `${mode ? mode.label : `${rule.at}+`} → ${name}`,
@@ -198,8 +196,8 @@ export function pagesControl(result: Quote): HTMLElement {
   const over = result.selection.websitePages > starterPageCap;
   const wrap = el("div", "modes");
   for (const [label, value] of [
-    ["Up to 30", false],
-    ["30+", true],
+    [`Up to ${starterPageCap}`, false],
+    [`${starterPageCap}+`, true],
   ] as const) {
     const node = btn(value === over ? "mode is-on" : "mode", label, {
       action: "pages-over",
@@ -239,22 +237,37 @@ export function designChoice(result: Quote, id: string | null, label: string): H
   return wrap;
 }
 
-/** Everything that moves between the estimate and the shelf. Content, Page migration and Blog import
-    are hours you enter, and are here so each can be added on its own. */
-export const laneIds: readonly string[] = [
-  ...addOnTileIds,
-  "content-hours",
-  "migrate-pages",
-  "migrate-posts",
+/** Parts of the Design block and of the Blog and Product catalogue cards: never items of their own. */
+export const partIds: readonly string[] = [
+  "ai-design",
+  "ai-feedback",
+  "custom-design",
+  "design-feedback",
+  "blog-list",
+  "blog-post",
+  "blog-recent",
+  "catalogue-custom",
+  "favorite-products",
+  "related-products",
 ];
 
-/** Items that are being built. They show on the shelf so nobody forgets them, but cannot be added. */
-export const blockedShelfIds: readonly string[] = [
-  "crm-section",
-  "crm-custom-section",
-  "external-forms",
-  "membership",
-];
+const onShelf = shelfTiles();
+const ready = onShelf.filter((tile) => !tile.disabled);
+
+/** Everything that moves between the estimate and the shelf, in the table's order: the items of the
+    shelf, then the Blog and the Product catalogue, then the items of content. */
+export const laneIds: readonly string[] = [
+  ...ready.filter((tile) => tile.place === "shelf" && tile.bucket !== "content"),
+  ...ready.filter((tile) => tile.place !== "shelf"),
+  ...ready.filter((tile) => tile.bucket === "content"),
+].map((tile) => tile.id);
+
+/** Items that are coming soon (status soon in the table), by name. They show on the shelf so
+    nobody forgets them, but cannot be added. */
+export const blockedShelfIds: readonly string[] = onShelf
+  .filter((tile) => tile.disabled)
+  .sort((a, b) => a.label.localeCompare(b.label))
+  .map((tile) => tile.id);
 
 /** Fixed groups for the shelf: what the item needs in itself, whatever the current package is. */
 export function shelfGroupOf(id: string): "Any package" | "Needs Growth" | "Needs Platform" {

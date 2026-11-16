@@ -4,7 +4,17 @@
    Hours, package and tier, and every row action are the app's own (controls.ts, quote.ts): the buttons
    and fields drawn here carry data-action, data-id and data-focus, so bindActions handles them. Copy
    hours, Share link and Reset with Undo are the client's (PageState). */
-import { editionLabel, getTile, shapeChoices, starterPageCap, type Tile } from "./catalog.ts";
+import {
+  catalogueId,
+  catalogueSources,
+  editionLabel,
+  fillNote,
+  getTile,
+  placeName,
+  shapeChoices,
+  starterPageCap,
+  type Tile,
+} from "./catalog.ts";
 import {
   stepper as appStepper,
   blockedShelfIds,
@@ -19,6 +29,7 @@ import {
   includedList,
   laneIds,
   lineHours,
+  partIds,
   modes,
   packagePop,
   pagesControl,
@@ -30,7 +41,16 @@ import {
 } from "./controls.ts";
 import { h, type Kid } from "./dom.ts";
 import { type IconName, icon, logo, sprocket } from "./icons.ts";
-import { aiVariantCost, formatHours, type Quote, quote, setTile, stepHours } from "./quote.ts";
+import {
+  aiVariantCost,
+  choiceOf,
+  isModuleBased,
+  formatHours,
+  type Quote,
+  quote,
+  setTile,
+  stepHours,
+} from "./quote.ts";
 
 /** What the page needs from the client: the moment's state, and the actions that are not the app's. */
 export type PageState = {
@@ -60,26 +80,12 @@ const designNote = {
     "Designed for this site. Hours follow the features you pick and show in the Design column.",
   none: "No design work in this estimate.",
 } as const;
+/** The Blog and the Product catalogue are named after their place; every other item by its row. */
 const laneNames: Record<string, string> = {
-  "blog-setups": "Blog",
-  "product-catalogue": "Product catalogue",
-  "content-hours": "Content",
+  "blog-setups": placeName.blog,
+  [catalogueId]: placeName.catalogue,
 };
-const shelfNames: Record<string, string> = { hubdb: "HubDB section" };
 const basicsIds = ["templates", "sections", "menu", "header", "footer", "setup"];
-const laneDesignIds = [
-  "search",
-  "custom-forms",
-  "system",
-  "landing-templates",
-  "hubdb",
-  "blog-list",
-  "blog-post",
-  "blog-recent",
-  "product-catalogue",
-  "favorite-products",
-  "related-products",
-];
 const shelfGroups = [
   ["Any package", "Any package"],
   ["Needs Growth", "Growth"],
@@ -89,8 +95,15 @@ const tiers = ["starter", "professional", "enterprise"] as const;
 
 const plus = (hours: number) => `+${hoursLabel(hours)}`;
 const laneName = (id: string) => laneNames[id] ?? getTile(id).label;
-const modeNotes = (tile: Tile) =>
-  tile.modes?.map((mode) => mode.detail ?? tile.summary) ?? [tile.summary];
+/** A note, with its build hours for the estimate's design choice where it says {build}. */
+const noteOf = (tile: Tile, result: Quote) =>
+  fillNote(tile.summary, tile.build, choiceOf(result.selection));
+const modeNotes = (tile: Tile, result: Quote) =>
+  tile.modes?.map((mode) =>
+    mode.detail
+      ? fillNote(mode.detail, mode.build, choiceOf(result.selection))
+      : noteOf(tile, result),
+  ) ?? [noteOf(tile, result)];
 const rankOf = (shape: string) => shapeChoices.findIndex((item) => item.id === shape);
 
 /* ---------- Small parts ---------- */
@@ -210,13 +223,21 @@ function unitField(input: HTMLElement): HTMLElement {
   return h("span", { class: "unit" }, input, h("span", { class: "u", "aria-hidden": "true" }, "h"));
 }
 
-function modeButton(id: string, label: string, level: number, shown: number): HTMLElement {
+function modeButton(
+  id: string,
+  label: string,
+  level: number,
+  shown: number,
+  soon = false,
+): HTMLElement {
   return h(
     "button",
     {
       type: "button",
       class: level === shown ? "mode is-on" : "mode",
       "aria-pressed": String(level === shown),
+      disabled: soon,
+      title: soon ? "In development" : null,
       data: { action: "mode", id, qty: String(level), focus: `mode-${id}-${level}` },
     },
     label,
@@ -302,7 +323,7 @@ function designPart(result: Quote): HTMLElement[] {
       row({
         lead: icon("feedback"),
         name: "Feedback",
-        note: feedback.summary,
+        note: noteOf(feedback, result),
         control: stepper(feedback, tiles[feedbackId] ?? feedback.initial),
         hours: hrs(null, lineHours(result, feedbackId)),
       }),
@@ -314,7 +335,7 @@ function designPart(result: Quote): HTMLElement[] {
       row({
         lead: icon("variants"),
         name: "Variants",
-        note: `2 included, then ${hoursLabel(aiVariantCost(result))} each`,
+        note: `${variants.includedInBase} included, then ${hoursLabel(aiVariantCost(result))} each`,
         control: stepper(variants, tiles["ai-design"] ?? variants.initial),
         hours: hrs(null, lineHours(result, "ai-variants")),
       }),
@@ -329,7 +350,7 @@ function basicRow(result: Quote, id: string, lead: IconName): HTMLElement {
   return row({
     lead: icon(lead),
     name: tile.label,
-    note: stack(modeNotes(tile), tile.modes ? qty - 1 : 0),
+    note: stack(modeNotes(tile, result), tile.modes ? qty - 1 : 0),
     hint: hint(id, result),
     control: tile.modes ? stacked(modes(id, tile.modes, qty)) : stepper(tile, qty),
     /* Languages never has design hours: one line */
@@ -366,7 +387,7 @@ function launch(result: Quote): HTMLElement {
         return row({
           className: "part",
           name: tile.label,
-          note: tile.summary,
+          note: noteOf(tile, result),
           hours: hrs(lineHours(result, id), designFor(result, id)),
         });
       }),
@@ -440,7 +461,7 @@ function plainItem(result: Quote, id: string): HTMLElement {
     row({
       lead: null,
       name: [laneName(id), tag(tile)],
-      note: stack(modeNotes(tile), tile.modes ? qty - 1 : 0),
+      note: stack(modeNotes(tile, result), tile.modes ? qty - 1 : 0),
       hint: hint(id, result),
       control,
       hours: hrs(lineHours(result, id), designFor(result, id)),
@@ -448,14 +469,8 @@ function plainItem(result: Quote, id: string): HTMLElement {
   );
 }
 
-/* Hours you enter yourself. They count as Content hours. */
-const enteredNotes: Record<string, string> = {
-  "content-hours": "Estimate for content work",
-  "migrate-pages": "Moving the old site's pages",
-  "migrate-posts": "Importing the old blog's posts",
-};
-
-/** Content, Page migration and Blog import: an hours field, and the hours in Content's colour. */
+/** Content, Page migration and Blog import: hours you enter yourself, which count as Content
+    hours. An hours field, and the hours in Content's colour. */
 function enteredItem(result: Quote, id: string, missing: boolean): HTMLElement {
   const tile = getTile(id);
   const qty = result.selection.tiles[id] ?? 0;
@@ -465,7 +480,7 @@ function enteredItem(result: Quote, id: string, missing: boolean): HTMLElement {
   /* When Copy hours found none, the warning takes the note's place; the place is as tall as the
      longer of the two, so nothing moves */
   const note = stack(
-    [enteredNotes[id] ?? "", "Add hours, or take it out of the estimate"],
+    [noteOf(tile, result), "Add hours, or take it out of the estimate"],
     missing ? 1 : 0,
   );
   note.lastElementChild?.classList.add("warn");
@@ -491,11 +506,12 @@ function enteredItem(result: Quote, id: string, missing: boolean): HTMLElement {
 function subItem(result: Quote, id: string, blockedNote?: string): HTMLElement {
   const tile = getTile(id);
   const qty = result.selection.tiles[id];
-  const blocked = blockedNote !== undefined && result.selection.tiles["product-catalogue"] === 1;
+  const blocked =
+    blockedNote !== undefined && isModuleBased(result.selection.tiles["product-catalogue"]);
   /* The same note place and control place in every state, so switching a part on or off moves
      nothing */
   const note = stack(
-    blockedNote === undefined ? [tile.summary] : [tile.summary, blockedNote],
+    blockedNote === undefined ? [noteOf(tile, result)] : [noteOf(tile, result), blockedNote],
     blocked ? 1 : 0,
   );
   const control = (on: boolean) =>
@@ -540,30 +556,16 @@ function blogItem(result: Quote): HTMLElement {
   const tile = getTile("blog-setups");
   const blogs = tiles["blog-setups"] ?? tile.initial;
   const ids = ["blog-setups", "blog-list", "blog-post", "blog-recent"];
-  const parts = (
-    [
-      ["blog-list", "blog-list-count"],
-      ["blog-post", "blog-post-count"],
-    ] as const
-  ).map(([id, countId]) => {
+  /* One list template and one post template, shared by every blog */
+  const parts = (["blog-list", "blog-post"] as const).map((id) => {
     const part = getTile(id);
     const qty = tiles[id] ?? part.initial;
-    /* With one blog there is one of each template, so the count only shows from two blogs on */
-    const count = reserved(
-      h(
-        "span",
-        { class: "count-field" },
-        h("span", { class: "kick" }, "Templates"),
-        stepper(getTile(countId), tiles[countId] ?? 1),
-      ),
-      blogs <= 1,
-    );
     return row({
       className: "sub",
       name: part.label,
-      note: stack(modeNotes(part), qty - 1),
+      note: stack(modeNotes(part, result), qty - 1),
       hint: hint(id, result),
-      control: h("div", { class: "combo" }, stacked(modes(id, part.modes ?? [], qty)), count),
+      control: stacked(modes(id, part.modes ?? [], qty)),
       hours: hrs(lineHours(result, id), designFor(result, id)),
     });
   });
@@ -575,7 +577,7 @@ function blogItem(result: Quote): HTMLElement {
       name: "Blog",
       hint: hint("blog-setups", result),
       note: stack(
-        [tile.summary, `${blogs} blogs, with list and post templates`],
+        [noteOf(tile, result), `${blogs} blogs, with list and post templates`],
         blogs > 1 ? 1 : 0,
       ),
       control: stepper(tile, blogs),
@@ -606,7 +608,7 @@ function complexity(result: Quote, shown: number): HTMLElement {
       part = { key, group: mode.group, custom: !!mode.customHours, at: index + 1, buttons: [] };
       parts.push(part);
     }
-    part.buttons.push(modeButton(tile.id, mode.label, index + 1, shown));
+    part.buttons.push(modeButton(tile.id, mode.label, index + 1, shown, mode.disabled));
   });
   const hoursTile = getTile("catalogue-custom");
   return h(
@@ -640,11 +642,14 @@ function catalogueItem(result: Quote): HTMLElement {
   const tile = getTile("product-catalogue");
   const shown = result.selection.tiles["product-catalogue"] ?? tile.initial;
   const ids = ["product-catalogue", "catalogue-custom", "favorite-products", "related-products"];
+  /* The source with options is the one in use; the others are coming */
+  const list = catalogueSources();
+  const coming = list.filter((source) => source.id !== catalogueId).map((source) => source.source);
   const sources = h(
     "div",
     { class: "modes" },
-    ["HubDB", "CRM Object", "Custom Object"].map((label) => {
-      const live = label === "HubDB";
+    list.map((source) => {
+      const live = source.id === catalogueId;
       return h(
         "button",
         {
@@ -654,7 +659,7 @@ function catalogueItem(result: Quote): HTMLElement {
           disabled: !live,
           title: live ? null : "In development",
         },
-        label,
+        source.source,
       );
     }),
   );
@@ -664,7 +669,7 @@ function catalogueItem(result: Quote): HTMLElement {
       lead: null,
       name: ["Product catalogue", tag(tile)],
       hint: hint("product-catalogue", result),
-      note: tile.summary,
+      note: `Catalogue with ${tile.source} as its source`,
       hours: hrs(
         ids.reduce((sum, id) => sum + lineHours(result, id), 0),
         designFor(result, ...ids),
@@ -674,13 +679,15 @@ function catalogueItem(result: Quote): HTMLElement {
       row({
         className: "sub wide",
         name: "Source",
-        note: "CRM Object and Custom Object are in development",
+        note: coming.length
+          ? `${coming.join(" and ").replace(/ and (?=.* and )/g, ", ")} ${coming.length === 1 ? "is" : "are"} in development`
+          : null,
         control: sources,
       }),
       row({
         className: "sub wide",
         name: "Complexity",
-        note: stack(modeNotes(tile), shown - 1),
+        note: stack(modeNotes(tile, result), shown - 1),
         control: complexity(result, shown),
         hours: hrs(
           lineHours(result, "product-catalogue") + lineHours(result, "catalogue-custom"),
@@ -732,7 +739,7 @@ function estimate(result: Quote, state: PageState): Kid[] {
         },
         h("span", null, hoursLabel(content)),
       ),
-      sums(stepHours(result, "addons"), designFor(result, ...laneDesignIds)),
+      sums(stepHours(result, "addons"), designFor(result, ...laneIds, ...partIds)),
     ),
     /* Items sit in the order they were added, Content too */
     store.order.length
@@ -769,7 +776,7 @@ function estimate(result: Quote, state: PageState): Kid[] {
 
 function shelfRow(result: Quote, id: string): HTMLElement {
   const tile = getTile(id);
-  const name = shelfNames[id] ?? laneName(id);
+  const name = laneName(id);
   let right: HTMLElement;
   if (tile.hourInput) right = h("span", { class: "s-cue" }, "Enter hours");
   else {
