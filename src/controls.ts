@@ -1,27 +1,37 @@
 /* State, actions and the controls of the page. Hours and rules come only from quote.ts. */
 import {
   defaultWebsitePages,
+  designChoices,
   editionLabel,
   getTile,
   inclusionPopovers,
   inclusionsFor,
+  isReady,
   packageName,
+  partsOf,
+  projectName,
   type ShapeId,
   shapeChoices,
   shelfTiles,
+  sourceTiles,
   starterPageCap,
   type Tile,
+  tiles,
 } from "./catalog.ts";
 import {
+  designOf,
   encodeSelection,
+  managementLineId,
   formatHours,
   type HourLine,
+  isIn,
   packageRules,
   type Quote,
   quote,
   type Selection,
   selectionForShape,
   setQuantity,
+  setSource,
   setTile,
   setWebsitePages,
   stepQuantity,
@@ -44,9 +54,9 @@ export function setRedraw(fn: () => void): void {
 /** The middle column keeps the order items were enabled in. */
 export function syncOrder(): void {
   const tiles = store.selection.tiles;
-  store.order = store.order.filter((id) => tiles[id] !== undefined);
+  store.order = store.order.filter((id) => isIn(tiles, id));
   for (const id of laneIds) {
-    if (tiles[id] !== undefined && !store.order.includes(id)) store.order.push(id);
+    if (isIn(tiles, id) && !store.order.includes(id)) store.order.push(id);
   }
 }
 
@@ -91,12 +101,12 @@ export function lineHours(result: Quote, id: string): number {
   return result.lines.find((line) => line.id === id)?.openHours ?? 0;
 }
 
-/* Each design line is named after its item: "ai-menu", "design-menu". Feedback rounds and extra
-   variants belong to no item and stay in the Design block. */
+/* The design hours of items: each design line says its item. Feedback rounds and variants belong to
+   no item and stay in the Design block. */
 export function designFor(result: Quote, ...ids: string[]): number {
   return result.lines
     .filter((line) => line.bucket === "design")
-    .filter((line) => ids.includes(line.id.replace(/^(ai|design)-/, "")))
+    .filter((line) => line.item !== undefined && ids.includes(line.item))
     .reduce((sum, line) => sum + line.openHours, 0);
 }
 
@@ -180,7 +190,7 @@ export function hoursInput(id: string, label: string, value: number, max: number
 /** The rule that moves the package, in a few words. Laid out even when hidden, so the row never moves. */
 export function ruleFor(id: string, result: Quote): { text: string; on: boolean } | undefined {
   const rule = packageRules.find((item) => item.tileId === id);
-  if (!rule || rule.at === 1) return undefined;
+  if (!rule || fromStart(rule)) return undefined;
   const name = packageName[rule.package];
   const mode = getTile(id).modes?.[rule.at - 1];
   /* An option coming soon cannot be chosen, so it moves nothing yet */
@@ -210,7 +220,20 @@ export function pagesControl(result: Quote): HTMLElement {
   return wrap;
 }
 
+/** In every estimate as they are: the header and footer, and setup and launch. They fold into one
+    row of the site basics. */
 export const fixedIds = ["header", "footer", "setup"] as const;
+
+/** The site basics whose hours are Project (the kick-off and training, by their type in the table),
+    and project management. They fold into a row of their own. */
+export function projectIds(): string[] {
+  return [
+    ...tiles
+      .filter((item) => item.place === "basics" && item.bucket === "project")
+      .map((item) => item.id),
+    managementLineId,
+  ];
+}
 
 export function fixedHours(result: Quote): number {
   return fixedIds.reduce((sum, id) => sum + lineHours(result, id), 0);
@@ -218,12 +241,9 @@ export function fixedHours(result: Quote): number {
 
 /* Design */
 
-export function designChoice(result: Quote, id: string | null, label: string): HTMLElement {
-  const chosen = result.selection.tiles;
-  const value = id ?? "none";
-  const on = id
-    ? chosen[id] !== undefined
-    : chosen["ai-design"] === undefined && chosen["custom-design"] === undefined;
+export function designChoice(result: Quote, id: string, label: string): HTMLElement {
+  const value = id;
+  const on = result.selection.tiles[id] !== undefined;
   const wrap = el("label", on ? "choice is-on" : "choice");
   const input = el("input");
   input.id = `design-${value}`;
@@ -237,41 +257,48 @@ export function designChoice(result: Quote, id: string | null, label: string): H
   return wrap;
 }
 
-/** Parts of the Design block and of the Blog and Product catalogue cards: never items of their own. */
+/** Parts of the Design block and of the Blog, Product catalogue and Memberships cards: never items
+    of their own. The catalogue's sources other than HubDB too: the catalogue is on the shelf as
+    HubDB. */
 export const partIds: readonly string[] = [
-  "ai-design",
-  "ai-feedback",
-  "custom-design",
-  "design-feedback",
-  "blog-list",
-  "blog-post",
-  "blog-recent",
-  "catalogue-custom",
-  "favorite-products",
-  "related-products",
+  ...designChoices.flatMap((choice) => [
+    choice.id,
+    ...(choice.feedbackId ? [choice.feedbackId] : []),
+  ]),
+  ...Object.values(partsOf).flat(),
+  ...sourceTiles()
+    .slice(1)
+    .map((item) => item.id),
 ];
 
-const onShelf = shelfTiles();
-const ready = onShelf.filter((tile) => !tile.disabled);
+/** The shelf of the catalog in use, in the table's order (the order of each item's first row, the
+    Blog's, the Product catalogue's and Memberships' too, wherever they are among the shelf's):
+    laneIds          everything that moves between the estimate and the shelf
+    blockedShelfIds  items that are coming soon (status soon in the table). They show locked at
+                     the end of their group, so nobody forgets them, but cannot be added */
+export function shelfLanes(): { laneIds: string[]; blockedShelfIds: string[] } {
+  const onShelf = shelfTiles();
+  return {
+    laneIds: onShelf.filter(isReady).map((tile) => tile.id),
+    blockedShelfIds: onShelf.filter((tile) => !isReady(tile)).map((tile) => tile.id),
+  };
+}
 
-/** Everything that moves between the estimate and the shelf, in the table's order: the items of the
-    shelf, then the Blog and the Product catalogue, then the items of content. */
-export const laneIds: readonly string[] = [
-  ...ready.filter((tile) => tile.place === "shelf" && tile.bucket !== "content"),
-  ...ready.filter((tile) => tile.place !== "shelf"),
-  ...ready.filter((tile) => tile.bucket === "content"),
-].map((tile) => tile.id);
+/** The page's shelf, from the files it was built with. */
+export const {
+  laneIds,
+  blockedShelfIds,
+}: { laneIds: readonly string[]; blockedShelfIds: readonly string[] } = shelfLanes();
 
-/** Items that are coming soon (status soon in the table), by name. They show on the shelf so
-    nobody forgets them, but cannot be added. */
-export const blockedShelfIds: readonly string[] = onShelf
-  .filter((tile) => tile.disabled)
-  .sort((a, b) => a.label.localeCompare(b.label))
-  .map((tile) => tile.id);
+/** A package rule that holds as soon as the item is in: from its first option, or from the least
+    it can be (0 for hours entered, such as Custom integration). */
+function fromStart(rule: { tileId: string; at: number }): boolean {
+  return rule.at <= Math.max(1, getTile(rule.tileId).min);
+}
 
 /** Fixed groups for the shelf: what the item needs in itself, whatever the current package is. */
 export function shelfGroupOf(id: string): "Any package" | "Needs Growth" | "Needs Platform" {
-  const rule = packageRules.find((item) => item.tileId === id && item.at === 1);
+  const rule = packageRules.find((item) => item.tileId === id && fromStart(item));
   if (rule?.package === "platform") return "Needs Platform";
   if (rule?.package === "growth") return "Needs Growth";
   return "Any package";
@@ -357,17 +384,17 @@ function popList(title: string, lines: string[]): Node[] {
   return [el("h3", "pop-sub", title), list];
 }
 
-/** What a package is and, on the current one, what puts you there. */
+/** What a package is and, on the estimate's own one, what puts the estimate there. */
 export function packagePop(result: Quote, shape: ShapeId): Node[] {
   const me = rankOf(shape);
   const current = rankOf(result.shape);
   const label = shapeChoices[me]?.label ?? "";
   const status =
     me === current
-      ? "Your package"
+      ? "This estimate"
       : me < current
-        ? "Not enough for your choices"
-        : "More than you need now";
+        ? "Too small for this estimate"
+        : "More than this estimate needs";
   const out: Node[] = [popHead(label, status)];
   const customer = shapeChoices[me]?.customer;
   if (customer) out.push(el("p", "pop-copy", customer));
@@ -375,7 +402,7 @@ export function packagePop(result: Quote, shape: ShapeId): Node[] {
     const reasons = result.packageReasons.map(reasonOnly);
     out.push(
       ...popList(
-        "What puts you here",
+        "Why this package",
         reasons.length > 0 ? reasons : ["Nothing selected needs more than Essential"],
       ),
     );
@@ -383,9 +410,9 @@ export function packagePop(result: Quote, shape: ShapeId): Node[] {
   return out;
 }
 
-/** The current tier and what puts you on it. */
+/** The estimate's tier and what puts it there. */
 export function tierPop(result: Quote): Node[] {
-  const out: Node[] = [popHead(editionLabel[result.edition], "Your tier")];
+  const out: Node[] = [popHead(editionLabel[result.edition], "This estimate")];
   /* The generic line would only repeat the list below, unless this tier is above the package's usual one. */
   if (result.edition === "starter" || result.usualEditionWarning)
     out.push(el("p", "pop-copy", tierLine(result)));
@@ -393,7 +420,7 @@ export function tierPop(result: Quote): Node[] {
     const reasons = result.editionReasons.map((text) =>
       text.replace(/\s+needs?\s+Content Hub \w+\.?$/, ""),
     );
-    out.push(...popList("What puts you here", reasons));
+    out.push(...popList("Why this tier", reasons));
   }
   return out;
 }
@@ -401,7 +428,7 @@ export function tierPop(result: Quote): Node[] {
 export function tierLine(result: Quote): string {
   if (result.usualEditionWarning) return "More than this package usually needs.";
   if (result.edition === "starter") return "Removes HubSpot branding.";
-  return "Needed for your choices.";
+  return "Needed for this estimate.";
 }
 
 export function includedList(result: Quote): HTMLElement {
@@ -443,23 +470,25 @@ function quantityLabel(unit: string, qty: number): string {
   return `${qty} ${unit}`;
 }
 
+/** A line's name: what it is, its option, and how many, with the included ones when it has more. */
 export function lineName(line: HourLine): string {
-  if (line.mode && line.unit && line.unit !== "hours") {
-    return `${line.label} · ${line.mode} · ${quantityLabel(line.unit, line.qty)}`;
+  const parts = [line.label];
+  if (line.mode) parts.push(line.mode);
+  if (line.unit && line.unit !== "hours") {
+    const count = quantityLabel(line.unit, line.qty);
+    const extra = line.included === undefined ? 0 : line.qty - line.included;
+    parts.push(extra > 0 ? `${count} (${line.included} included, ${extra} extra)` : count);
   }
-  if (line.mode) return `${line.label} · ${line.mode}`;
-  if (line.unit && line.unit !== "hours")
-    return `${line.label} · ${quantityLabel(line.unit, line.qty)}`;
-  return line.label;
+  return parts.join(" · ");
 }
 
-/* label is for the copied text; heading is what the page calls the group, Build as everywhere on it */
+/* label is for the copied text, heading for the page: the same words, Build as everywhere on it */
 export const breakdownGroups = [
   { key: "design", bucket: "design", label: "Design", heading: "Design", total: "designHours" },
   {
     key: "build",
     bucket: "implementation",
-    label: "Implementation",
+    label: "Build",
     heading: "Build",
     total: "implementationHours",
   },
@@ -470,42 +499,105 @@ export const breakdownGroups = [
     heading: "Content",
     total: "contentHours",
   },
+  {
+    key: "project",
+    bucket: "project",
+    label: projectName,
+    heading: projectName,
+    total: "projectHours",
+  },
 ] as const;
 
+/** The lines a group lists: those with hours, and those that are included (feedback rounds,
+    variants, languages), so the hours say how many of them the estimate has. */
 export function groupRows(result: Quote, bucket: HourLine["bucket"]): HourLine[] {
-  return result.lines.filter((line) => line.bucket === bucket && line.openHours > 0);
+  return result.lines.filter(
+    (line) => line.bucket === bucket && (line.openHours > 0 || line.included !== undefined),
+  );
 }
 
-export function hoursText(result: Quote): string {
-  const out = [`Hours: ${result.label}`];
+/** A line of the hours: its hours, "included", or none (a note). */
+export type SummaryLine = { name: string; hours: number | "included" | null };
+export type SummaryGroup = {
+  key: (typeof breakdownGroups)[number]["key"];
+  /** In the copied text */
+  label: string;
+  /** On the page */
+  heading: string;
+  hours: number;
+  lines: SummaryLine[];
+};
+/** What Copy hours and Hours breakdown say, the one as text and the other on the page: the package
+    and tier, then Design (always, with the design chosen), Build, Content and Project with each
+    line, and the total. */
+export type HoursSummary = { title: string; groups: SummaryGroup[]; total: number };
+
+export function hoursSummary(result: Quote): HoursSummary {
+  const design = designOf(result.selection);
+  const groups: SummaryGroup[] = [];
   for (const group of breakdownGroups) {
     const rows = groupRows(result, group.bucket);
-    if (rows.length === 0) continue;
-    out.push(`- ${group.label}: ${formatHours(result[group.total])}h`);
-    if (rows.length === 1 && rows[0]?.label === group.label) continue;
-    for (const line of rows) out.push(`  - ${lineName(line)}: ${formatHours(line.openHours)}h`);
+    if (rows.length === 0 && group.key !== "design") continue;
+    let lines: SummaryLine[] = rows.map((line) => ({
+      name: lineName(line),
+      hours: line.openHours === 0 && line.included !== undefined ? "included" : line.openHours,
+    }));
+    /* One line named as its group says nothing more */
+    if (rows.length === 1 && rows[0]?.label === group.label) lines = [];
+    if (group.key === "design" && design.kind === "none") {
+      lines = [{ name: "Provided by the client", hours: null }];
+    }
+    const named = (name: string) => (group.key === "design" ? `${name} (${design.label})` : name);
+    groups.push({
+      key: group.key,
+      label: named(group.label),
+      heading: named(group.heading),
+      hours: result[group.total],
+      lines,
+    });
   }
-  out.push(`- Total: ${formatHours(result.hours)}h`);
+  return {
+    title: `${result.label} package · Content Hub ${editionLabel[result.edition]}`,
+    groups,
+    total: result.hours,
+  };
+}
+
+const lineValue = (hours: SummaryLine["hours"]) =>
+  hours === null ? "" : hours === "included" ? "included" : hoursLabel(hours);
+
+export function hoursText(result: Quote): string {
+  const summary = hoursSummary(result);
+  const out = [summary.title];
+  for (const group of summary.groups) {
+    out.push(`- ${group.label}: ${hoursLabel(group.hours)}`);
+    for (const line of group.lines) {
+      out.push(`  - ${line.name}${line.hours === null ? "" : `: ${lineValue(line.hours)}`}`);
+    }
+  }
+  out.push(`- Total: ${hoursLabel(summary.total)}`);
   return out.join("\n");
 }
 
 export function breakdownList(result: Quote): HTMLElement {
+  const summary = hoursSummary(result);
   const list = el("ul", "lines");
-  for (const group of breakdownGroups) {
-    const rows = groupRows(result, group.bucket);
-    if (rows.length === 0) continue;
-    list.append(el("li", "line-head", group.heading));
-    for (const item of rows) {
-      const li = el("li", "line");
-      li.append(
-        el("span", undefined, lineName(item)),
-        el("span", "line-hours", hoursLabel(item.openHours)),
-      );
+  list.append(el("li", "line-title", summary.title));
+  for (const group of summary.groups) {
+    const head = el("li", "line-head");
+    head.append(
+      el("span", undefined, group.heading),
+      el("span", "line-hours", hoursLabel(group.hours)),
+    );
+    list.append(head);
+    for (const line of group.lines) {
+      const li = el("li", line.hours === "included" ? "line is-included" : "line");
+      li.append(el("span", undefined, line.name), el("span", "line-hours", lineValue(line.hours)));
       list.append(li);
     }
   }
   const total = el("li", "line is-total");
-  total.append(el("span", undefined, "Total"), el("span", "line-hours", hoursLabel(result.hours)));
+  total.append(el("span", undefined, "Total"), el("span", "line-hours", hoursLabel(summary.total)));
   list.append(total);
   return list;
 }
@@ -528,12 +620,15 @@ export function bindActions(app: HTMLElement): void {
     } else if (action === "mode" && id) {
       const level = Number(button.dataset.qty);
       if (Number.isFinite(level)) commit(setQuantity(selection, id, level));
+    } else if (action === "source" && id) {
+      commit(setSource(selection, id));
     } else if (action === "tile" && id) {
-      const turningOn = selection.tiles[id] === undefined;
+      const turningOn = !isIn(selection.tiles, id);
       if (turningOn && laneIds.includes(id)) store.reveal = id;
       commit(setTile(selection, id, turningOn));
     } else if ((action === "dec" || action === "inc") && id) {
-      const qty = selection.tiles[id];
+      /* A count of templates at one is not in the estimate: one is the template the blogs share */
+      const qty = selection.tiles[id] ?? (getTile(id).counts ? 1 : undefined);
       if (qty === undefined) return;
       const step = getTile(id).step;
       commit(stepQuantity(selection, id, qty + (action === "inc" ? step : -step)));
@@ -544,8 +639,8 @@ export function bindActions(app: HTMLElement): void {
     if (!(input instanceof HTMLInputElement)) return;
     const selection = store.selection;
     if (input.dataset.action === "design") {
-      const cleared = setTile(setTile(selection, "ai-design", false), "custom-design", false);
-      commit(input.value === "none" ? cleared : setTile(cleared, input.value, true));
+      /* A design takes the place of the one before it */
+      commit(setTile(selection, input.value, true));
       return;
     }
     const qty = Number(input.value);

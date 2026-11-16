@@ -8,30 +8,34 @@ import { checkFiles, mayWrite, readTables, saveTables } from "../src/calc/api.ts
 import {
   applyCells,
   columns,
-  liveCodesText,
-  liveRulesText,
-  liveText,
   parseCodes,
   parseTable,
   type Row,
   serializeTable,
 } from "../src/table.ts";
+import { fixtureText } from "./fixture.ts";
+
+/* The files as the copy starts with them: the frozen ones, so a change made on the calculations
+   page never changes what these tests save */
+const tableText = fixtureText.table;
+const rulesText = fixtureText.rules;
+const codesText = fixtureText.codes;
 
 const folders: string[] = [];
 async function copyOfRepo(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "parcel-api-"));
   folders.push(root);
-  await Bun.write(join(root, "src/estimator.csv"), liveText);
-  await Bun.write(join(root, "src/rules.csv"), liveRulesText);
-  await Bun.write(join(root, "src/link-codes.csv"), liveCodesText);
+  await Bun.write(join(root, "src/estimator.csv"), tableText);
+  await Bun.write(join(root, "src/rules.csv"), rulesText);
+  await Bun.write(join(root, "src/link-codes.csv"), codesText);
   return root;
 }
 afterAll(async () => {
   for (const folder of folders) await rm(folder, { recursive: true, force: true });
 });
 
-const rows = parseTable(liveText);
-const edited = (table: string, rules = liveRulesText) => ({ table, rules });
+const rows = parseTable(tableText);
+const edited = (table: string, rules = rulesText) => ({ table, rules });
 
 describe("saving the files", () => {
   test("writes a table the app can read, in the file's own layout", async () => {
@@ -41,8 +45,8 @@ describe("saving the files", () => {
     expect(await saveTables(root, edited(changed.replaceAll("\n", "\r\n")))).toEqual({});
     const tables = await readTables(root);
     expect(tables.saved.table).toBe(changed);
-    expect(tables.saved.rules).toBe(liveRulesText);
-    expect(tables.saved.codes).toBe(liveCodesText);
+    expect(tables.saved.rules).toBe(rulesText);
+    expect(tables.saved.codes).toBe(codesText);
     expect(tables.committed).toBeNull();
   });
 
@@ -57,25 +61,25 @@ describe("saving the files", () => {
       (
         await saveTables(
           root,
-          edited(liveText, liveRulesText.replace("ai-feedback-each,3", "ai-feedback-each,x")),
+          edited(tableText, rulesText.replace("ai-feedback-each,3", "ai-feedback-each,x")),
         )
       ).error,
     ).toContain("Rule ai-feedback-each");
     expect((await readTables(root)).saved).toEqual({
-      table: liveText,
-      rules: liveRulesText,
-      codes: liveCodesText,
+      table: tableText,
+      rules: rulesText,
+      codes: codesText,
     });
-    expect(checkFiles(edited(liveText), liveCodesText)).toEqual({
-      table: liveText,
-      rules: liveRulesText,
-      codes: liveCodesText,
+    expect(checkFiles(edited(tableText), codesText)).toEqual({
+      table: tableText,
+      rules: rulesText,
+      codes: codesText,
     });
   });
 
   test("gives a new item the next link code, and writes it to link-codes.csv", async () => {
     const root = await copyOfRepo();
-    const highest = Math.max(...parseCodes(liveCodesText).map((entry) => entry.code));
+    const highest = Math.max(...parseCodes(codesText).map((entry) => entry.code));
     const booking = Object.fromEntries(columns.map((column) => [column, ""])) as Row;
     Object.assign(booking, {
       id: "booking",
@@ -86,7 +90,7 @@ describe("saving the files", () => {
     expect(await saveTables(root, edited(serializeTable([...rows, booking])))).toEqual({});
     const saved = parseCodes((await readTables(root)).saved.codes);
     expect(saved.find((entry) => entry.id === "booking")?.code).toBe(highest + 1);
-    expect(saved.length).toBe(parseCodes(liveCodesText).length + 1);
+    expect(saved.length).toBe(parseCodes(codesText).length + 1);
   });
 
   test("reads the table of the last commit from git", async () => {

@@ -9,26 +9,34 @@ import type { Tables } from "./api.ts";
 import {
   buildCatalog,
   type Catalog,
-  catalogueId,
+  type DesignChoice,
+  designChoices,
+  designInputUnit,
   editionLabel,
   hasStatus,
-  isComingSource,
+  isSource,
   partsOf,
   placeName,
+  projectName,
   places,
+  startingDesign,
   tileMode,
   withCatalog,
 } from "../catalog.ts";
 import { designFor, hoursLabel, lineHours } from "../controls.ts";
 import { h, type Kid } from "../dom.ts";
 import { codeIn } from "../link.ts";
+import { type PreviewFiles, previewAddress, previewKey } from "../preview.ts";
 import {
   decodeSelection,
   encodeSelection,
   formatHours,
+  managementLineId,
   type Quote,
   quote,
+  type Selection,
   selectionForShape,
+  setTile,
 } from "../quote.ts";
 import scenarioText from "../scenarios.csv" with { type: "text" };
 import {
@@ -38,6 +46,7 @@ import {
   type Column,
   cellKey,
   columns,
+  designKinds,
   parseCodes,
   parseCsv,
   parseRules,
@@ -47,6 +56,7 @@ import {
   type Rules,
   rowKey,
   ruleNames,
+  serializeCodes,
   serializeRules,
   serializeTable,
 } from "../table.ts";
@@ -57,9 +67,41 @@ const root: HTMLElement = found;
 
 /* ---------- What the page knows ---------- */
 
-type Estimate = { name: string; code: string };
+/** An estimate on the right. A starting estimate is made from the files it is priced with, so a
+    change to what an estimate starts with (an option, a quantity) shows in it; its code is the
+    one the saved files make, for its link. */
+type Estimate = { name: string; code: string; design?: DesignChoice };
 
-/** Estimates to price every change against: src/scenarios.csv, a name and a link on each line. */
+/** The estimate a new page starts with, with a design, under the catalog in use. */
+const startWith = (design: DesignChoice) =>
+  setTile(selectionForShape("essential"), design.id, true);
+
+/** The estimate a new page starts with, once for each design that has design hours: the starting
+    design first. */
+const startingEstimates: Estimate[] = [
+  startingDesign,
+  ...designChoices.filter((choice) => choice !== startingDesign && choice.kind !== "none"),
+].map((choice) => ({
+  name: `Starting estimate · ${choice.label}`,
+  code: encodeSelection(startWith(choice)),
+  design: choice,
+}));
+
+/** An estimate under a catalog: a starting one made with it, any other read from its code. */
+function selectionOf(item: Estimate, catalog: Catalog): Selection | null {
+  return withCatalog(catalog, () =>
+    item.design ? startWith(item.design) : decodeSelection(item.code),
+  );
+}
+
+/** The code of an estimate under a catalog, for the preview of this page's files. */
+function codeWith(item: Estimate, catalog: Catalog): string {
+  const selection = selectionOf(item, catalog);
+  return selection ? withCatalog(catalog, () => encodeSelection(selection)) : item.code;
+}
+
+/** More estimates to price every change against: src/scenarios.csv, a name and a link on each
+    line. */
 const scenarios: Estimate[] = parseCsv(scenarioText)
   .slice(1)
   .map(([name = "", link = ""]) => ({ name, code: codeIn(link) }))
@@ -71,8 +113,8 @@ const unsavedRowsKey = "website-packages.unsaved-rows";
 /** Set on Save: the dev server reloads this page once the file changes, and the page says Saved then. */
 const savedKey = "website-packages.saved";
 
-type AddForm = { label: string; type: string; hours: string; unit: string };
-const emptyForm: AddForm = { label: "", type: "", hours: "fixed", unit: "" };
+type AddForm = { label: string; type: string; hours: string; unit: string; design: string };
+const emptyForm: AddForm = { label: "", type: "", hours: "fixed", unit: "", design: "" };
 
 const state = {
   /** The files on disk, and what was read from them. */
@@ -84,7 +126,6 @@ const state = {
   /** The table and rules in the last commit; null when there are none, or this code cannot read them. */
   committedRows: null as Row[] | null,
   committedRules: null as Rules | null,
-  committedNote: "",
   /** Cells changed on this page and not saved yet, by "row-key column". */
   cells: {} as Cells,
   /** Rules changed on this page and not saved yet. */
@@ -101,11 +142,12 @@ const state = {
   loadError: "",
   saveError: "",
   saving: false,
+  /** A preview of the estimator is open: it follows every change made here. */
+  previewing: false,
   /** The estimate in the address, when there is one. */
   code: codeIn(location.hash),
   /** Which estimate the table's last columns show. */
   picked: 0,
-  askReset: false,
   said: new Map<string, string>(),
   linkError: "",
 };
@@ -114,14 +156,15 @@ const state = {
 
 type Help = { name: string; text: string; example?: string };
 
+/* Build and design hours for each design choice, named as the estimator's Design choices */
 const buildColumns = [
   ["build-ai", "AI"],
-  ["build-design", "Design"],
+  ["build-nimbly", "Nimbly"],
   ["build-custom", "Custom"],
 ] as const;
 const designColumns = [
   ["design-ai", "AI"],
-  ["design-design", "Design"],
+  ["design-nimbly", "Nimbly"],
   ["design-custom", "Custom"],
 ] as const;
 const hourColumns: readonly Column[] = [...buildColumns, ...designColumns].map(
@@ -147,11 +190,11 @@ const help: Record<Column, Help> = {
   },
   type: {
     name: "Type",
-    text: "Build: its hours are build hours. Content: they are content hours, counted apart, and the item sits with Content in the estimate. For items of the shelf.",
+    text: "Build: its hours are build hours. Content: they are content hours, counted apart, and the item sits with Content in the estimate (items of the shelf). Project: the work around the site, as the kick-off and training are, counted with project management (the site basics and the shelf). Design hours are design hours whatever the type.",
   },
   status: {
     name: "Status",
-    text: "Live: ready to add or choose. Soon: shown, but locked. Hidden: not shown anywhere, and left out of every estimate. Each option has its own. The site basics and the parts of the Blog and the Product catalogue are always shown.",
+    text: "Live: ready to add or choose. Soon: shown, but locked. Hidden: not shown anywhere, and left out of every estimate. Each option has its own, and so does each part added on its own (Recent blog posts, Favorite products, Related products, Social sign-in, Member area). The site basics, the Blog's templates and Memberships' access groups are always shown. A source of products is live while one of its options is.",
   },
   unit: {
     name: "Unit",
@@ -172,9 +215,9 @@ const help: Record<Column, Help> = {
     text: "For each unit when the item counts something, for the item otherwise.",
     example: "Sections: 4, so 8 sections are 32h",
   },
-  "build-design": {
-    name: "Build hours with Design",
-    text: "For the Design choice, which the estimator offers later. Counted the same way.",
+  "build-nimbly": {
+    name: "Build hours with Nimbly design",
+    text: "Counted the same way.",
   },
   "build-custom": {
     name: "Build hours with Custom design, or none",
@@ -185,9 +228,10 @@ const help: Record<Column, Help> = {
     text: "While AI generated design is chosen: for each unit when the item counts something, for the item otherwise.",
     example: "Sections: 1, so 8 sections add 8h",
   },
-  "design-design": {
-    name: "Design hours, Design",
-    text: "For the Design choice, which the estimator offers later.",
+  "design-nimbly": {
+    name: "Design hours, Nimbly",
+    text: "While Nimbly design is chosen, counted as AI's.",
+    example: "Sections: 3, so 8 sections add 24h",
   },
   "design-custom": {
     name: "Design hours, Custom",
@@ -219,7 +263,7 @@ function ownHelp(picked: Estimate): Record<"qty" | "build" | "design", Help> {
     },
     design: {
       name: `Design hours in ${picked.name}`,
-      text: "Design hours the item adds, AI or Custom, whichever the estimate has.",
+      text: "Design hours the item adds for the estimate's design choice: AI generated, Nimbly or Custom.",
     },
   };
 }
@@ -232,15 +276,19 @@ const placeInfo: Record<(typeof places)[number], { title: string; note: string }
   },
   shelf: {
     title: "Shelf",
-    note: "Added when the site needs it. Its type says whether its hours are build or content.",
+    note: "Added when the site needs it. Its type says whether its hours are build, content or project.",
   },
   blog: {
     title: placeName.blog,
-    note: "One item on the shelf: how many blogs, and the templates they share.",
+    note: "One item on the shelf: how many blogs, and their list and post templates: shared, or with more than one blog, up to one for each.",
   },
   catalogue: {
     title: placeName.catalogue,
-    note: "One item on the shelf: where the products come from, how they show, and what goes with them.",
+    note: "One item on the shelf: where the products come from (each source with the same options), how they show, and what goes with them.",
+  },
+  membership: {
+    title: placeName.membership,
+    note: "One item on the shelf: how members sign in, their access groups (Enterprise from 3), and what goes with them.",
   },
 };
 
@@ -252,12 +300,17 @@ const ruleLabels: Record<RuleName, string> = {
   "ai-feedback-included": "AI feedback · rounds included",
   "ai-feedback-each": "AI feedback · hours an extra round",
   "ai-feedback-max": "AI feedback · at most",
-  "design-feedback-included": "Design feedback · rounds included",
-  "design-feedback-each": "Design feedback · hours an extra round",
-  "design-feedback-max": "Design feedback · at most",
+  "nimbly-feedback-included": "Nimbly feedback · rounds included",
+  "nimbly-feedback-each": "Nimbly feedback · hours an extra round",
+  "nimbly-feedback-max": "Nimbly feedback · at most",
   "custom-feedback-included": "Custom feedback · rounds included",
   "custom-feedback-each": "Custom feedback · hours an extra round",
   "custom-feedback-max": "Custom feedback · at most",
+  "ai-package": "AI generated · package it needs",
+  "nimbly-package": "Nimbly · package it needs",
+  "custom-package": "Custom · package it needs",
+  "none-package": "No design · package it needs",
+  "pm-percent": "Project management · %",
   "languages-included": "Languages · included",
   "languages-second": "Languages · the 2nd",
   "languages-each": "Languages · each after it",
@@ -268,18 +321,6 @@ const ruleLabels: Record<RuleName, string> = {
   "pages-max": "Website pages · at most",
   "pages-professional-from": "Website pages · Pro from",
 };
-
-/** What the files cannot say. These stay in the code (src/quote.ts and src/catalog.ts). */
-const rulesInCode = [
-  "AI generated, Custom or no design: one at a time. Each design brings its feedback rounds; rounds past the included ones are charged.",
-  "Build hours follow the design choice. No design builds as Custom.",
-  "The site basics are always in: page templates, sections, menu, languages, header, footer, setup and launch.",
-  "Product catalogue: HubDB is the source with options. Other sources stay Soon or Hidden until the estimator has options for them.",
-  "Product catalogue, Custom: its hours are entered in the estimate, up to its Max.",
-  "Related products: not with Module based.",
-  "The parts of the Blog and of the Product catalogue are in the estimate with it, and leave with it.",
-  "The package is the highest one that any item or option in the estimate needs. The tier works the same way.",
-];
 
 const statusNames: Record<string, string> = { "": "Live", soon: "Soon", hidden: "Hidden" };
 const typeNames: Record<string, string> = { "": "Build", content: "Content" };
@@ -521,6 +562,7 @@ function readForm(form: HTMLFormElement): AddForm {
     type: String(data.get("type") ?? ""),
     hours: String(data.get("hours") ?? "fixed"),
     unit: String(data.get("unit") ?? "").trim(),
+    design: data.get("design") ? "1" : "",
   };
 }
 
@@ -536,16 +578,18 @@ function addItem(form: AddForm): void {
     state.addError = "Say what it counts, such as calendars.";
     return;
   }
-  const unit = form.hours === "entered" ? "hours" : form.hours === "unit" ? form.unit : "";
+  /* Design hours entered too go with build hours only */
+  const entered = form.design && form.type === "" ? designInputUnit : "hours";
+  const unit = form.hours === "entered" ? entered : form.hours === "unit" ? form.unit : "";
   const row = Object.fromEntries(columns.map((column) => [column, ""])) as Row;
   Object.assign(row, {
     id: newId(form.label),
     item: form.label,
     place: "shelf",
-    type: form.type === "content" ? "content" : "",
+    type: form.type === "content" || form.type === "project" ? form.type : "",
     unit,
   });
-  if (unit === "hours") Object.assign(row, { start: "0", max: "400" });
+  if (unit === "hours" || unit === designInputUnit) Object.assign(row, { start: "0", max: "400" });
   else if (unit) Object.assign(row, { start: "1", max: "10" });
   state.added.push(row);
   state.addError = "";
@@ -571,22 +615,49 @@ type Priced = { live: Quote; draft: Quote | null };
 type Share = { qty: string; hours: number; design: number };
 
 /** Prices an estimate with the committed files and, when they differ, with the ones on this page. */
-function price(code: string, base: Catalog, working: Catalog | null): Priced | null {
-  const priceWith = (catalog: Catalog) =>
-    withCatalog(catalog, () => {
-      const selection = decodeSelection(code);
-      return selection ? quote(selection) : null;
-    });
+function price(item: Estimate, base: Catalog, working: Catalog | null): Priced | null {
+  const priceWith = (catalog: Catalog) => {
+    const selection = selectionOf(item, catalog);
+    return selection ? withCatalog(catalog, () => quote(selection)) : null;
+  };
   const live = priceWith(base);
   if (!live) return null;
   return { live, draft: working ? priceWith(working) : null };
 }
 
+/** The starting estimates, their codes made with the saved files: as the estimator on this server
+    writes them, so a link from it picks its card even when what an estimate starts with changed
+    since this page loaded. */
+let startingCodes: { rows: readonly Row[]; rules: Rules; list: Estimate[] } | null = null;
+function startingList(): Estimate[] {
+  const { savedRows: rows, savedRules: rules } = state;
+  if (!rules) return startingEstimates;
+  if (startingCodes?.rows === rows && startingCodes.rules === rules) return startingCodes.list;
+  const saved = catalogOf(rows, rules);
+  const list =
+    "catalog" in saved
+      ? startingEstimates.map((item) => ({ ...item, code: codeWith(item, saved.catalog) }))
+      : startingEstimates;
+  startingCodes = { rows, rules, list };
+  return list;
+}
+
+/** The estimates on the right: the one in the address first, unless it is one of the others. */
 function estimates(): Estimate[] {
-  const own = decodeSelection(state.code) ? [{ name: "From your link", code: state.code }] : [];
-  const list = [...own, ...scenarios];
-  if (list.length > 0) return list;
-  return [{ name: "Starting estimate", code: encodeSelection(selectionForShape("essential")) }];
+  const listed = [...startingList(), ...scenarios];
+  const own =
+    decodeSelection(state.code) && !listed.some((item) => item.code === state.code)
+      ? [{ name: "From your link", code: state.code }]
+      : [];
+  return [...own, ...listed];
+}
+
+/** The estimate the address names, picked for the table's last columns. */
+function pickAddress(): void {
+  state.picked = Math.max(
+    0,
+    estimates().findIndex((item) => item.code === state.code),
+  );
 }
 
 /** What a row adds to an estimate: how much of it is in, its build hours, and its design hours.
@@ -725,11 +796,18 @@ function head(error: string | null, changes: Diff, picked: Estimate): HTMLElemen
         disabled: unsaved === 0 || error !== null || state.saving,
         title: "Writes src/estimator.csv and src/rules.csv",
       }),
+      button("preview", "Preview", {
+        disabled: error !== null,
+        title:
+          "Opens the estimator with this page's files, saved or not, and keeps it up to date. Nothing is written",
+      }),
+      /* One edit goes back with its Undo in the list of changes; this throws them all away */
       unsaved === 0
         ? null
-        : state.askReset
-          ? button("reset-yes", `Discard ${plural(unsaved, "edit", "edits")}`, { quiet: true })
-          : button("reset", "Discard unsaved", { quiet: true }),
+        : button("reset", "Discard", {
+            quiet: true,
+            title: `Throws away the ${plural(unsaved, "edit", "edits")} not saved`,
+          }),
     ),
     h(
       "div",
@@ -743,7 +821,6 @@ function head(error: string | null, changes: Diff, picked: Estimate): HTMLElemen
         }),
         status,
       ),
-      state.committedNote ? h("p", { class: "c-small" }, state.committedNote) : null,
       error
         ? h("p", { class: "c-warn", role: "alert" }, `This cannot be saved yet. ${error}.`)
         : null,
@@ -904,8 +981,33 @@ function ruleField(name: RuleName): HTMLElement {
   });
 }
 
+/** A package one of the rules names, in the Design panel: Any, Growth or Platform. */
+function rulePick(name: RuleName): HTMLElement {
+  const value = workingRules()[name];
+  const before = baseRules()[name];
+  const changed = value !== before;
+  const unsaved = state.rules[name] !== undefined;
+  const known = packageNames.some(([id]) => id === value);
+  return h(
+    "select",
+    {
+      class: classes(
+        "c-pick",
+        `package-${value || "none"}`,
+        changed && "is-changed",
+        unsaved && "is-unsaved",
+      ),
+      "aria-label": ruleLabels[name],
+      title: changed ? `Last commit: ${shownValue(before)}${unsaved ? ". Not saved" : ""}` : null,
+      data: { rule: name, focus: `rule ${name}` },
+    },
+    packageNames.map(([id, text]) => h("option", { value: id, selected: id === value }, text)),
+    known ? null : h("option", { value, selected: true }, value),
+  );
+}
+
 function designPanel(): HTMLElement {
-  const kinds = ["ai", "design", "custom"] as const;
+  const kinds = designKinds;
   const row = (label: string, cells: (HTMLElement | null)[], unit = "") =>
     h(
       "tr",
@@ -935,15 +1037,7 @@ function designPanel(): HTMLElement {
           null,
           h("td", null),
           h("th", { scope: "col" }, "AI"),
-          h(
-            "th",
-            {
-              scope: "col",
-              class: "is-later",
-              title: "The Design choice comes to the estimator later",
-            },
-            "Design",
-          ),
+          h("th", { scope: "col" }, "Nimbly"),
           h("th", { scope: "col" }, "Custom"),
           h("td", null),
         ),
@@ -964,7 +1058,45 @@ function designPanel(): HTMLElement {
     h(
       "p",
       { class: "c-small" },
-      "An extra variant costs its share of the AI design hours, rounded up. Design is a choice the estimator offers later.",
+      "An extra variant costs its share of the AI design hours, rounded up.",
+    ),
+    h("h3", { class: "c-subhead" }, "Each design"),
+    h(
+      "div",
+      { class: "c-per" },
+      h("span", null),
+      h("span", { class: "c-per-head" }, "Package"),
+      designChoices.flatMap((choice) => [
+        h("span", { class: "c-per-name" }, choice.label),
+        rulePick(`${choice.kind}-package` as RuleName),
+      ]),
+    ),
+    h("p", { class: "c-small" }, "Package: the least the estimate is with that design."),
+  );
+}
+
+/** Project: project management's share, the same whatever the design. The kick-off and training
+    are rows of the site basics, Project by their type. */
+function projectPanel(): HTMLElement {
+  return h(
+    "section",
+    { class: "c-card", "aria-label": projectName },
+    h("h2", null, projectName),
+    h(
+      "div",
+      { class: "c-lines" },
+      h(
+        "label",
+        { class: "c-line" },
+        h("span", null, "Project management"),
+        ruleField("pm-percent"),
+        h("span", { class: "c-unit" }, "%"),
+      ),
+    ),
+    h(
+      "p",
+      { class: "c-small" },
+      "Of the estimate's design, build and content hours, not the kick-off and training, rounded up, whatever the design.",
     ),
   );
 }
@@ -1060,6 +1192,7 @@ function addCard(): HTMLElement {
           [
             ["", "Build"],
             ["content", "Content"],
+            ["project", projectName],
           ],
           "Type",
         ),
@@ -1082,6 +1215,19 @@ function addCard(): HTMLElement {
             ? "Hours for each one it counts."
             : "One number of hours for the item.",
       ),
+      form.hours === "entered" && form.type === ""
+        ? h(
+            "label",
+            { class: "c-check" },
+            h("input", {
+              type: "checkbox",
+              name: "design",
+              checked: form.design === "1",
+              data: { focus: "add design" },
+            }),
+            h("span", null, "Its design hours are entered too"),
+          )
+        : null,
       form.hours === "unit"
         ? h(
             "label",
@@ -1107,20 +1253,6 @@ function addCard(): HTMLElement {
         ),
       ),
       state.addError ? h("p", { class: "c-warn", role: "alert" }, state.addError) : null,
-    ),
-  );
-}
-
-function rulesCard(): HTMLElement {
-  return h(
-    "details",
-    { class: "c-card c-fold" },
-    h("summary", null, h("h2", null, "Rules in the code")),
-    h("p", { class: "c-note" }, "In src/quote.ts and src/catalog.ts, not in the files."),
-    h(
-      "ul",
-      { class: "c-rules" },
-      rulesInCode.map((item) => h("li", null, item)),
     ),
   );
 }
@@ -1198,6 +1330,7 @@ function estimatesCard(
             ["Design", (result: Quote) => result.designHours, "design"],
             ["Build", (result: Quote) => result.implementationHours, "build"],
             ["Content", (result: Quote) => result.contentHours, "content"],
+            [projectName, (result: Quote) => result.projectHours, "project"],
           ] as const
         ).map(([name, read, key]) =>
           h(
@@ -1356,36 +1489,45 @@ function need(row: Row, column: "package" | "tier", counted: boolean): HTMLEleme
 }
 
 function statusPick(row: Row): HTMLElement {
-  /* A source to come cannot be live: the estimator has nothing to offer for it yet */
-  const names: [string, string][] = isComingSource(row.id, row.place)
-    ? [
-        ["soon", "Soon"],
-        ["hidden", "Hidden"],
-      ]
-    : [
-        ["", "Live"],
-        ["soon", "Soon"],
-        ["hidden", "Hidden"],
-      ];
+  /* A source with no options cannot be live: the estimator has nothing to offer for it yet */
+  const names: [string, string][] =
+    isSource(row.id, row.place) && !row.option
+      ? [
+          ["soon", "Soon"],
+          ["hidden", "Hidden"],
+        ]
+      : [
+          ["", "Live"],
+          ["soon", "Soon"],
+          ["hidden", "Hidden"],
+        ];
   return pick(row, "status", names, { tone: "status", label: "status" });
 }
 
+/** Build, Content or Project on an item of the shelf; Build or Project in the site basics. */
 function typePick(row: Row): HTMLElement {
-  return pick(
-    row,
-    "type",
-    [
-      ["", "Build"],
-      ["content", "Content"],
-    ],
-    { tone: "type", label: "type", data: { type: row.id, focus: `type ${row.id}` } },
-  );
+  const names: [string, string][] = [["", "Build"]];
+  if (row.place === "shelf") names.push(["content", "Content"]);
+  names.push(["project", projectName]);
+  return pick(row, "type", names, {
+    tone: "type",
+    label: "type",
+    data: { type: row.id, focus: `type ${row.id}` },
+  });
 }
+
+/** Where a row's type can be chosen: the shelf and the site basics. */
+const hasType = (row: Row) => row.place === "shelf" || row.place === "basics";
 
 /** Where an item sits when it has no status of its own. */
 function fixedStatus(id: string): string {
+  const withThe: Record<string, string> = {
+    "blog-setups": "With the blog",
+    "product-catalogue": "With the catalogue",
+    membership: "With memberships",
+  };
   for (const [owner, parts] of Object.entries(partsOf)) {
-    if (parts.includes(id)) return owner === "blog-setups" ? "With the blog" : "With the catalogue";
+    if (parts.includes(id)) return withThe[owner] ?? "With its item";
   }
   return "Always in";
 }
@@ -1394,10 +1536,11 @@ const singular = (unit: string) => unit.replace(/s$/, "");
 
 /** The line under an item's name: what it counts, or what it is. */
 function captionOf(row: Row, hasOptions: boolean): string {
-  if (row.id === catalogueId) return "Source, with its options";
-  if (isComingSource(row.id, row.place)) return "Source, to come";
+  if (isSource(row.id, row.place))
+    return hasOptions ? "Source, with its options" : "Source, to come";
   if (hasOptions) return "";
   if (row.unit === "hours") return "Hours entered in the estimate";
+  if (row.unit === designInputUnit) return "Build and design hours entered in the estimate";
   if (row.unit) return `Per ${singular(row.unit)}`;
   return "";
 }
@@ -1446,7 +1589,12 @@ function hourCells(row: Row): HTMLElement[] {
     h("td", { class: "c-entered g1", colspan: String(hourColumns.length) }, text),
   ];
   if (row.unit === "hours") return line("Entered in the estimate");
-  if (isComingSource(row.id, row.place) && hourColumns.every((column) => row[column] === "")) {
+  if (row.unit === designInputUnit) return line("Build and design entered in the estimate");
+  if (
+    isSource(row.id, row.place) &&
+    !row.option &&
+    hourColumns.every((column) => row[column] === "")
+  ) {
     return line("Its options come later");
   }
   return hourColumns.map((column, index) =>
@@ -1456,7 +1604,6 @@ function hourCells(row: Row): HTMLElement[] {
         class: classes(
           "c-num",
           (index === 0 || index === buildColumns.length) && "g1",
-          column.endsWith("-design") && "is-later",
           column.startsWith("design-") && "is-design",
         ),
       },
@@ -1465,11 +1612,49 @@ function hourCells(row: Row): HTMLElement[] {
   );
 }
 
-/** The rows of one item: one, or a heading row with a row for each option under it. */
-function itemRows(rows: Row[], pricing: Pricing, hoursRow: Row | null): HTMLElement[] {
+/** Project management: in every estimate, a share of all its hours that the Project panel sets. A
+    row of the rules, so the table's rows add up to the estimate. */
+function managementRow(pricing: Pricing): HTMLElement {
+  const { live, draft } = sharesOf(pricing, (result, catalog) => ({
+    qty: `${formatHours(catalog.managementPercent)}%`,
+    hours: result.lines.find((line) => line.id === managementLineId)?.openHours ?? 0,
+    design: 0,
+  }));
+  const share = formatHours((pricing.working ?? pricing.base).managementPercent);
+  return h(
+    "tr",
+    { class: "c-row is-item is-rule" },
+    h(
+      "th",
+      { scope: "row", class: "c-item" },
+      h("div", { class: "c-name" }, h("span", { class: "c-rule-name" }, "Project management")),
+      h("small", null, "Share of all the estimate's hours"),
+    ),
+    h("td", { class: "c-stat" }, h("span", { class: "c-fixed" }, "Always in")),
+    h("td", { class: "c-type" }, h("span", { class: "c-fixed" }, projectName)),
+    h("td", { class: "c-num" }),
+    h("td", { class: "c-num" }),
+    h(
+      "td",
+      { class: "c-entered g1", colspan: String(hourColumns.length) },
+      `${share}%, whatever the design: in the Project panel`,
+    ),
+    h("td", { class: "c-needs g1" }),
+    h("td", { class: "c-needs" }),
+    ownCells(pricing, live, draft),
+  );
+}
+
+/** The rows of one item: one, or a heading row with a row for each option under it. hoursRow: the catalogue's custom hours, which a source's Custom option
+    carries; its most hours are a field on the first source that has one, and said on the others. */
+function itemRows(
+  rows: Row[],
+  pricing: Pricing,
+  hoursRow: Row | null,
+  editsHours = true,
+): HTMLElement[] {
   const first = rows[0] as Row;
   const hasOptions = first.option !== "";
-  const shelf = first.place === "shelf";
   const caption = captionOf(first, hasOptions);
   const nameCell = h(
     "th",
@@ -1490,7 +1675,7 @@ function itemRows(rows: Row[], pricing: Pricing, hoursRow: Row | null): HTMLElem
     classes(row.status === "soon" && "is-soon", row.status === "hidden" && "is-hidden");
 
   if (!hasOptions) {
-    const counted = !!first.unit && first.unit !== "hours";
+    const counted = !!first.unit && first.unit !== "hours" && first.unit !== designInputUnit;
     const { live, draft } = sharesOf(pricing, (result, catalog) => share(result, catalog, first));
     return [
       h(
@@ -1507,7 +1692,7 @@ function itemRows(rows: Row[], pricing: Pricing, hoursRow: Row | null): HTMLElem
             ? statusPick(first)
             : h("span", { class: "c-fixed" }, fixedStatus(first.id)),
         ),
-        h("td", { class: "c-type" }, shelf ? typePick(first) : null),
+        h("td", { class: "c-type" }, hasType(first) ? typePick(first) : null),
         h("td", { class: "c-num" }, counted ? input(first, "start") : null),
         h("td", { class: "c-num" }, first.unit ? input(first, "max") : null),
         hourCells(first),
@@ -1541,7 +1726,7 @@ function itemRows(rows: Row[], pricing: Pricing, hoursRow: Row | null): HTMLElem
       },
       nameCell,
       h("td", { class: "c-stat" }, h("span", { class: "c-fixed" }, summary)),
-      h("td", { class: "c-type" }, shelf ? typePick(first) : null),
+      h("td", { class: "c-type" }, hasType(first) ? typePick(first) : null),
       h("td", { colspan: String(2 + hourColumns.length + 2), class: "c-head-fill" }),
       ownCells(pricing, null, null),
     ),
@@ -1592,7 +1777,15 @@ function itemRows(rows: Row[], pricing: Pricing, hoursRow: Row | null): HTMLElem
         h(
           "td",
           { class: "c-num" },
-          isHours && hoursRow ? input(hoursRow, "max", { label: "most hours" }) : null,
+          isHours && hoursRow
+            ? editsHours
+              ? input(hoursRow, "max", { label: "most hours" })
+              : h(
+                  "span",
+                  { class: "c-fixed", title: "The same for every source: set on the first" },
+                  hoursRow.max,
+                )
+            : null,
         ),
         hourCells(row),
         h("td", { class: "c-needs g1" }, need(row, "package", false)),
@@ -1607,10 +1800,16 @@ function itemRows(rows: Row[], pricing: Pricing, hoursRow: Row | null): HTMLElem
 function tableCard(picked: Estimate, pricing: Pricing): HTMLElement {
   const rows = workingRows();
   const span = 5 + hourColumns.length + 2 + 3;
-  /* The catalogue's Custom option carries the hours entered for it, so that row is not shown */
+  /* Each source's Custom option carries the hours entered for it, so that row is not shown */
   const hoursRow = rows.find((row) => row.id === "catalogue-custom") ?? null;
-  const merged =
-    hoursRow !== null && rows.some((row) => row.id === catalogueId && row.unit === "hours");
+  const withHours = [
+    ...new Set(
+      rows
+        .filter((row) => isSource(row.id, row.place) && row.option && row.unit === "hours")
+        .map((row) => row.id),
+    ),
+  ];
+  const merged = hoursRow !== null && withHours.length > 0;
   const body: Kid[] = [];
   const known = new Set<string>(places);
   const strays = [...new Set(rows.map((row) => row.place))].filter((place) => !known.has(place));
@@ -1639,12 +1838,16 @@ function tableCard(picked: Estimate, pricing: Pricing): HTMLElement {
         itemRows(
           own.filter((row) => row.id === id),
           pricing,
-          merged && id === catalogueId ? hoursRow : null,
+          merged && withHours.includes(id) ? hoursRow : null,
+          id === withHours[0],
         ),
       );
     }
+    if (place === "basics") body.push(managementRow(pricing));
   }
-  const sum = (result: Quote) => hoursLabel(result.implementationHours + result.contentHours);
+  /* The table's hours column: every hour that is not design, Content and Project too */
+  const sum = (result: Quote) =>
+    hoursLabel(result.implementationHours + result.contentHours + result.projectHours);
   const own = ownHelp(picked);
   const heading = (label: Kid, about: Help, attrs: Record<string, string | null> = {}) =>
     h(
@@ -1661,7 +1864,6 @@ function tableCard(picked: Estimate, pricing: Pricing): HTMLElement {
       },
       label,
     );
-  const later = (label: string) => [label, h("i", null, "later")];
   const { pair } = pricing;
   return h(
     "section",
@@ -1739,14 +1941,9 @@ function tableCard(picked: Estimate, pricing: Pricing): HTMLElement {
           h(
             "tr",
             { class: "c-heads2" },
-            buildColumns.map(([column, label], index) =>
-              heading(column === "build-design" ? later(label) : label, help[column], {
-                class: classes("n", index === 0 && "g1", column === "build-design" && "is-later"),
-              }),
-            ),
-            designColumns.map(([column, label], index) =>
-              heading(column === "design-design" ? later(label) : label, help[column], {
-                class: classes("n", index === 0 && "g1", column === "design-design" && "is-later"),
+            [...buildColumns, ...designColumns].map(([column, label], index) =>
+              heading(label, help[column], {
+                class: classes("n", (index === 0 || index === buildColumns.length) && "g1"),
               }),
             ),
             heading("Package", help.package, { class: "g1" }),
@@ -1798,6 +1995,20 @@ function tableCard(picked: Estimate, pricing: Pricing): HTMLElement {
 /* ---------- Drawing ---------- */
 
 /** Files read: the catalog, or why it cannot be one. */
+/** Leaves this page's files for the estimator's preview, in this browser only. The open preview
+    reloads when they change. */
+function writePreview(code: string): void {
+  const files: PreviewFiles = {
+    table: serializeTable(workingRows()),
+    rules: serializeRules(workingRules()),
+    codes: serializeCodes(state.codes),
+    code,
+  };
+  try {
+    localStorage.setItem(previewKey, JSON.stringify(files));
+  } catch {}
+}
+
 function catalogOf(rows: readonly Row[], rules: Rules): { catalog: Catalog } | { error: string } {
   try {
     return { catalog: buildCatalog(rows, rules, state.codes) };
@@ -1828,7 +2039,6 @@ function draw(): void {
     /* The last commit's files are not ones this code can read: compare with the saved files */
     state.committedRows = null;
     state.committedRules = null;
-    state.committedNote = `The last commit's files cannot be read by this code (${based.error}), so changes are counted from the saved files.`;
     draw();
     return;
   }
@@ -1838,8 +2048,12 @@ function draw(): void {
   const error = worked && "error" in worked ? worked.error : null;
   const list = estimates();
   if (state.picked >= list.length) state.picked = 0;
-  const priced = list.map((item) => price(item.code, based.catalog, working));
+  const priced = list.map((item) => price(item, based.catalog, working));
   const picked = list[state.picked] ?? (list[0] as Estimate);
+  /* An open preview follows the files and the chosen estimate, while they can be read */
+  if (state.previewing && error === null) {
+    writePreview(codeWith(picked, working ?? based.catalog));
+  }
 
   const focus =
     document.activeElement instanceof HTMLElement
@@ -1849,7 +2063,6 @@ function draw(): void {
   for (const node of root.querySelectorAll<HTMLElement>("[data-keep-scroll]")) {
     scroll.set(node.dataset.keepScroll ?? "", [node.scrollLeft, node.scrollTop]);
   }
-  const unfolded = root.querySelector<HTMLDetailsElement>("details.c-fold")?.open ?? false;
   root.replaceChildren(
     h(
       "main",
@@ -1867,9 +2080,9 @@ function draw(): void {
           head(error, changes, picked),
           changesList(changes),
           designPanel(),
+          projectPanel(),
           languagesPanel(),
           addCard(),
-          rulesCard(),
         ),
         h(
           "div",
@@ -1884,8 +2097,6 @@ function draw(): void {
       ),
     ),
   );
-  const fold = root.querySelector<HTMLDetailsElement>("details.c-fold");
-  if (fold) fold.open = unfolded;
   for (const node of root.querySelectorAll<HTMLElement>("[data-keep-scroll]")) {
     const [left, top] = scroll.get(node.dataset.keepScroll ?? "") ?? [0, 0];
     node.scrollLeft = left;
@@ -1912,22 +2123,17 @@ function take(tables: Tables): void {
   state.savedRows = parseTable(tables.saved.table);
   state.savedRules = parseRules(tables.saved.rules);
   state.codes = parseCodes(tables.saved.codes);
-  state.committedNote = "";
   state.committedRows = null;
   state.committedRules = null;
-  if (tables.committed === null) {
-    state.committedNote =
-      "No commit has these files yet, so changes are counted from the saved files.";
-  } else {
+  /* With no commit of the files, or one this code cannot read, changes are counted from the saved
+     files */
+  if (tables.committed !== null) {
     try {
       state.committedRows = parseTable(tables.committed.table);
       state.committedRules = parseRules(tables.committed.rules);
-    } catch (problem) {
+    } catch {
       state.committedRows = null;
       state.committedRules = null;
-      state.committedNote = `The last commit's files cannot be read (${
-        problem instanceof Error ? problem.message : String(problem)
-      }), so changes are counted from the saved files.`;
     }
   }
   /* Added items the file now has, and new items taken out that it no longer has, are done with.
@@ -1956,6 +2162,8 @@ async function load(): Promise<void> {
     if (!response.ok) throw new Error(`the server answered ${response.status}`);
     readUnsaved();
     take((await response.json()) as Tables);
+    /* The starting estimates' codes are the saved files' now: the address may name one of them */
+    pickAddress();
     try {
       const at = Number(sessionStorage.getItem(savedKey));
       sessionStorage.removeItem(savedKey);
@@ -2047,9 +2255,19 @@ root.addEventListener("change", (event) => {
   if (name) setItemCell(name, "item", field.value.trim());
   else if (type) setItemCell(type, "type", field.value);
   else if (start) {
-    /* The option an item starts with: 1 on it, empty on the others */
+    /* The option an item starts with: 1 on it, empty on the others. Back to the one the saved file
+       starts with, its cells are the file's again, so nothing is listed as changed */
+    const saved = [...state.savedRows, ...state.added].filter((item) => item.id === start);
+    const back = startingOption(saved);
     for (const row of workingRows().filter((item) => item.id === start)) {
-      setCell(cellKey(row, "start"), rowKey(row) === field.value ? "1" : "");
+      const own = saved.find((item) => rowKey(item) === rowKey(row));
+      const value =
+        back && rowKey(back) === field.value
+          ? (own?.start ?? "")
+          : rowKey(row) === field.value
+            ? "1"
+            : "";
+      setCell(cellKey(row, "start"), value);
     }
   } else if (cell) setCell(cell, field.value.trim());
   else if (rule) setRule(rule as RuleName, field.value.trim());
@@ -2091,24 +2309,24 @@ root.addEventListener("click", (event) => {
     setRule(name, baseRules()[name]);
     draw();
   } else if (act === "reset") {
-    state.askReset = true;
-    draw();
-    window.setTimeout(() => {
-      if (!state.askReset) return;
-      state.askReset = false;
-      draw();
-    }, 5000);
-  } else if (act === "reset-yes") {
     state.cells = {};
     state.added = [];
     state.dropped = [];
     state.rules = {};
-    state.askReset = false;
     state.saveError = "";
     keepUnsaved();
     draw();
   } else if (act === "save") {
     void save();
+  } else if (act === "preview") {
+    state.previewing = true;
+    /* The estimate as this page's files make it: a starting one starts as they say */
+    const picked = estimates()[state.picked] ?? estimates()[0];
+    const files = catalogOf(workingRows(), workingRules());
+    const code =
+      picked && "catalog" in files ? codeWith(picked, files.catalog) : (picked?.code ?? "");
+    writePreview(code);
+    window.open(`../${previewAddress(code)}`, "estimator-preview");
   } else if (act === "drop" && target.dataset.cell) {
     dropItem(target.dataset.cell);
     state.saveError = "";
@@ -2134,14 +2352,14 @@ root.addEventListener("submit", (event) => {
   }
   state.linkError = "";
   state.code = code;
-  state.picked = 0;
+  pickAddress();
   history.replaceState(null, "", `#${code}`);
   draw();
 });
 
 window.addEventListener("hashchange", () => {
   state.code = codeIn(location.hash);
-  state.picked = 0;
+  pickAddress();
   draw();
 });
 
@@ -2218,4 +2436,5 @@ document.addEventListener("keydown", (event) => {
 });
 document.addEventListener("scroll", hideTip, true);
 
+pickAddress();
 void load();

@@ -43,6 +43,9 @@
   --design-dot: #f2783f;
   --content: #00756f;
   --content-dot: #2fc4b5;
+  /* Project: the kick-off, training and project management */
+  --project: #2456b8;
+  --project-dot: #5b8ef0;
   --dot-empty: #eceae6;
 
   /* Package and tier */
@@ -289,6 +292,14 @@ ul {
 .est .sh {
   margin-bottom: -2px;
   padding-inline: 13px;
+  /* A little closer, so Content keeps its label at full width */
+  column-gap: 10px;
+}
+.est .sh h2 {
+  column-gap: 8px;
+}
+.est .sh h2::after {
+  min-width: 8px;
 }
 .est .sh h2::after {
   background: color-mix(in srgb, var(--muted) 30%, transparent);
@@ -338,9 +349,14 @@ ul {
 .hc {
   color: var(--content);
 }
-/* The head figures sit on the title's line: each label before its figure, Build then Design */
+.hp {
+  color: var(--project);
+}
+/* The head figures sit on the title's line: each label before its figure, Build, Design, then
+   Project when there is some */
 .hrs.sum {
-  grid-template-columns: auto auto;
+  grid-template-columns: none;
+  grid-auto-flow: column;
   grid-template-rows: none;
   column-gap: 12px;
   justify-content: end;
@@ -363,10 +379,20 @@ ul {
   color: inherit;
   opacity: 0.6;
 }
-/* Content in the estimate head: its figure only, in its colour */
-.hrs.sum.c {
+/* The figure that leads a head, in its colour: Content in the estimate, Project in the site basics.
+   Its label shows where there is room */
+.hrs.sum.c,
+.hrs.sum.p {
   grid-template-columns: auto;
   color: var(--content);
+}
+.hrs.sum.p {
+  color: var(--project);
+}
+/* Where the title would no longer fit on its line, the leading figure goes without its label */
+.sh.is-tight .hrs.sum.c small,
+.sh.is-tight .hrs.sum.p small {
+  display: none;
 }
 
 /* ---------- One row: lead mark | name and note | control | hours ---------- */
@@ -592,6 +618,29 @@ ul {
 .unit .qty:focus-visible {
   outline: 0;
 }
+/* Build and design hours entered (Custom integration): a field for each, named over it */
+.duos {
+  display: flex;
+  gap: 6px;
+}
+.duo {
+  display: grid;
+  gap: 2px;
+  font-size: var(--fs-caption);
+  font-weight: 620;
+  color: var(--muted);
+}
+.duo .unit .qty {
+  width: 40px;
+}
+.missing .duo .unit,
+.missing .complexity .unit {
+  box-shadow: inset 0 0 0 1.5px var(--remove);
+}
+.missing .warn {
+  font-weight: 600;
+  color: var(--remove);
+}
 .combo {
   display: flex;
   align-items: center;
@@ -652,7 +701,7 @@ ul {
   margin-left: 4px;
 }
 
-/* Design: AI generated, Custom or None fills the row */
+/* Design: AI generated, Nimbly, Custom or None fills the row */
 .dsel {
   display: block;
   min-height: 0;
@@ -666,9 +715,11 @@ ul {
   border-radius: var(--r-ctl);
   background: var(--control);
 }
+/* Four choices of different lengths: each gets its name's width, and the rest is shared */
 .choice {
   position: relative;
-  flex: 1;
+  flex: 1 1 auto;
+  padding: 0 8px;
   display: grid;
   place-items: center;
   border-radius: var(--r-inner);
@@ -1210,6 +1261,79 @@ ul {
 .s-row.is-blocked:hover .tip {
   opacity: 1;
 }
+
+/* More about a row (Feedback, Variants): its name is dotted, and the pointer or the focus on it
+   shows a card under it. Screen readers read the card with the name */
+.has-info {
+  position: relative;
+  text-decoration: underline dotted var(--faint);
+  text-underline-offset: 3px;
+  cursor: help;
+}
+.has-info:hover,
+.has-info:focus-visible {
+  text-decoration-color: currentColor;
+  outline: none;
+}
+.info-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 20;
+  display: grid;
+  gap: 6px;
+  width: 290px;
+  padding: 12px 14px;
+  border-radius: var(--r-ctl);
+  background: var(--bg);
+  color: var(--ink);
+  font-size: var(--fs-note);
+  line-height: 16px;
+  font-weight: 450;
+  text-align: left;
+  white-space: normal;
+  box-shadow: var(--shadow-pop);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 0.12s,
+    visibility 0.12s;
+}
+.has-info:hover .info-pop,
+.has-info:focus-visible .info-pop {
+  opacity: 1;
+  visibility: visible;
+}
+/* Over the rows under it */
+.r:has(.has-info:hover),
+.r:has(.has-info:focus-visible) {
+  z-index: 5;
+}
+.info-title {
+  font-size: var(--fs-name);
+  font-weight: 700;
+}
+.info-p {
+  color: var(--muted);
+}
+.info-list {
+  display: grid;
+}
+.info-list > span {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 3px 0;
+  color: var(--muted);
+}
+.info-list > span + span {
+  border-top: 1px solid var(--line);
+}
+.info-list > .is-on {
+  color: var(--ink);
+  font-weight: 650;
+}
 .s-row .lock,
 .subs .lock {
   display: grid;
@@ -1431,6 +1555,9 @@ ul {
 .lg .c::before {
   background: var(--content-dot);
 }
+.lg .p::before {
+  background: var(--project-dot);
+}
 .lg b {
   margin-left: auto;
   font-weight: 700;
@@ -1442,6 +1569,9 @@ ul {
 }
 .lg .c b {
   color: var(--content);
+}
+.lg .p b {
+  color: var(--project);
 }
 .hgrid {
   display: grid;
@@ -1466,6 +1596,9 @@ ul {
 }
 .blk .c {
   background: var(--content-dot);
+}
+.blk .p {
+  background: var(--project-dot);
 }
 .blk .e {
   background: var(--dot-empty);
@@ -1676,12 +1809,68 @@ ul {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+/* The package and tier the hours are for, over them */
+.line-title {
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+  font-weight: 700;
+}
+.line-title + .line-head {
+  margin-top: 10px;
+}
+/* A group's total on its heading's line */
+.line-head .line-hours {
+  color: var(--muted);
+  letter-spacing: 0;
+  text-transform: none;
+}
+/* In the estimate at no charge: said, not counted */
+.line.is-included .line-hours {
+  color: var(--muted);
+  font-weight: 500;
+}
 .line.is-total {
   margin-top: 10px;
   padding-top: 8px;
   border-top: 1.5px solid var(--ink);
   font-size: var(--fs-name);
   font-weight: 720;
+}
+
+/* ---------- Preview of the calculations page's unsaved files ---------- */
+
+/* The bar takes the top of the window, and the page the rest */
+body.is-preview {
+  display: flex;
+  flex-direction: column;
+}
+body.is-preview #app {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
+.preview-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px 16px;
+  padding: 7px 16px;
+  background: var(--tick);
+  color: var(--ink);
+  font-size: var(--fs-action);
+}
+.preview-bar b {
+  margin-right: 6px;
+}
+.preview-bar a {
+  color: inherit;
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.preview-bar.is-off {
+  background: var(--control);
 }
 
 /* ---------- Undo for Reset ---------- */
@@ -1741,6 +1930,11 @@ ul {
 @media (max-width: 1340px) {
   :root {
     --side: var(--side-slim);
+  }
+  /* No room for the leading figure's label: its colour says what it is */
+  .hrs.sum.c small,
+  .hrs.sum.p small {
+    display: none;
   }
   .side {
     gap: 14px;

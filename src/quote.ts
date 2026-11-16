@@ -4,7 +4,7 @@
  * Design hours stay separate from build hours.
  * Website pages are not build hours. Past a number of them, the tier goes up.
  * Every number comes from the files in src/ (estimator.csv, rules.csv), through catalog.ts.
- * Build hours depend on the design choice: AI generated, Custom, or none.
+ * Build hours depend on the design choice: AI generated, Nimbly, Custom, or none.
  */
 
 import {
@@ -13,7 +13,11 @@ import {
   alwaysOnTileIds,
   basicsTileIds,
   type Choice,
+  catalogueId,
   defaultWebsitePages,
+  type DesignChoice,
+  type DesignPart,
+  designChoices,
   designParts,
   type Edition,
   editionLabel,
@@ -22,25 +26,33 @@ import {
   getStartingPoint,
   getTile,
   groups,
+  hasTile,
   type HourBucket,
   type HubId,
   hubName,
   isAlwaysOn,
+  managementPercent,
   modeLabel,
+  ownerOf,
   type PackageId,
   type PackageRule,
   type Parcel,
   pageEdition,
   pageLimits,
   packageRules,
+  partsOf,
+  requiredPartsOf,
   type ShapeId,
   type StartingPoint,
   type StartingPointId,
   type StepId,
+  sourceTiles,
+  startingDesign,
   starterPageCap,
   type Tile,
   tileByCode,
   tileHours,
+  tileMode,
   tiles,
   tilesInGroup,
 } from "./catalog.ts";
@@ -61,6 +73,10 @@ export type HourLine = {
   id: string;
   label: string;
   qty: number;
+  /** How many of qty come with the estimate at no charge: feedback rounds, variants, languages. */
+  included?: number;
+  /** The item the hours are of, build or design. None for feedback, variants and management. */
+  item?: string;
   unit?: string;
   mode?: string;
   openHours: number;
@@ -123,6 +139,8 @@ export type Quote = {
   packageOpenHours: number;
   packageHours: number;
   contentHours: number;
+  /** The kick-off, training and project management: the work around the site. */
+  projectHours: number;
   packageReasons: string[];
   edition: Edition;
   editionReasons: string[];
@@ -150,21 +168,42 @@ function clampQuantity(qty: number, min: number, max: number): number {
 }
 
 /** Feedback rounds are charged past the included ones, on a line of their own. */
-const feedbackIds = ["design-feedback", "ai-feedback"] as const;
+const feedbackIds: readonly string[] = designChoices.flatMap((choice) =>
+  choice.feedbackId ? [choice.feedbackId] : [],
+);
+/** A design's item and its feedback rounds. */
+const designIds = (choice: DesignChoice) => [
+  choice.id,
+  ...(choice.feedbackId ? [choice.feedbackId] : []),
+];
 
 /** How much of a task is in the estimate, for its design hours. */
 function amountOf(selection: Selection): (item: Tile) => Amount | undefined {
   return (item) => {
     const qty = selection.tiles[item.id];
-    return qty === undefined ? undefined : { qty };
+    if (qty === undefined) return undefined;
+    return { qty, times: timesOf(selection, item), unit: countUnit(item) };
   };
 }
 
-/** The estimate's design choice, which picks the build hours of every item. */
+/** How many of an item the estimate has: its count, or one. */
+function timesOf(selection: Selection, item: Tile): number {
+  return item.countedBy ? (selection.tiles[item.countedBy] ?? 1) : 1;
+}
+
+/** What an item's count counts: templates, versions. */
+function countUnit(item: Tile): string | undefined {
+  return item.countedBy ? getTile(item.countedBy).unit : undefined;
+}
+
+/** The estimate's design choice, which picks the build hours of every item. An estimate without
+    one gets the starting design. */
+export function designOf(selection: Selection): DesignChoice {
+  return designChoices.find((choice) => selection.tiles[choice.id] !== undefined) ?? startingDesign;
+}
+
 export function choiceOf(selection: Selection): Choice {
-  if (selection.tiles["ai-design"] !== undefined) return "ai";
-  if (selection.tiles["custom-design"] !== undefined) return "custom";
-  return "none";
+  return designOf(selection).kind;
 }
 
 function hoursFor(item: Tile, qty: number, selection: Selection): number {
@@ -172,14 +211,48 @@ function hoursFor(item: Tile, qty: number, selection: Selection): number {
   return tileHours(item, qty, choiceOf(selection));
 }
 
-/** Related products do not go with the catalogue's Module based option. */
-export function isModuleBased(level: number | undefined): boolean {
-  return level !== undefined && modeLabel(getTile("product-catalogue"), level) === "Module based";
+/** The source of the estimate's Product catalogue: HubDB, or another with the same options. None
+    when the catalogue is not in the estimate. */
+export function sourceIn(chosen: Readonly<Record<string, number>>): string | undefined {
+  return sourceTiles().find((item) => chosen[item.id] !== undefined)?.id;
 }
 
-/** The catalogue mode whose hours are entered, counted from 1. 0 when it has none. */
-function customCatalogueLevel(): number {
-  return (getTile("product-catalogue").modes ?? []).findIndex((mode) => mode.customHours) + 1;
+/** An item of the shelf in the estimate. The Product catalogue is, with any of its sources. */
+export function isIn(chosen: Readonly<Record<string, number>>, id: string): boolean {
+  return id === catalogueId ? sourceIn(chosen) !== undefined : chosen[id] !== undefined;
+}
+
+/** Related products do not go with the catalogue's Module based option, from any source. */
+export function isModuleBased(chosen: Readonly<Record<string, number>>): boolean {
+  const source = sourceIn(chosen);
+  return source !== undefined && modeLabel(getTile(source), chosen[source] ?? 0) === "Module based";
+}
+
+/** A source's option whose hours are entered, counted from 1. 0 when it has none. */
+function customLevel(source: string): number {
+  return (getTile(source).modes ?? []).findIndex((mode) => mode.customHours) + 1;
+}
+
+/** An option's whole name: "Dynamic pages: Simple". */
+const optionName = (mode: { label: string; group?: string } | undefined) =>
+  mode ? (mode.group ? `${mode.group}: ${mode.label}` : mode.label) : "";
+
+/** The catalogue's parts: they go with it, whatever its source. */
+const catalogueParts = ["catalogue-custom", "favorite-products", "related-products"] as const;
+
+/** Social sign-in does not go with SSO: the client's identity provider signs members in. */
+export function isSso(chosen: Readonly<Record<string, number>>): boolean {
+  const level = chosen.membership;
+  return level !== undefined && hasTile("membership")
+    ? modeLabel(getTile("membership"), level) === "SSO"
+    : false;
+}
+
+/** A part that does not go with the option its item has. */
+export function isBlocked(chosen: Readonly<Record<string, number>>, id: string): boolean {
+  if (id === "related-products") return isModuleBased(chosen);
+  if (id === "membership-social") return isSso(chosen);
+  return false;
 }
 
 export function normalize(selection: Selection): Selection {
@@ -199,139 +272,138 @@ export function normalize(selection: Selection): Selection {
     next[id] = level;
   }
 
-  let grew = true;
-  while (grew) {
-    grew = false;
-    for (const id of Object.keys(next)) {
-      for (const req of getTile(id).requires) {
-        if (next[req] !== undefined) continue;
-        next[req] = getTile(req).initial;
-        grew = true;
-      }
-    }
-    const external = next["external-forms"];
-    if (external === 1 && next.hubdb === undefined) {
-      next.hubdb = getTile("hubdb").initial;
-      grew = true;
-    }
-  }
+  /* An item of the shelf never brings another with it: only its own parts, below */
 
-  if (next["blog-setups"] !== undefined) {
-    if (next["blog-list"] === undefined) next["blog-list"] = 1;
-    if (next["blog-post"] === undefined) next["blog-post"] = 1;
-  } else {
-    delete next["blog-list"];
-    delete next["blog-post"];
-    delete next["blog-recent"];
-  }
-  if (next["ai-design"] !== undefined && next["custom-design"] !== undefined) {
-    delete next["custom-design"];
-    delete next["design-feedback"];
-  }
-  if (next["ai-design"] !== undefined) {
-    if (next["ai-feedback"] === undefined) next["ai-feedback"] = getTile("ai-feedback").initial;
-  } else {
-    delete next["ai-feedback"];
-  }
-  if (next["custom-design"] !== undefined) {
-    if (next["design-feedback"] === undefined) {
-      next["design-feedback"] = getTile("design-feedback").initial;
+  /* The parts of the Blog and Memberships: in with their item, the ones always in it at the
+     quantity they start with; out without it, or when its option does not take them */
+  for (const [owner, parts] of Object.entries(partsOf)) {
+    if (owner === catalogueId) continue;
+    if (next[owner] === undefined) for (const id of parts) delete next[id];
+    else {
+      for (const id of requiredPartsOf(owner)) next[id] ??= getTile(id).initial;
+      for (const id of parts) if (isBlocked(next, id)) delete next[id];
     }
-  } else {
-    delete next["design-feedback"];
   }
-  if (next["product-catalogue"] !== customCatalogueLevel()) delete next["catalogue-custom"];
-  else if (next["catalogue-custom"] === undefined) {
-    next["catalogue-custom"] = getTile("catalogue-custom").initial;
+  /* A count of the Blog's templates: only with more than one blog, and never more than the blogs.
+     One is the template they share, and no count */
+  for (const item of tiles) {
+    if (!item.counts || next[item.id] === undefined) continue;
+    const owner = ownerOf(item.counts);
+    const most = owner ? (next[owner] ?? 0) : 0;
+    const qty = Math.min(most, next[item.id] ?? 1);
+    if (next[item.counts] === undefined || qty <= 1) delete next[item.id];
+    else next[item.id] = qty;
   }
-  if (next["product-catalogue"] === undefined) {
-    delete next["favorite-products"];
-    delete next["related-products"];
-  } else if (isModuleBased(next["product-catalogue"])) {
-    delete next["related-products"];
+  /* One design, always: the first of the list when a link has more, the starting design when it
+     has none. With its feedback rounds */
+  const design = designOf({ ...selection, tiles: next });
+  for (const choice of designChoices) {
+    if (choice !== design) for (const id of designIds(choice)) delete next[id];
+  }
+  for (const id of designIds(design)) next[id] ??= getTile(id).initial;
+  /* Design hours entered for an item go with it */
+  for (const item of tiles) {
+    if (!item.designInput) continue;
+    if (next[item.id] === undefined) delete next[item.designInput];
+    else next[item.designInput] ??= 0;
+  }
+  /* One source for the catalogue: the first of the table's when a link has more. The hours
+     entered for its Custom option, while that is the option */
+  const source = sourceIn(next);
+  for (const item of sourceTiles()) if (item.id !== source) delete next[item.id];
+  if (source === undefined) for (const id of catalogueParts) delete next[id];
+  else {
+    if (next[source] !== customLevel(source)) delete next["catalogue-custom"];
+    else next["catalogue-custom"] ??= getTile("catalogue-custom").initial;
+    for (const id of catalogueParts) if (isBlocked(next, id)) delete next[id];
   }
   for (const id of alwaysOnTileIds) {
     if (next[id] === undefined) next[id] = getTile(id).initial;
   }
 
+  /* Website pages are one of two, as the estimator offers them: up to what Starter takes, or more */
+  const pages = clampQuantity(
+    selection.websitePages ?? defaultWebsitePages,
+    pageLimits().min,
+    pageLimits().max,
+  );
   return {
     startingPoint: selection.startingPoint,
-    websitePages: clampQuantity(
-      selection.websitePages ?? defaultWebsitePages,
-      pageLimits().min,
-      pageLimits().max,
-    ),
+    websitePages:
+      pages > starterPageCap ? starterPageCap + 1 : Math.min(defaultWebsitePages, starterPageCap),
     tiles: next,
   };
 }
 
-function dependentsOf(rootId: string, selected: Record<string, number>): Set<string> {
-  const remove = new Set<string>([rootId]);
-  let grew = true;
-  while (grew) {
-    grew = false;
-    for (const item of tiles) {
-      if (remove.has(item.id)) continue;
-      if (item.requires.some((req) => remove.has(req))) {
-        remove.add(item.id);
-        grew = true;
-      }
-    }
-  }
-  if (rootId === "hubdb" && selected["external-forms"] === 1) remove.add("external-forms");
-  return remove;
-}
+/** Always in the estimate with their item: they cannot be taken out on their own. */
+const isRequiredPart = (id: string) => {
+  const owner = ownerOf(id);
+  return owner !== undefined && requiredPartsOf(owner).includes(id);
+};
 
-const childTileIds = ["blog-list", "blog-post"] as const;
+/** Puts the Product catalogue in the estimate from a source, or moves it to that source: with the
+    option it has when the source has that option live, or the one the source starts with. The
+    shelf's Product catalogue comes with its first live source. */
+export function setSource(selection: Selection, sourceId: string): Selection {
+  let source = getTile(sourceId);
+  if (source.disabled || source.hidden) {
+    const first = sourceTiles().find((item) => !item.disabled && !item.hidden);
+    if (sourceId !== catalogueId || !first) return selection;
+    source = first;
+  }
+  const next = { ...selection.tiles };
+  const before = sourceIn(next);
+  let level = next[source.id] ?? source.initial;
+  if (before !== undefined && before !== source.id) {
+    const name = optionName(tileMode(getTile(before), next[before] ?? 0));
+    const same = (source.modes ?? []).findIndex(
+      (mode) => !mode.disabled && optionName(mode) === name,
+    );
+    if (same !== -1) level = same + 1;
+    delete next[before];
+  }
+  next[source.id] = level;
+  return normalize({ ...selection, tiles: next });
+}
 
 export function setTile(selection: Selection, tileId: string, on: boolean): Selection {
   const piece = getTile(tileId);
-  if (piece.disabled) return selection;
-  if (!on && (isAlwaysOn(tileId) || childTileIds.some((id) => id === tileId))) return selection;
-  if (on && tileId === "blog-recent" && selection.tiles["blog-setups"] === undefined) {
-    return selection;
+  if (piece.source !== undefined) {
+    if (on) return setSource(selection, tileId);
+    /* Out with whichever source it has, and its parts */
+    const next = { ...selection.tiles };
+    for (const item of sourceTiles()) delete next[item.id];
+    for (const id of catalogueParts) delete next[id];
+    return normalize({ ...selection, tiles: next });
   }
-  if (
-    on &&
-    (tileId === "favorite-products" || tileId === "related-products") &&
-    selection.tiles["product-catalogue"] === undefined
-  ) {
-    return selection;
-  }
-  if (on && tileId === "related-products" && isModuleBased(selection.tiles["product-catalogue"])) {
-    return selection;
-  }
+  if (piece.disabled || piece.hidden) return selection;
+  if (!on && (isAlwaysOn(tileId) || isRequiredPart(tileId))) return selection;
+  /* A part comes in only with its item, and with an option of it that takes the part */
+  const owner = ownerOf(tileId);
+  if (on && owner !== undefined && !isIn(selection.tiles, owner)) return selection;
+  if (on && isBlocked(selection.tiles, tileId)) return selection;
   const next = { ...selection.tiles };
   if (on) {
     next[tileId] = piece.initial;
-    if (tileId === "ai-design") {
-      delete next["custom-design"];
-      delete next["design-feedback"];
-    }
-    if (tileId === "custom-design") {
-      delete next["ai-design"];
-      delete next["ai-feedback"];
+    /* A design takes the place of the one before it */
+    if (designChoices.some((choice) => choice.id === tileId)) {
+      for (const choice of designChoices) {
+        if (choice.id !== tileId) for (const id of designIds(choice)) delete next[id];
+      }
     }
     return normalize({ ...selection, tiles: next });
   }
-  for (const id of dependentsOf(tileId, selection.tiles)) delete next[id];
-  if (tileId === "blog-setups") {
-    delete next["blog-list"];
-    delete next["blog-post"];
-    delete next["blog-recent"];
-  }
-  if (tileId === "product-catalogue") {
-    delete next["favorite-products"];
-    delete next["related-products"];
-  }
+  /* Out with its own parts, and nothing else */
+  delete next[tileId];
+  for (const id of partsOf[tileId] ?? []) delete next[id];
   return normalize({ ...selection, tiles: next });
 }
 
 export function setQuantity(selection: Selection, tileId: string, qty: number): Selection {
   const piece = getTile(tileId);
-  if (piece.disabled) return selection;
+  if (piece.disabled || piece.hidden) return selection;
   if (qty < piece.min) {
-    if (isAlwaysOn(tileId) || childTileIds.some((id) => id === tileId)) return selection;
+    if (isAlwaysOn(tileId) || isRequiredPart(tileId)) return selection;
     return setTile(selection, tileId, false);
   }
   return normalize({
@@ -353,9 +425,10 @@ export function selectionForShape(_shape: ShapeId, websitePages = defaultWebsite
   return normalize({
     startingPoint: "cms-react",
     websitePages,
-    /* What is always in, and AI design, each at the quantity the table starts it with */
+    /* What is always in, and the starting design with its feedback rounds, each at the quantity
+       the table starts it with */
     tiles: Object.fromEntries(
-      [...alwaysOnTileIds, "ai-design", "ai-feedback"].map((id) => [id, getTile(id).initial]),
+      [...alwaysOnTileIds, ...designIds(startingDesign)].map((id) => [id, getTile(id).initial]),
     ),
   });
 }
@@ -407,10 +480,13 @@ type Priced = {
   packageOpenHours: number;
   packageHours: number;
   contentHours: number;
+  projectHours: number;
   lines: HourLine[];
 };
 
 const aiVariantsLineId = "ai-variants";
+/** The line of project management, in Build. */
+export const managementLineId = "project-management";
 
 function price(selection: Selection): Priced {
   const parcel = getParcel(packageFor(selection));
@@ -424,8 +500,12 @@ function price(selection: Selection): Priced {
   for (const group of groups) {
     for (const item of tilesInGroup(group.id)) {
       const qty = selection.tiles[item.id];
-      if (qty === undefined || feedbackIds.some((id) => id === item.id)) continue;
-      const open = hoursFor(item, qty, selection);
+      /* The design, its rounds and design hours entered are lines of their own, below; a count is
+         in its item's line */
+      if (qty === undefined || item.group === "design" || item.designOf || item.counts) continue;
+      /* A template the blogs need more than one of counts once for each */
+      const times = timesOf(selection, item);
+      const open = hoursFor(item, qty, selection) * times;
       listOpen += open;
       const isContent = item.bucket === "content";
       if (isContent) side += open;
@@ -433,9 +513,11 @@ function price(selection: Selection): Priced {
       const mode = modeLabel(item, qty);
       lines.push({
         id: item.id,
+        item: item.designOf ?? item.id,
         label: item.label,
-        qty,
-        ...(item.unit ? { unit: item.unit } : {}),
+        qty: times > 1 ? times : qty,
+        ...(item.stepped && item.includedInBase > 0 ? { included: item.includedInBase } : {}),
+        ...(item.unit ? { unit: item.unit } : times > 1 ? { unit: countUnit(item) } : {}),
         ...(mode ? { mode } : {}),
         openHours: roundHours(open),
         billedHours: roundHours(open),
@@ -445,89 +527,105 @@ function price(selection: Selection): Priced {
     }
   }
 
+  /* The design's feedback rounds: a line even when all are included, so the hours say how many */
   const pushFeedback = (id: string) => {
     const qty = selection.tiles[id];
     if (qty === undefined) return;
     const rounds = getTile(id);
     const extra = Math.max(0, qty - rounds.includedInBase);
-    /* A round costs the same whatever the design choice */
     const hours = extra * rounds.build.custom;
-    if (hours <= 0) return;
     listOpen += hours;
     parcelOpen += hours;
     lines.push({
       id,
-      label: rounds.label,
-      qty: extra,
-      unit: "extra rounds",
+      label: "Feedback",
+      qty,
+      included: rounds.includedInBase,
+      unit: "rounds",
       openHours: hours,
       billedHours: hours,
       extra: false,
       bucket: "design",
     });
   };
-  const amount = amountOf(selection);
-  if (selection.tiles["custom-design"] !== undefined) {
-    for (const part of designParts("custom", amount)) {
-      listOpen += part.hours;
-      parcelOpen += part.hours;
-      lines.push({
-        id: part.id,
-        label: part.label,
-        qty: part.qty,
-        ...(part.unit ? { unit: part.unit } : {}),
-        ...(part.mode ? { mode: part.mode } : {}),
-        openHours: part.hours,
-        billedHours: part.hours,
-        extra: false,
-        bucket: "design",
-      });
-    }
+  /* The design hours of the estimate's design choice, one line for each item, and the design hours
+     entered for an item, in the table's order */
+  const choice = choiceOf(selection);
+  const parts = choice === "none" ? [] : designParts(choice, amountOf(selection));
+  const entered: DesignPart[] = tiles.flatMap((item) => {
+    const qty = selection.tiles[item.id];
+    if (!item.designOf || qty === undefined) return [];
+    return [{ id: item.id, item: item.designOf, label: item.label, qty, hours: qty }];
+  });
+  const place = new Map(tiles.map((item, index) => [item.id, index]));
+  const designLines = [...parts, ...entered].sort(
+    (a, b) => (place.get(a.item) ?? 0) - (place.get(b.item) ?? 0),
+  );
+  for (const part of designLines) {
+    listOpen += part.hours;
+    parcelOpen += part.hours;
+    lines.push({
+      id: part.id,
+      item: part.item,
+      label: part.label,
+      qty: part.qty,
+      ...(part.unit ? { unit: part.unit } : {}),
+      ...(part.mode ? { mode: part.mode } : {}),
+      openHours: part.hours,
+      billedHours: part.hours,
+      extra: false,
+      bucket: "design",
+    });
   }
   const aiVariants = selection.tiles["ai-design"];
   if (aiVariants !== undefined) {
-    const parts = designParts("ai", amount);
-    for (const part of parts) {
-      listOpen += part.hours;
-      parcelOpen += part.hours;
-      lines.push({
-        id: part.id,
-        label: part.label,
-        qty: part.qty,
-        ...(part.unit ? { unit: part.unit } : {}),
-        ...(part.mode ? { mode: part.mode } : {}),
-        openHours: part.hours,
-        billedHours: part.hours,
-        extra: false,
-        bucket: "design",
-      });
-    }
     const extraVariants = Math.max(0, aiVariants - getTile("ai-design").includedInBase);
     const baseDesign = parts.reduce((sum, part) => sum + part.hours, 0);
     const variantHours = extraVariants * aiVariantHours(baseDesign);
-    if (variantHours > 0) {
-      listOpen += variantHours;
-      parcelOpen += variantHours;
-      lines.push({
-        id: aiVariantsLineId,
-        label: "Extra design variants",
-        qty: extraVariants,
-        unit: "variants",
-        openHours: variantHours,
-        billedHours: variantHours,
-        extra: false,
-        bucket: "design",
-      });
-    }
+    /* A line even when all are included, so the hours say how many */
+    listOpen += variantHours;
+    parcelOpen += variantHours;
+    lines.push({
+      id: aiVariantsLineId,
+      label: "Variants",
+      qty: aiVariants,
+      included: getTile("ai-design").includedInBase,
+      unit: "designs",
+      openHours: variantHours,
+      billedHours: variantHours,
+      extra: false,
+      bucket: "design",
+    });
   }
   for (const id of feedbackIds) pushFeedback(id);
+
+  /* Project management: a share of the design, build and content hours above, rounded up; not of
+     the kick-off and training, which are Project too. The same share whatever the design */
+  const percent = managementPercent();
+  const base = lines
+    .filter((line) => line.bucket !== "project")
+    .reduce((sum, line) => sum + line.openHours, 0);
+  const management = Math.ceil(Math.round(base * percent) / 100);
+  listOpen += management;
+  parcelOpen += management;
+  lines.push({
+    id: managementLineId,
+    label: "Project management",
+    qty: 1,
+    mode: `${formatHours(percent)}% of ${formatHours(base)}h`,
+    openHours: management,
+    billedHours: management,
+    extra: false,
+    bucket: "project",
+  });
 
   const hours = roundHours(parcelOpen + side);
   const designHours = sumBucket(lines, "design");
   const contentHours = sumBucket(lines, "content");
+  const projectHours = sumBucket(lines, "project");
   const implementationOpenHours = sumBucket(lines, "implementation");
   const implementationHours = sumBilled(lines, "implementation");
-  const packageOpenHours = roundHours(implementationOpenHours + designHours);
+  const packageOpenHours = roundHours(implementationOpenHours + designHours + projectHours);
   const packageHours = roundHours(hours - contentHours);
   const openHours = roundHours(listOpen);
 
@@ -547,6 +645,7 @@ function price(selection: Selection): Priced {
     packageOpenHours,
     packageHours,
     contentHours,
+    projectHours,
     lines,
   };
 }
@@ -709,6 +808,7 @@ export function quote(input: Selection): Quote {
     packageOpenHours: priced.packageOpenHours,
     packageHours: priced.packageHours,
     contentHours: priced.contentHours,
+    projectHours: priced.projectHours,
     packageReasons,
     edition,
     editionReasons: reasons,
@@ -724,67 +824,124 @@ function stepOfLine(line: HourLine): StepId {
   if (line.bucket === "design") return "design";
   if (line.bucket === "content") return "content";
   if (line.id === "languages") return "languages";
+  if (line.id === managementLineId) return "basics";
   return basicsTileIds.some((id) => id === line.id) ? "basics" : "addons";
 }
 
-/** Step totals add up to the quote total, so the page reads as one sum. */
-export function stepHours(result: Quote, step: StepId): number {
+/** Step totals add up to the quote total, so the page reads as one sum. With a bucket, only the
+    hours that count there: the site basics' Build apart from their Project. */
+export function stepHours(result: Quote, step: StepId, bucket?: HourBucket): number {
   return roundHours(
     result.lines
-      .filter((line) => stepOfLine(line) === step)
+      .filter((line) => stepOfLine(line) === step && (!bucket || line.bucket === bucket))
       .reduce((sum, line) => sum + line.openHours, 0),
   );
 }
 
-/** What one more AI design variant costs for this scope. */
-export function aiVariantCost(result: Quote): number {
-  const base = result.lines.filter(
-    (line) =>
-      line.bucket === "design" &&
-      line.id.startsWith("ai-") &&
-      line.id !== "ai-feedback" &&
-      line.id !== aiVariantsLineId,
-  );
-  return aiVariantHours(base.reduce((sum, line) => sum + line.openHours, 0));
+/** The AI design hours of the items in the estimate: what a variant is a share of. */
+export function aiDesignHours(result: Quote): number {
+  return result.lines
+    .filter(
+      (line) =>
+        line.bucket === "design" &&
+        line.id.startsWith("ai-") &&
+        line.id !== "ai-feedback" &&
+        line.id !== aiVariantsLineId,
+    )
+    .reduce((sum, line) => sum + line.openHours, 0);
 }
 
-/** The estimate as the short code a link carries after its #. See link.ts for what is in it. */
+/** What one more AI design variant costs for this scope. */
+export function aiVariantCost(result: Quote): number {
+  return aiVariantHours(aiDesignHours(result));
+}
+
+/* ---------- The short link ----------
+   A link holds, in this order (see link.ts for the bits):
+     - whether the site has more website pages than Starter takes: the estimator offers two
+     - the design, and its feedback rounds and AI variants
+     - a number for each site basic that has one or options, in the order of linkedBasics. The
+       others (header, footer, setup and launch, kick-off) are always in, once, and not in a link
+     - every other item that is in, by its code in link-codes.csv, with its number
+   An item's number is its quantity, from the least it can be (0 for hours entered, 1 otherwise),
+   or for an option its number in link-codes.csv, so the table's rows can be reordered. Every
+   number the link writes counts from 1, so the usual ones take one bit. */
+
+/** The site basics a link holds a number for, in this order. Fixed here, not by the table, so a
+    link reads the same whatever the files say. */
+const linkedBasics = ["templates", "sections", "menu", "languages", "training"] as const;
+
+/** How many fixed numbers a link has with a design: its feedback rounds, its variants, the basics. */
+function fixedCount(design: number): number {
+  const choice = designChoices[design];
+  if (!choice) return -1;
+  return (choice.feedbackId ? 1 : 0) + (choice.kind === "ai" ? 1 : 0) + linkedBasics.length;
+}
+
+/** An item's number in a link, from 1. */
+function linkNumber(item: Tile, qty: number): number {
+  if (item.modes) return item.modes[qty - 1]?.value ?? 1;
+  return Math.max(0, Math.round(qty) - item.min) + 1;
+}
+
+/** An item's quantity or option from its number in a link. An option that is gone: the one the
+    item starts with. */
+function fromLinkNumber(item: Tile, value: number): number {
+  if (item.modes) return item.modes.findIndex((mode) => mode.value === value) + 1 || item.initial;
+  return value - 1 + item.min;
+}
+
+/** Items a link names by code: not the design's, and not the site basics. */
+const isCoded = (id: string) =>
+  !isAlwaysOn(id) && !designChoices.some((choice) => designIds(choice).includes(id));
+
+/** The estimate as the short code a link carries after its #. */
 export function encodeSelection(selection: Selection): string {
+  const tiles = selection.tiles;
+  const design = designOf(selection);
+  const fixed: number[] = [];
+  if (design.feedbackId) fixed.push(Math.max(1, tiles[design.feedbackId] ?? 1));
+  if (design.kind === "ai") fixed.push(Math.max(1, tiles[design.id] ?? 1));
+  for (const id of linkedBasics) {
+    fixed.push(hasTile(id) ? linkNumber(getTile(id), tiles[id] ?? getTile(id).initial) : 1);
+  }
   const entries: [number, number][] = [];
-  for (const [id, qty] of Object.entries(selection.tiles)) {
+  for (const [id, qty] of Object.entries(tiles)) {
+    if (!isCoded(id) || !hasTile(id)) continue;
     const item = getTile(id);
-    /* A mode is stored as its number in link-codes.csv, not its place, so the table's rows can be
-       reordered */
-    const value = item.modes ? item.modes[qty - 1]?.value : qty;
-    if (value !== undefined) entries.push([item.code, value]);
+    entries.push([item.code, linkNumber(item, qty)]);
   }
   return packLink({
-    /* Two spare bits, kept for a later use */
-    mode: 0,
-    pages: selection.websitePages,
+    over: selection.websitePages > starterPageCap,
+    design: designChoices.indexOf(design),
+    fixed,
     entries,
   });
 }
 
 /** Reads a code, a link or the address's hash. Null when it is not a link. */
 export function decodeSelection(hash: string): Selection | null {
-  const packed = unpackLink(codeIn(hash));
+  const packed = unpackLink(codeIn(hash), fixedCount);
   if (!packed) return null;
-  const tilesSelected: Record<string, number> = {};
+  const choice = designChoices[packed.design];
+  if (!choice) return null;
+  const tilesSelected: Record<string, number> = { [choice.id]: 1 };
+  const fixed = [...packed.fixed];
+  if (choice.feedbackId) tilesSelected[choice.feedbackId] = fixed.shift() ?? 1;
+  if (choice.kind === "ai") tilesSelected[choice.id] = fixed.shift() ?? 1;
+  for (const id of linkedBasics) {
+    const value = fixed.shift() ?? 1;
+    if (hasTile(id)) tilesSelected[id] = fromLinkNumber(getTile(id), value);
+  }
   for (const [code, value] of packed.entries) {
     const item = tileByCode(code);
-    /* A task or mode that is no longer in the table is left out */
-    if (!item) continue;
-    if (!item.modes) tilesSelected[item.id] = value;
-    else {
-      /* An option that is hidden now: the item keeps the one it starts with */
-      const level = item.modes.findIndex((mode) => mode.value === value) + 1;
-      tilesSelected[item.id] = level > 0 ? level : item.initial;
-    }
+    /* A task that is no longer in the table is left out */
+    if (!item || !isCoded(item.id)) continue;
+    tilesSelected[item.id] = fromLinkNumber(item, value);
   }
   return normalize({
     startingPoint: "cms-react",
-    websitePages: packed.pages,
+    websitePages: packed.over ? starterPageCap + 1 : defaultWebsitePages,
     tiles: tilesSelected,
   });
 }
