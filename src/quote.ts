@@ -2,16 +2,17 @@
  * Hours come only from the selected items.
  * The package is the lowest tier that covers every selected option.
  * Design hours stay separate from build hours.
- * Website pages are not build hours. More than 30 needs Professional.
+ * Website pages are not build hours. Past a number of them, the tier goes up.
+ * Every number comes from the files in src/ (estimator.csv, rules.csv), through catalog.ts.
+ * Build hours depend on the design choice: AI generated, Custom, or none.
  */
 
 import {
-  aiDesignParts,
+  type Amount,
   aiVariantHours,
   alwaysOnTileIds,
-  type BlogSetupMode,
   basicsTileIds,
-  type DesignInput,
+  type Choice,
   defaultWebsitePages,
   designParts,
   type Edition,
@@ -26,26 +27,32 @@ import {
   hubName,
   isAlwaysOn,
   modeLabel,
+  type PackageId,
+  type PackageRule,
   type Parcel,
+  pageEdition,
+  pageLimits,
+  packageRules,
   type ShapeId,
   type StartingPoint,
   type StartingPointId,
   type StepId,
   starterPageCap,
-  startingPoints,
+  type Tile,
+  tileByCode,
   tileHours,
   tiles,
   tilesInGroup,
 } from "./catalog.ts";
+import { codeIn, packLink, unpackLink } from "./link.ts";
 
-export type { BlogSetupMode };
+export type { Choice, PackageRule };
+export { packageRules };
 
 export type Selection = {
   startingPoint: StartingPointId;
   /** Published website pages. More than 30 needs Content Hub Professional. */
   websitePages: number;
-  /** How extra blogs reuse the first list and post templates. */
-  blogSetupMode: BlogSetupMode;
   /** Selected tiles. The number is the quantity, the mode index, or entered hours. */
   tiles: Record<string, number>;
 };
@@ -126,8 +133,6 @@ export type Quote = {
   pageSpeed: PageSpeed;
 };
 
-const blogModes: readonly BlogSetupMode[] = ["same", "list", "post", "both"];
-
 function roundHours(value: number): number {
   return Math.round(value * 100) / 100;
 }
@@ -144,45 +149,37 @@ function clampQuantity(qty: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, rounded));
 }
 
-function blogTemplateCount(selection: Selection, countId: string): number {
-  const setups = selection.tiles["blog-setups"];
-  if (setups === undefined) return 0;
-  if (setups <= 1) return 1;
-  return selection.tiles[countId] ?? 1;
-}
+/** Feedback rounds are charged past the included ones, on a line of their own. */
+const feedbackIds = ["design-feedback", "ai-feedback"] as const;
 
-function designInputFor(selection: Selection): DesignInput {
-  const blog = selection.tiles["blog-setups"] !== undefined;
-  return {
-    templates: selection.tiles.templates ?? 0,
-    landing: selection.tiles["landing-templates"] ?? 0,
-    sections: selection.tiles.sections ?? 0,
-    menu: selection.tiles.menu ?? 0,
-    header: selection.tiles.header !== undefined,
-    footer: selection.tiles.footer !== undefined,
-    customForms: selection.tiles["custom-forms"] !== undefined,
-    search: selection.tiles.search ?? 0,
-    systemPages: selection.tiles.system !== undefined,
-    setup: selection.tiles.setup !== undefined,
-    listTemplates: blog ? blogTemplateCount(selection, "blog-list-count") : 0,
-    listAdvanced: selection.tiles["blog-list"] === 2,
-    postTemplates: blog ? blogTemplateCount(selection, "blog-post-count") : 0,
-    postAdvanced: selection.tiles["blog-post"] === 2,
-    recentPosts: selection.tiles["blog-recent"] !== undefined,
-    hubdb: selection.tiles.hubdb ?? 0,
-    catalogue: selection.tiles["product-catalogue"] ?? 0,
-    favoriteProducts: selection.tiles["favorite-products"] ?? 0,
-    relatedProducts: selection.tiles["related-products"] !== undefined,
+/** How much of a task is in the estimate, for its design hours. */
+function amountOf(selection: Selection): (item: Tile) => Amount | undefined {
+  return (item) => {
+    const qty = selection.tiles[item.id];
+    return qty === undefined ? undefined : { qty };
   };
 }
 
-function hoursFor(item: ReturnType<typeof getTile>, qty: number, selection: Selection): number {
-  if (item.id === "blog-list" || item.id === "blog-post") {
-    const countId = item.id === "blog-list" ? "blog-list-count" : "blog-post-count";
-    return blogTemplateCount(selection, countId) * (qty >= 2 ? 8 : 4);
-  }
-  if (item.id === "custom-design" || item.id === "ai-design") return 0;
-  return tileHours(item, qty);
+/** The estimate's design choice, which picks the build hours of every item. */
+export function choiceOf(selection: Selection): Choice {
+  if (selection.tiles["ai-design"] !== undefined) return "ai";
+  if (selection.tiles["custom-design"] !== undefined) return "custom";
+  return "none";
+}
+
+function hoursFor(item: Tile, qty: number, selection: Selection): number {
+  if (item.group === "design") return 0;
+  return tileHours(item, qty, choiceOf(selection));
+}
+
+/** Related products do not go with the catalogue's Module based option. */
+export function isModuleBased(level: number | undefined): boolean {
+  return level !== undefined && modeLabel(getTile("product-catalogue"), level) === "Module based";
+}
+
+/** The catalogue mode whose hours are entered, counted from 1. 0 when it has none. */
+function customCatalogueLevel(): number {
+  return (getTile("product-catalogue").modes ?? []).findIndex((mode) => mode.customHours) + 1;
 }
 
 export function normalize(selection: Selection): Selection {
@@ -195,8 +192,11 @@ export function normalize(selection: Selection): Selection {
     } catch {
       continue;
     }
-    if (piece.disabled) continue;
-    next[id] = clampQuantity(qty, piece.min, piece.max);
+    if (piece.disabled || piece.hidden) continue;
+    let level = clampQuantity(qty, piece.min, piece.max);
+    /* An option that is coming soon cannot be chosen: the item takes the one it starts with */
+    if (piece.modes?.[level - 1]?.disabled) level = piece.initial;
+    next[id] = level;
   }
 
   let grew = true;
@@ -219,17 +219,9 @@ export function normalize(selection: Selection): Selection {
   if (next["blog-setups"] !== undefined) {
     if (next["blog-list"] === undefined) next["blog-list"] = 1;
     if (next["blog-post"] === undefined) next["blog-post"] = 1;
-    if (next["blog-list-count"] === undefined) next["blog-list-count"] = 1;
-    if (next["blog-post-count"] === undefined) next["blog-post-count"] = 1;
-    if ((next["blog-setups"] ?? 0) <= 1) {
-      next["blog-list-count"] = 1;
-      next["blog-post-count"] = 1;
-    }
   } else {
     delete next["blog-list"];
     delete next["blog-post"];
-    delete next["blog-list-count"];
-    delete next["blog-post-count"];
     delete next["blog-recent"];
   }
   if (next["ai-design"] !== undefined && next["custom-design"] !== undefined) {
@@ -248,25 +240,27 @@ export function normalize(selection: Selection): Selection {
   } else {
     delete next["design-feedback"];
   }
-  if (next["product-catalogue"] !== 5) delete next["catalogue-custom"];
+  if (next["product-catalogue"] !== customCatalogueLevel()) delete next["catalogue-custom"];
   else if (next["catalogue-custom"] === undefined) {
     next["catalogue-custom"] = getTile("catalogue-custom").initial;
   }
   if (next["product-catalogue"] === undefined) {
     delete next["favorite-products"];
     delete next["related-products"];
-  } else if (next["product-catalogue"] === 1) {
+  } else if (isModuleBased(next["product-catalogue"])) {
     delete next["related-products"];
   }
   for (const id of alwaysOnTileIds) {
     if (next[id] === undefined) next[id] = getTile(id).initial;
   }
 
-  const mode = blogModes.includes(selection.blogSetupMode) ? selection.blogSetupMode : "same";
   return {
     startingPoint: selection.startingPoint,
-    websitePages: clampQuantity(selection.websitePages ?? defaultWebsitePages, 1, 200),
-    blogSetupMode: mode,
+    websitePages: clampQuantity(
+      selection.websitePages ?? defaultWebsitePages,
+      pageLimits().min,
+      pageLimits().max,
+    ),
     tiles: next,
   };
 }
@@ -288,7 +282,7 @@ function dependentsOf(rootId: string, selected: Record<string, number>): Set<str
   return remove;
 }
 
-const childTileIds = ["blog-list", "blog-post", "blog-list-count", "blog-post-count"] as const;
+const childTileIds = ["blog-list", "blog-post"] as const;
 
 export function setTile(selection: Selection, tileId: string, on: boolean): Selection {
   const piece = getTile(tileId);
@@ -304,7 +298,7 @@ export function setTile(selection: Selection, tileId: string, on: boolean): Sele
   ) {
     return selection;
   }
-  if (on && tileId === "related-products" && selection.tiles["product-catalogue"] === 1) {
+  if (on && tileId === "related-products" && isModuleBased(selection.tiles["product-catalogue"])) {
     return selection;
   }
   const next = { ...selection.tiles };
@@ -324,8 +318,6 @@ export function setTile(selection: Selection, tileId: string, on: boolean): Sele
   if (tileId === "blog-setups") {
     delete next["blog-list"];
     delete next["blog-post"];
-    delete next["blog-list-count"];
-    delete next["blog-post-count"];
     delete next["blog-recent"];
   }
   if (tileId === "product-catalogue") {
@@ -357,76 +349,30 @@ export function setWebsitePages(selection: Selection, websitePages: number): Sel
   return normalize({ ...selection, websitePages });
 }
 
-export function setBlogSetupMode(selection: Selection, blogSetupMode: BlogSetupMode): Selection {
-  return normalize({ ...selection, blogSetupMode });
-}
-
-export function selectionForShape(
-  _shape: ShapeId,
-  websitePages = defaultWebsitePages,
-  blogSetupMode: BlogSetupMode = "same",
-): Selection {
+export function selectionForShape(_shape: ShapeId, websitePages = defaultWebsitePages): Selection {
   return normalize({
     startingPoint: "cms-react",
     websitePages,
-    blogSetupMode,
-    tiles: {
-      templates: 3,
-      sections: 8,
-      menu: 1,
-      languages: 1,
-      header: 1,
-      footer: 1,
-      setup: 1,
-      "ai-design": 2,
-      "ai-feedback": 1,
-    },
+    /* What is always in, and AI design, each at the quantity the table starts it with */
+    tiles: Object.fromEntries(
+      [...alwaysOnTileIds, "ai-design", "ai-feedback"].map((id) => [id, getTile(id).initial]),
+    ),
   });
 }
 
 const packageRank = { essential: 0, growth: 1, platform: 2 } as const;
 
-function raisePackage(
-  current: Exclude<ShapeId, "custom">,
-  next: Exclude<ShapeId, "custom">,
-): Exclude<ShapeId, "custom"> {
+function raisePackage(current: PackageId, next: PackageId): PackageId {
   return packageRank[next] > packageRank[current] ? next : current;
 }
 
-type PackageId = Exclude<ShapeId, "custom">;
-
-/** Each rule raises the package once the tile reaches `at`. */
-export type PackageRule = {
-  tileId: string;
-  at: number;
-  package: PackageId;
-  reason: (qty: number) => string;
-};
-
-export const packageRules: readonly PackageRule[] = [
-  { tileId: "templates", at: 5, package: "growth", reason: (qty) => `${qty} page templates` },
-  { tileId: "sections", at: 11, package: "growth", reason: (qty) => `${qty} sections` },
-  { tileId: "menu", at: 2, package: "growth", reason: () => "Advanced menu" },
-  { tileId: "languages", at: 2, package: "growth", reason: (qty) => `${qty} languages` },
-  {
-    tileId: "landing-templates",
-    at: 3,
-    package: "growth",
-    reason: (qty) => `${qty} landing templates`,
-  },
-  { tileId: "search", at: 2, package: "growth", reason: () => "Advanced search" },
-  { tileId: "custom-forms", at: 1, package: "growth", reason: () => "Custom forms" },
-  { tileId: "hubdb", at: 1, package: "growth", reason: () => "HubDB based section" },
-  { tileId: "blog-setups", at: 2, package: "growth", reason: (qty) => `${qty} blogs` },
-  { tileId: "blog-list", at: 2, package: "growth", reason: () => "Advanced blog list" },
-  { tileId: "blog-post", at: 2, package: "growth", reason: () => "Advanced blog post" },
-  { tileId: "product-catalogue", at: 1, package: "platform", reason: () => "Product catalogue" },
-  { tileId: "favorite-products", at: 1, package: "platform", reason: () => "Favorite products" },
-  { tileId: "related-products", at: 1, package: "platform", reason: () => "Related products" },
-];
-
+/** The rules are the table's package cells: "growth@5" on a task, "growth" on a mode. */
 function matchedRules(selection: Selection): PackageRule[] {
-  return packageRules.filter((rule) => (selection.tiles[rule.tileId] ?? 0) >= rule.at);
+  return packageRules.filter((rule) => {
+    const qty = selection.tiles[rule.tileId];
+    if (qty === undefined) return false;
+    return rule.exact ? qty === rule.at : qty >= rule.at;
+  });
 }
 
 /** Lowest package that satisfies every selected option. The highest need wins. */
@@ -464,7 +410,6 @@ type Priced = {
   lines: HourLine[];
 };
 
-const includedAiVariants = 2;
 const aiVariantsLineId = "ai-variants";
 
 function price(selection: Selection): Priced {
@@ -479,26 +424,18 @@ function price(selection: Selection): Priced {
   for (const group of groups) {
     for (const item of tilesInGroup(group.id)) {
       const qty = selection.tiles[item.id];
-      if (qty === undefined) continue;
+      if (qty === undefined || feedbackIds.some((id) => id === item.id)) continue;
       const open = hoursFor(item, qty, selection);
       listOpen += open;
       const isContent = item.bucket === "content";
       if (isContent) side += open;
       else parcelOpen += open;
       const mode = modeLabel(item, qty);
-      const counted =
-        item.id === "blog-list" || item.id === "blog-post"
-          ? blogTemplateCount(
-              selection,
-              item.id === "blog-list" ? "blog-list-count" : "blog-post-count",
-            )
-          : qty;
-      const unit = item.id === "blog-list" || item.id === "blog-post" ? "templates" : item.unit;
       lines.push({
         id: item.id,
         label: item.label,
-        qty: counted,
-        ...(unit ? { unit } : {}),
+        qty,
+        ...(item.unit ? { unit: item.unit } : {}),
         ...(mode ? { mode } : {}),
         openHours: roundHours(open),
         billedHours: roundHours(open),
@@ -508,17 +445,19 @@ function price(selection: Selection): Priced {
     }
   }
 
-  const pushFeedback = (id: string, included: number, rate: number) => {
+  const pushFeedback = (id: string) => {
     const qty = selection.tiles[id];
     if (qty === undefined) return;
-    const extra = Math.max(0, qty - included);
-    const hours = extra * rate;
+    const rounds = getTile(id);
+    const extra = Math.max(0, qty - rounds.includedInBase);
+    /* A round costs the same whatever the design choice */
+    const hours = extra * rounds.build.custom;
     if (hours <= 0) return;
     listOpen += hours;
     parcelOpen += hours;
     lines.push({
       id,
-      label: getTile(id).label,
+      label: rounds.label,
       qty: extra,
       unit: "extra rounds",
       openHours: hours,
@@ -527,9 +466,9 @@ function price(selection: Selection): Priced {
       bucket: "design",
     });
   };
-  const designInput = designInputFor(selection);
+  const amount = amountOf(selection);
   if (selection.tiles["custom-design"] !== undefined) {
-    for (const part of designParts(designInput)) {
+    for (const part of designParts("custom", amount)) {
       listOpen += part.hours;
       parcelOpen += part.hours;
       lines.push({
@@ -547,7 +486,7 @@ function price(selection: Selection): Priced {
   }
   const aiVariants = selection.tiles["ai-design"];
   if (aiVariants !== undefined) {
-    const parts = aiDesignParts(designInput);
+    const parts = designParts("ai", amount);
     for (const part of parts) {
       listOpen += part.hours;
       parcelOpen += part.hours;
@@ -563,7 +502,7 @@ function price(selection: Selection): Priced {
         bucket: "design",
       });
     }
-    const extraVariants = Math.max(0, aiVariants - includedAiVariants);
+    const extraVariants = Math.max(0, aiVariants - getTile("ai-design").includedInBase);
     const baseDesign = parts.reduce((sum, part) => sum + part.hours, 0);
     const variantHours = extraVariants * aiVariantHours(baseDesign);
     if (variantHours > 0) {
@@ -581,8 +520,7 @@ function price(selection: Selection): Priced {
       });
     }
   }
-  pushFeedback("design-feedback", 2, 6);
-  pushFeedback("ai-feedback", 1, 3);
+  for (const id of feedbackIds) pushFeedback(id);
 
   const hours = roundHours(parcelOpen + side);
   const designHours = sumBucket(lines, "design");
@@ -626,13 +564,8 @@ function sumBilled(lines: HourLine[], bucket: HourBucket): number {
 }
 
 function pageHits(selection: Selection): { edition: Edition; reason: string }[] {
-  if (selection.websitePages <= starterPageCap) return [];
-  return [
-    {
-      edition: "professional",
-      reason: "30+ website pages need Content Hub Professional",
-    },
-  ];
+  const hit = pageEdition(selection.websitePages);
+  return hit ? [hit] : [];
 }
 
 function editionOf(selection: Selection): { edition: Edition; reasons: string[] } {
@@ -719,10 +652,6 @@ function pageSpeedOf(selection: Selection): PageSpeed {
     notes.push("Accessibility: forms need labels, errors, and a visible focus state.");
   }
   if (selection.tiles["blog-post"] !== undefined) seo += 2;
-  if (selection.tiles.redirects !== undefined) {
-    seo += 2;
-    notes.push("SEO: redirects keep old URLs when each rule is checked.");
-  }
   if ((selection.tiles.languages ?? 1) > 1) {
     seo += 1;
     notes.push("SEO: each language needs hreflang. That work is in the language hours.");
@@ -819,58 +748,47 @@ export function aiVariantCost(result: Quote): number {
   return aiVariantHours(base.reduce((sum, line) => sum + line.openHours, 0));
 }
 
+/** The estimate as the short code a link carries after its #. See link.ts for what is in it. */
 export function encodeSelection(selection: Selection): string {
-  const body = Object.entries(selection.tiles)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([id, qty]) => `${id}.${qty}`)
-    .join(",");
-  return `s=${selection.startingPoint}&w=${selection.websitePages}&b=${selection.blogSetupMode}&t=${body}`;
+  const entries: [number, number][] = [];
+  for (const [id, qty] of Object.entries(selection.tiles)) {
+    const item = getTile(id);
+    /* A mode is stored as its number in link-codes.csv, not its place, so the table's rows can be
+       reordered */
+    const value = item.modes ? item.modes[qty - 1]?.value : qty;
+    if (value !== undefined) entries.push([item.code, value]);
+  }
+  return packLink({
+    /* Two spare bits, kept for a later use */
+    mode: 0,
+    pages: selection.websitePages,
+    entries,
+  });
 }
 
+/** Reads a code, a link or the address's hash. Null when it is not a link. */
 export function decodeSelection(hash: string): Selection | null {
-  const raw = hash.startsWith("#") ? hash.slice(1) : hash;
-  if (raw.length === 0) return null;
-  const params = new Map<string, string>();
-  for (const part of raw.split("&")) {
-    const eq = part.indexOf("=");
-    if (eq === -1) continue;
-    params.set(decodeURIComponent(part.slice(0, eq)), decodeURIComponent(part.slice(eq + 1)));
-  }
-  const start = params.get("s");
-  if (!start || !startingPoints.some((item) => item.id === start)) return null;
+  const packed = unpackLink(codeIn(hash));
+  if (!packed) return null;
   const tilesSelected: Record<string, number> = {};
-  const body = params.get("t") ?? "";
-  if (body.length > 0) {
-    for (const part of body.split(",")) {
-      const dot = part.lastIndexOf(".");
-      if (dot <= 0) continue;
-      const id = part.slice(0, dot);
-      const qty = Number(part.slice(dot + 1));
-      if (!Number.isFinite(qty)) continue;
-      try {
-        getTile(id);
-      } catch {
-        continue;
-      }
-      tilesSelected[id] = qty;
+  for (const [code, value] of packed.entries) {
+    const item = tileByCode(code);
+    /* A task or mode that is no longer in the table is left out */
+    if (!item) continue;
+    if (!item.modes) tilesSelected[item.id] = value;
+    else {
+      /* An option that is hidden now: the item keeps the one it starts with */
+      const level = item.modes.findIndex((mode) => mode.value === value) + 1;
+      tilesSelected[item.id] = level > 0 ? level : item.initial;
     }
   }
-  const website = Number(params.get("w"));
-  const mode = params.get("b");
-  const blogSetupMode: BlogSetupMode =
-    mode === "list" || mode === "post" || mode === "both" || mode === "same" ? mode : "same";
   return normalize({
-    startingPoint: start as StartingPointId,
-    websitePages: Number.isFinite(website) ? website : defaultWebsitePages,
-    blogSetupMode,
+    startingPoint: "cms-react",
+    websitePages: packed.pages,
     tiles: tilesSelected,
   });
 }
 
 export function isShapeId(value: string): value is ShapeId {
   return value === "essential" || value === "growth" || value === "platform" || value === "custom";
-}
-
-export function isBlogSetupMode(value: string): value is BlogSetupMode {
-  return value === "same" || value === "list" || value === "post" || value === "both";
 }

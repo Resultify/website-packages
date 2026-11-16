@@ -1,15 +1,39 @@
 /**
- * Guide hours. Replace them before a real proposal.
+ * The catalog: what the estimator offers, read from the files in src/ (see table.ts):
+ * estimator.csv for the items, rules.csv for design rounds, languages and pages, and
+ * link-codes.csv for each item's number in a link.
+ *
+ * Change the files, or use the calculations page (/calc/) on the dev server. What is here is how
+ * they are read, and the words and lists that are not calculations.
  *
  * Essential, Growth, and Platform are project packages. The active package is
  * the lowest tier that covers every selected option. It is not a choice.
  *
- * Website pages are not build hours. More than 30 needs Professional.
- * The count starts at 25.
+ * Website pages are not build hours.
  *
- * Design hours are charged only while Custom design is on, and they stay
- * separate from build hours.
+ * Design hours are charged only while a design is on, and they stay
+ * separate from build hours. Build hours depend on the design choice.
  */
+
+import {
+  buildKind,
+  type Choice,
+  type CodeEntry,
+  type Column,
+  type DesignKind,
+  liveCodesText,
+  liveRulesText,
+  liveText,
+  parseCodes,
+  parseRules,
+  parseTable,
+  type Row,
+  type RuleName,
+  type Rules,
+  withCodes,
+} from "./table.ts";
+
+export type { Choice, DesignKind };
 
 /** Display names. Rename the package labels here. */
 export const packageName = {
@@ -34,11 +58,6 @@ export const editionRank: Record<Edition, number> = {
   professional: 2,
   enterprise: 3,
 };
-
-/** More than this many website pages needs Professional. */
-export const starterPageCap = 30;
-
-export const defaultWebsitePages = 25;
 
 /** Shown before content work. Always on, and not a package choice. */
 export const closingTileIds = ["setup"] as const;
@@ -243,9 +262,9 @@ export const groups: readonly {
 }[] = [
   { id: "design", label: "Design", layout: "pair" },
   { id: "site", label: "", layout: "tiles" },
-  { id: "blog", label: "Blog", layout: "tiles" },
-  { id: "features", label: "Extra features", layout: "tiles" },
   { id: "languages", label: "Languages", layout: "wide" },
+  { id: "features", label: "Extra features", layout: "tiles" },
+  { id: "blog", label: "Blog", layout: "tiles" },
   { id: "catalogue", label: "", layout: "tiles" },
   { id: "content", label: "Content", layout: "tiles" },
 ];
@@ -303,45 +322,43 @@ export const badgeLabel: Record<TileBadge, string> = {
   planned: "in development",
 };
 
+/** Design hours: for each unit when the task has a quantity, for the task otherwise. */
+export type DesignRate = Record<DesignKind, number>;
+
+/** Build hours for each design choice (no design takes Custom's): for each unit when the task has a
+    quantity, for the task otherwise. */
+export type BuildRate = Record<DesignKind, number>;
+
 export type TileMode = {
   label: string;
-  hours: number;
+  build: BuildRate;
   detail?: string;
   group?: string;
   /** Hours come from a separate number input, not from this mode. */
   customHours?: boolean;
+  /** Coming soon: shown, but cannot be chosen. */
+  disabled?: boolean;
+  /** What a link stores for this mode: its place in the item's list of options, from 1. */
+  value: number;
+  design: DesignRate;
 };
-
-export type BlogSetupMode = "same" | "list" | "post" | "both";
-
-function fixed(edition: Edition, reason: string): EditionRule {
-  return { at: () => ({ edition, reason }) };
-}
-
-function ladder(
-  rungs: { upTo: number; edition: Edition; reason: string }[],
-  above: { edition: Edition; reason: (qty: number) => string },
-): EditionRule {
-  return {
-    at(qty) {
-      for (const rung of rungs) {
-        if (qty <= rung.upTo) return { edition: rung.edition, reason: rung.reason };
-      }
-      return { edition: above.edition, reason: above.reason(qty) };
-    },
-  };
-}
-
-const starter = fixed("starter", "");
 
 export type Tile = {
   id: string;
+  /** Where the estimator shows it. The items the rules make are in the basics, or in Design. */
+  place: Place;
+  /** A source of the Product catalogue: its name on the Source buttons. */
+  source?: string;
+  /** The task's number in a link. It is never changed, and never given to another task. */
+  code: number;
   label: string;
   group: GroupId;
+  /** May hold {build}: the build hours, filled in for the estimate's design choice. */
   summary: string;
-  baseHours: number;
-  perUnitHours: number;
+  build: BuildRate;
   includedInBase: number;
+  /** The first unit past the included ones, when it costs something other than the rest. */
+  firstUnitHours?: number;
   unit?: string;
   min: number;
   max: number;
@@ -352,6 +369,8 @@ export type Tile = {
   hourInput?: boolean;
   /** Shown, but not selectable. No build hours. */
   disabled?: boolean;
+  /** Not shown anywhere, and left out of every estimate. Its link code stays taken. */
+  hidden?: boolean;
   modes?: readonly TileMode[];
   rule: EditionRule;
   mark?: string;
@@ -361,656 +380,11 @@ export type Tile = {
   note?: string;
   /** Design and content sit outside the package rate and the extra cap. */
   bucket: HourBucket;
+  /** A task with modes keeps its design hours on each mode. */
+  design: DesignRate;
+  /** What its design line is called, before "design" lines get their "AI " in front. */
+  designLabel: string;
 };
-
-function tile(input: {
-  id: string;
-  label: string;
-  group: GroupId;
-  summary: string;
-  baseHours: number;
-  rule: EditionRule;
-  perUnitHours?: number;
-  includedInBase?: number;
-  unit?: string;
-  min?: number;
-  max?: number;
-  initial?: number;
-  step?: number;
-  stepped?: boolean;
-  hourInput?: boolean;
-  disabled?: boolean;
-  modes?: readonly TileMode[];
-  mark?: string;
-  badge?: TileBadge;
-  hub?: Tile["hub"];
-  requires?: readonly string[];
-  note?: string;
-  bucket?: HourBucket;
-}): Tile {
-  const modeLimits = input.modes
-    ? { min: 1, max: input.modes.length, stepped: false as const }
-    : {};
-  return {
-    perUnitHours: 0,
-    includedInBase: 0,
-    min: 1,
-    max: 1,
-    initial: 1,
-    step: 1,
-    stepped: false,
-    requires: [],
-    bucket: "implementation",
-    ...input,
-    ...modeLimits,
-  };
-}
-
-export const tiles: readonly Tile[] = [
-  tile({
-    id: "ai-design",
-    label: "AI generated design",
-    group: "design",
-    summary:
-      "Generates design variants from the features included and how many of each. Two variants are the starting cost. Each variant after that adds half of that cost, rounded up.",
-    baseHours: 0,
-    unit: "variants",
-    min: 2,
-    max: 10,
-    initial: 2,
-    stepped: true,
-    bucket: "design",
-    rule: starter,
-  }),
-  tile({
-    id: "ai-feedback",
-    label: "AI feedback",
-    group: "design",
-    summary: "1 included, then 3h each",
-    baseHours: 0,
-    perUnitHours: 3,
-    includedInBase: 1,
-    unit: "rounds",
-    min: 1,
-    max: 10,
-    initial: 1,
-    stepped: true,
-    bucket: "design",
-    rule: starter,
-  }),
-  tile({
-    id: "custom-design",
-    label: "Custom design",
-    group: "design",
-    summary: "Design depends on the features included and how many of each.",
-    baseHours: 0,
-    bucket: "design",
-    rule: starter,
-  }),
-  tile({
-    id: "design-feedback",
-    label: "Custom feedback",
-    group: "design",
-    summary: "2 included, then 6h each",
-    baseHours: 0,
-    perUnitHours: 6,
-    includedInBase: 2,
-    unit: "rounds",
-    min: 2,
-    max: 10,
-    initial: 2,
-    stepped: true,
-    bucket: "design",
-    rule: starter,
-  }),
-  tile({
-    id: "templates",
-    label: "Page templates",
-    group: "site",
-    summary: "2h each to build",
-    baseHours: 0,
-    perUnitHours: 2,
-    unit: "templates",
-    min: 1,
-    max: 20,
-    initial: 3,
-    stepped: true,
-    rule: starter,
-  }),
-  tile({
-    id: "sections",
-    label: "Sections",
-    group: "site",
-    summary: "Hero, cards, quote, FAQ and more. 4h each",
-    baseHours: 0,
-    perUnitHours: 4,
-    unit: "sections",
-    min: 1,
-    max: 40,
-    initial: 8,
-    stepped: true,
-    rule: starter,
-  }),
-  tile({
-    id: "landing-templates",
-    label: "Landing templates",
-    group: "site",
-    summary: "3h each to build",
-    baseHours: 0,
-    perUnitHours: 3,
-    unit: "templates",
-    min: 1,
-    max: 10,
-    initial: 1,
-    stepped: true,
-    rule: starter,
-  }),
-  tile({
-    id: "blog-list",
-    label: "List template",
-    group: "blog",
-    summary: "List with pagination",
-    baseHours: 0,
-    modes: [
-      { label: "Simple", hours: 4, detail: "List with pagination" },
-      {
-        label: "Advanced",
-        hours: 8,
-        detail: "Grid, favorites, filters, paging",
-      },
-    ],
-    rule: starter,
-  }),
-  tile({
-    id: "blog-post",
-    label: "Post template",
-    group: "blog",
-    summary: "Standard post template",
-    baseHours: 0,
-    modes: [
-      { label: "Simple", hours: 4, detail: "Standard post template" },
-      {
-        label: "Advanced",
-        hours: 8,
-        detail: "Related posts, advanced features",
-      },
-    ],
-    rule: starter,
-  }),
-  tile({
-    id: "blog-list-count",
-    label: "List templates",
-    group: "blog",
-    summary: "How many list templates, when there is more than one blog.",
-    baseHours: 0,
-    unit: "templates",
-    min: 1,
-    max: 20,
-    initial: 1,
-    stepped: true,
-    rule: starter,
-  }),
-  tile({
-    id: "blog-post-count",
-    label: "Post templates",
-    group: "blog",
-    summary: "How many post templates, when there is more than one blog.",
-    baseHours: 0,
-    unit: "templates",
-    min: 1,
-    max: 20,
-    initial: 1,
-    stepped: true,
-    rule: starter,
-  }),
-  tile({
-    id: "blog-setups",
-    label: "Blogs",
-    group: "blog",
-    summary: "With list and post templates",
-    baseHours: 0,
-    perUnitHours: 0,
-    unit: "blogs",
-    min: 1,
-    max: 100,
-    initial: 1,
-    stepped: true,
-    rule: ladder([{ upTo: 1, edition: "starter", reason: "" }], {
-      edition: "professional",
-      reason: (qty) => `${qty} blogs need Content Hub Professional`,
-    }),
-  }),
-  tile({
-    id: "blog-recent",
-    label: "Recent blog posts",
-    group: "blog",
-    summary: "Lists the latest posts",
-    baseHours: 4,
-    rule: starter,
-  }),
-  tile({
-    id: "search",
-    label: "Search",
-    group: "site",
-    summary: "Search field and results page",
-    baseHours: 0,
-    modes: [
-      { label: "Simple", hours: 4, detail: "Search field and results page" },
-      {
-        label: "Advanced",
-        hours: 10,
-        detail: "Dialog with favorites, suggestions, results page",
-      },
-    ],
-    rule: starter,
-  }),
-  tile({
-    id: "menu",
-    label: "Menu",
-    group: "site",
-    summary: "One level, touch-friendly on mobile",
-    baseHours: 0,
-    modes: [
-      {
-        label: "Simple",
-        hours: 3,
-        detail: "One level, touch-friendly on mobile",
-      },
-      {
-        label: "Advanced",
-        hours: 12,
-        detail: "Multi-level mega menu, touch-friendly on mobile",
-      },
-    ],
-    rule: starter,
-  }),
-  tile({
-    id: "system",
-    label: "Custom system templates",
-    group: "site",
-    summary: "Custom error and subscription pages",
-    baseHours: 6,
-    rule: starter,
-  }),
-  tile({
-    id: "header",
-    label: "Global header",
-    group: "site",
-    summary: "Logo, navigation and buttons",
-    baseHours: 3,
-    rule: starter,
-  }),
-  tile({
-    id: "footer",
-    label: "Global footer",
-    group: "site",
-    summary: "Links, contact and legal",
-    baseHours: 4,
-    rule: starter,
-  }),
-  tile({
-    id: "setup",
-    label: "Setup and launch",
-    group: "site",
-    summary: "Kickoff, deploy, go-live checks, handover, DNS",
-    baseHours: 12,
-    rule: starter,
-  }),
-  tile({
-    id: "hubdb",
-    label: "HubDB based section",
-    group: "features",
-    summary: "Library, directory, filterable list",
-    baseHours: 0,
-    perUnitHours: 10,
-    unit: "modules",
-    min: 1,
-    max: 10,
-    initial: 1,
-    stepped: true,
-    mark: "Pro",
-    rule: fixed("professional", "HubDB needs Content Hub Professional"),
-  }),
-  tile({
-    id: "crm-section",
-    label: "CRM Object section",
-    group: "features",
-    summary: "",
-    baseHours: 0,
-    disabled: true,
-    badge: "planned",
-    mark: "Pro",
-    rule: fixed("professional", "A CRM Object section needs Content Hub Professional"),
-  }),
-  tile({
-    id: "crm-custom-section",
-    label: "Custom Object section",
-    group: "features",
-    summary: "",
-    baseHours: 0,
-    disabled: true,
-    badge: "planned",
-    mark: "Ent",
-    rule: fixed("enterprise", "A CRM custom object needs Enterprise"),
-  }),
-  tile({
-    id: "product-catalogue",
-    label: "HubDB-based",
-    group: "catalogue",
-    summary: "Catalogue with HubDB as its source",
-    baseHours: 0,
-    initial: 2,
-    modes: [
-      {
-        label: "Module based",
-        hours: 22,
-        detail: "One product with sub-levels, no listing page",
-      },
-      {
-        label: "Simple",
-        hours: 18,
-        group: "Dynamic pages",
-        detail: "Listing page, pagination, product detail pages",
-      },
-      {
-        label: "Filtered",
-        hours: 28,
-        group: "Dynamic pages",
-        detail: "Simple, plus filters and sorting",
-      },
-      {
-        label: "Multi-level",
-        hours: 40,
-        group: "Dynamic pages",
-        detail: "Filtered, plus SEO category pages, breadcrumbs",
-      },
-      {
-        label: "Custom",
-        hours: 0,
-        customHours: true,
-        detail: "Your own estimate",
-      },
-    ],
-    mark: "Pro",
-    rule: fixed("professional", "A product catalogue on HubDB needs Content Hub Professional"),
-  }),
-  tile({
-    id: "catalogue-custom",
-    label: "Custom catalogue",
-    group: "catalogue",
-    summary: "",
-    baseHours: 0,
-    perUnitHours: 1,
-    unit: "hours",
-    min: 0,
-    max: 400,
-    initial: 0,
-    hourInput: true,
-    rule: starter,
-  }),
-  tile({
-    id: "catalogue-crm",
-    label: "CRM Object",
-    group: "catalogue",
-    summary: "Products as the standard CRM product record. In development.",
-    baseHours: 0,
-    disabled: true,
-    badge: "planned",
-    rule: starter,
-  }),
-  tile({
-    id: "catalogue-objects",
-    label: "CRM custom object",
-    group: "catalogue",
-    summary: "Enterprise only. Products as a CRM custom object. In development.",
-    baseHours: 0,
-    disabled: true,
-    badge: "planned",
-    mark: "Ent",
-    rule: fixed("enterprise", "CRM custom objects need Enterprise"),
-  }),
-  tile({
-    id: "favorite-products",
-    label: "Favorite products",
-    group: "catalogue",
-    summary: "Section on a static page",
-    baseHours: 0,
-    perUnitHours: 6,
-    unit: "sections",
-    min: 1,
-    max: 10,
-    initial: 1,
-    stepped: true,
-    rule: starter,
-  }),
-  tile({
-    id: "related-products",
-    label: "Related products",
-    group: "catalogue",
-    summary: "On the product detail page",
-    baseHours: 6,
-    rule: starter,
-  }),
-  tile({
-    id: "custom-forms",
-    label: "Custom forms",
-    group: "site",
-    summary: "HubSpot form with your styling, faster",
-    baseHours: 5,
-    rule: starter,
-  }),
-  tile({
-    id: "external-forms",
-    label: "Forms + external data",
-    group: "features",
-    summary:
-      "A custom form filled from HubDB, or from an external API through a serverless function.",
-    baseHours: 0,
-    modes: [
-      { label: "HubDB", hours: 12 },
-      { label: "External API", hours: 18 },
-    ],
-    disabled: true,
-    badge: "planned",
-    mark: "Pro",
-    rule: ladder(
-      [
-        {
-          upTo: 1,
-          edition: "professional",
-          reason: "A form fed by HubDB needs Content Hub Professional",
-        },
-      ],
-      {
-        edition: "enterprise",
-        reason: () => "A form that calls an external API needs Content Hub Enterprise",
-      },
-    ),
-  }),
-  tile({
-    id: "membership",
-    label: "Memberships",
-    group: "features",
-    summary: "",
-    baseHours: 0,
-    disabled: true,
-    perUnitHours: 4,
-    includedInBase: 1,
-    unit: "access groups",
-    min: 1,
-    max: 20,
-    initial: 1,
-    stepped: true,
-    mark: "Pro",
-    badge: "planned",
-    note: "",
-    rule: ladder(
-      [
-        {
-          upTo: 2,
-          edition: "professional",
-          reason: "Memberships need Content Hub Professional",
-        },
-      ],
-      {
-        edition: "enterprise",
-        reason: (qty) => `${qty} access groups need Content Hub Enterprise`,
-      },
-    ),
-  }),
-  tile({
-    id: "languages",
-    label: "Languages",
-    group: "languages",
-    summary: "One included, 2nd is 14h, then 6h each",
-    baseHours: 0,
-    unit: "languages",
-    min: 1,
-    max: 60,
-    initial: 1,
-    stepped: true,
-    rule: ladder([{ upTo: 50, edition: "starter", reason: "" }], {
-      edition: "professional",
-      reason: (qty) => `${qty} languages need Content Hub Professional`,
-    }),
-  }),
-  tile({
-    id: "redirects",
-    label: "Additional redirects",
-    group: "content",
-    summary: "",
-    baseHours: 0,
-    disabled: true,
-    badge: "planned",
-    rule: starter,
-  }),
-  tile({
-    id: "migrate-pages",
-    label: "Page migration",
-    group: "content",
-    bucket: "content",
-    summary: "",
-    baseHours: 0,
-    perUnitHours: 1,
-    unit: "hours",
-    min: 0,
-    max: 400,
-    initial: 0,
-    hourInput: true,
-    rule: starter,
-  }),
-  tile({
-    id: "migrate-posts",
-    label: "Blog import",
-    group: "content",
-    bucket: "content",
-    summary: "",
-    baseHours: 0,
-    perUnitHours: 1,
-    unit: "hours",
-    min: 0,
-    max: 400,
-    initial: 0,
-    hourInput: true,
-    rule: starter,
-  }),
-  tile({
-    id: "content-hours",
-    label: "Content",
-    group: "content",
-    summary: "",
-    baseHours: 0,
-    perUnitHours: 1,
-    unit: "hours",
-    min: 0,
-    max: 400,
-    initial: 0,
-    hourInput: true,
-    bucket: "content",
-    rule: starter,
-  }),
-];
-
-const tileById = new Map<string, Tile>(tiles.map((item) => [item.id, item]));
-
-export function getTile(id: string): Tile {
-  const found = tileById.get(id);
-  if (!found) throw new Error(`Unknown tile: ${id}`);
-  return found;
-}
-
-const groupOrder: Partial<Record<GroupId, readonly string[]>> = {
-  design: ["ai-design", "custom-design"],
-  site: [
-    "templates",
-    "landing-templates",
-    "sections",
-    "menu",
-    "header",
-    "footer",
-    "custom-forms",
-    "search",
-    "system",
-    "setup",
-  ],
-  blog: [
-    "blog-setups",
-    "blog-list",
-    "blog-post",
-    "blog-list-count",
-    "blog-post-count",
-    "blog-recent",
-  ],
-  catalogue: [
-    "product-catalogue",
-    "catalogue-custom",
-    "catalogue-crm",
-    "catalogue-objects",
-    "favorite-products",
-    "related-products",
-  ],
-  features: ["external-forms", "hubdb", "crm-section", "crm-custom-section", "membership"],
-  content: ["content-hours", "migrate-pages", "migrate-posts", "redirects"],
-};
-
-export function tilesInGroup(group: GroupId): Tile[] {
-  const items = tiles.filter((item) => item.group === group);
-  const order = groupOrder[group];
-  if (!order) return items;
-  return order.flatMap((id) => {
-    const found = items.find((item) => item.id === id);
-    return found ? [found] : [];
-  });
-}
-
-export function tileHours(item: Tile, qty: number): number {
-  if (item.disabled) return 0;
-  if (item.id === "languages") return languageHours(qty);
-  if (item.id === "redirects") return redirectHours(qty);
-  if (item.modes && item.modes.length > 0) {
-    const index = Math.min(item.modes.length, Math.max(1, Math.round(qty))) - 1;
-    return item.modes[index]?.hours ?? 0;
-  }
-  const units = Math.max(0, qty - item.includedInBase);
-  return item.baseHours + item.perUnitHours * units;
-}
-
-export function languageHours(qty: number): number {
-  if (qty <= 1) return 0;
-  return 14 + 6 * (qty - 2);
-}
-
-export function redirectHours(count: number): number {
-  if (count <= 0) return 0;
-  const hundreds = Math.ceil(count / 100);
-  return 4 + 2 * (hundreds - 1);
-}
-
-export function modeLabel(item: Tile, qty: number): string | undefined {
-  if (!item.modes || item.modes.length === 0) return undefined;
-  const index = Math.min(item.modes.length, Math.max(1, Math.round(qty))) - 1;
-  return item.modes[index]?.label;
-}
 
 export type ShapeId = "essential" | "growth" | "platform" | "custom";
 
@@ -1087,6 +461,854 @@ export function getParcel(id: Exclude<ShapeId, "custom">): Parcel {
   return found;
 }
 
+/* ---------- The files become the catalog ---------- */
+
+export type PackageId = Exclude<ShapeId, "custom">;
+
+/** A rule raises the package once the task reaches `at`. For a mode (`exact`), only while that
+    mode is the one chosen. */
+export type PackageRule = {
+  tileId: string;
+  at: number;
+  exact: boolean;
+  package: PackageId;
+  reason: (qty: number) => string;
+};
+
+type PageRule = {
+  min: number;
+  max: number;
+  initial: number;
+  /** From this many website pages on, the tier. Lowest first. */
+  steps: readonly { edition: Edition; at: number }[];
+};
+
+export type Catalog = {
+  tiles: readonly Tile[];
+  byId: ReadonlyMap<string, Tile>;
+  byCode: ReadonlyMap<number, Tile>;
+  packageRules: readonly PackageRule[];
+  pages: PageRule;
+  /** Extra AI variants: this share of the AI design hours each, in percent. */
+  variantPercent: number;
+  /** The link codes with every item of the table in them: what Save and the build write. */
+  codes: readonly CodeEntry[];
+};
+
+const rulePackages = ["growth", "platform"] as const;
+const ruleEditions = ["professional", "enterprise"] as const;
+
+/** Where an item of the table is in the estimator:
+    basics     in every estimate (the page is built around them, so the list is fixed)
+    shelf      added when the site needs it, on its own
+    blog       the Blog: the number of blogs, and its templates
+    catalogue  the Product catalogue: its sources, and what goes with them */
+export const places = ["basics", "shelf", "blog", "catalogue"] as const;
+export type Place = (typeof places)[number] | "design";
+
+/** What the Blog and the Product catalogue are called. They are places, not rows of the table. */
+export const placeName = { blog: "Blog", catalogue: "Product catalogue" } as const;
+
+/** The catalogue's source with options, the only one an estimate can use for now. Any other
+    item of the catalogue that is not a part of it is a source to come: Coming soon, or Hidden. */
+export const catalogueId = "product-catalogue";
+
+/** Items the rules make, with what they are called. */
+const ruleTileIds = ["ai-design", "ai-feedback", "custom-design", "design-feedback", "languages"];
+
+/** Items the page is built around: the basics. A table without one of them cannot be used. */
+const neededIds = basicsTileIds;
+
+/** Parts that live inside another item's card: with the item in the table, they must be too. */
+export const partsOf: Record<string, readonly string[]> = {
+  "blog-setups": ["blog-list", "blog-post", "blog-recent"],
+  "product-catalogue": ["catalogue-custom", "favorite-products", "related-products"],
+};
+
+/** Items whose status can be Coming soon or Hidden: what sits on the shelf, not the basics that
+    every estimate has, nor the parts of another item. The catalogue's CRM sources show inside it,
+    as coming. */
+export function hasStatus(id: string): boolean {
+  return !isAlwaysOn(id) && !isPart(id) && !ruleTileIds.includes(id);
+}
+
+/** A part of the Blog or of the Product catalogue: in the estimate with it, never on its own. */
+export function isPart(id: string): boolean {
+  return Object.values(partsOf).some((parts) => parts.includes(id));
+}
+
+/** A source of products to come: an item of the catalogue that is neither its source with options
+    nor one of its parts. */
+export function isComingSource(id: string, place: string): boolean {
+  return place === "catalogue" && id !== catalogueId && !isPart(id);
+}
+
+function fail(row: Row, message: string): never {
+  throw new Error(`${row.item || row.id}${row.option ? `, ${row.option}` : ""}: ${message}`);
+}
+
+function number(row: Row, column: Column, fallback: number, whole = false): number {
+  const text = row[column];
+  if (text === "") return fallback;
+  const value = Number(text);
+  if (!Number.isFinite(value) || value < 0 || (whole && !Number.isInteger(value))) {
+    fail(
+      row,
+      `${column} must be a ${whole ? "whole number" : "number"}, 0 or more. It is "${text}"`,
+    );
+  }
+  return value;
+}
+
+function blank(row: Row, columns: readonly Column[], why: string): void {
+  for (const column of columns) {
+    if (row[column] !== "") fail(row, `${column} must be empty: ${why}`);
+  }
+}
+
+type Step<Name> = { name: Name; at: number | null };
+
+/** "growth", "growth from 5": what is needed, and from which quantity on. */
+function needs<Name extends string>(
+  row: Row,
+  column: "package" | "tier",
+  names: readonly Name[],
+): Step<Name> | null {
+  const text = row[column];
+  if (text === "") return null;
+  const match = /^(\w+)(?:\s+from\s+(\d+))?$/.exec(text);
+  const known = names.find((item) => item === match?.[1]);
+  if (!match || !known) {
+    fail(
+      row,
+      `${column} must be ${names.join(" or ")}, and to start at a quantity, "from" and that number, as in ${names[0]} from 5. It is "${text}"`,
+    );
+  }
+  return { name: known, at: match[2] === undefined ? null : Number(match[2]) };
+}
+
+/** "Page templates" reads "page templates" inside a sentence; "HubDB section" stays as it is. */
+function inSentence(label: string): string {
+  const word = label.split(" ")[0] ?? "";
+  return /[A-Z]/.test(word.slice(1)) ? label : label.charAt(0).toLowerCase() + label.slice(1);
+}
+
+const withQty = (text: string, qty: number) => text.replaceAll("{qty}", String(qty));
+
+function packageReason(step: Step<PackageId>, label: string, mode: string) {
+  const text = mode
+    ? `${mode} ${inSentence(label)}`
+    : step.at === null
+      ? label
+      : `{qty} ${inSentence(label)}`;
+  return (qty: number) => withQty(text, qty);
+}
+
+function editionReason(step: Step<Edition>, label: string, mode: string): string {
+  const tier = `Content Hub ${editionLabel[step.name]}`;
+  if (mode) return `${mode} ${inSentence(label)} needs ${tier}`;
+  return step.at === null ? `${label} needs ${tier}` : `{qty} ${inSentence(label)} need ${tier}`;
+}
+
+/** A note may say {build}: the build hours, for the design choice of the estimate. */
+function checkNote(row: Row): string {
+  for (const [, name] of row.note.matchAll(/\{(\w*)\}/g)) {
+    if (name !== "build")
+      fail(row, `note can hold {build}, the build hours, and nothing else in { }`);
+  }
+  return row.note;
+}
+
+/** The note with its build hours in it. */
+export function fillNote(text: string, build: BuildRate, choice: Choice): string {
+  return text.replaceAll("{build}", String(build[buildKind(choice)]));
+}
+
+const noBuild: BuildRate = { ai: 0, design: 0, custom: 0 };
+const noDesign: DesignRate = { ai: 0, design: 0, custom: 0 };
+const same = (hours: number): BuildRate => ({ ai: hours, design: hours, custom: hours });
+
+function buildRate(row: Row): BuildRate {
+  return {
+    ai: number(row, "build-ai", 0),
+    design: number(row, "build-design", 0),
+    custom: number(row, "build-custom", 0),
+  };
+}
+
+function designRate(row: Row): DesignRate {
+  return {
+    ai: number(row, "design-ai", 0),
+    design: number(row, "design-design", 0),
+    custom: number(row, "design-custom", 0),
+  };
+}
+
+const hourColumns = [
+  "build-ai",
+  "build-design",
+  "build-custom",
+  "design-ai",
+  "design-design",
+  "design-custom",
+] as const;
+
+/** Where the row belongs, checked against what the page is built around. */
+function placeOf(row: Row): (typeof places)[number] {
+  const place = places.find((item) => item === row.place);
+  if (!place) fail(row, `place must be one of ${places.join(", ")}. It is "${row.place}"`);
+  const basic = basicsTileIds.some((id) => id === row.id);
+  const blogIds = ["blog-setups", ...(partsOf["blog-setups"] ?? [])];
+  const catalogueIds = [catalogueId, ...(partsOf[catalogueId] ?? [])];
+  const expected = basic
+    ? "basics"
+    : blogIds.includes(row.id)
+      ? "blog"
+      : catalogueIds.includes(row.id)
+        ? "catalogue"
+        : null;
+  if (expected && place !== expected) fail(row, `place must be ${expected}. It is ${place}`);
+  if (!expected && (place === "basics" || place === "blog")) {
+    fail(
+      row,
+      place === "basics"
+        ? `place cannot be basics: the basics are ${basicsTileIds.join(", ")}`
+        : `place cannot be blog: the Blog is ${blogIds.join(", ")}`,
+    );
+  }
+  if (row.type !== "" && row.type !== "content") {
+    fail(row, `type must be empty (build) or content. It is "${row.type}"`);
+  }
+  if (row.type === "content" && place !== "shelf") {
+    fail(row, "type can be content on items of the shelf only");
+  }
+  return place;
+}
+
+function groupOf(row: Row, place: (typeof places)[number]): GroupId {
+  if (place === "basics") return "site";
+  if (place === "shelf") return row.type === "content" ? "content" : "features";
+  return place;
+}
+
+function bucketOf(group: GroupId): HourBucket {
+  if (group === "design") return "design";
+  return group === "content" ? "content" : "implementation";
+}
+
+function statusOf(row: Row): { disabled?: true; badge?: TileBadge; hidden?: true } {
+  if (isComingSource(row.id, row.place) && row.status === "") {
+    fail(
+      row,
+      "status must be soon or hidden: the estimator has no options for this source of products yet",
+    );
+  }
+  if (row.status === "") return {};
+  if (!hasStatus(row.id)) {
+    fail(row, "status can be set on items of the shelf only. This one is always shown");
+  }
+  if (row.status === "soon") return { disabled: true, badge: "planned" };
+  if (row.status === "hidden") return { hidden: true };
+  fail(row, `status must be empty (live), soon or hidden. It is "${row.status}"`);
+}
+
+function markOf(rule: EditionRule, min: number): { mark?: string } {
+  const edition = rule.at(min).edition;
+  if (edition === "professional") return { mark: "Pro" };
+  return edition === "enterprise" ? { mark: "Ent" } : {};
+}
+
+function steppedRule(steps: readonly { name: Edition; at: number; reason: string }[]): EditionRule {
+  const sorted = [...steps].sort((a, b) => a.at - b.at);
+  return {
+    at(qty) {
+      let found: EditionHit = { edition: "starter", reason: "" };
+      for (const step of sorted) {
+        if (qty >= step.at) found = { edition: step.name, reason: withQty(step.reason, qty) };
+      }
+      return found;
+    },
+  };
+}
+
+/** A task with one row: a switch, a quantity, or hours you enter. */
+function plainTile(row: Row, code: number, rules: PackageRule[]): Tile {
+  if (!row.item) fail(row, "item is empty");
+  const place = placeOf(row);
+  const group = groupOf(row, place);
+  const unit = row.unit || undefined;
+  const hourInput = unit === "hours";
+  const min = hourInput ? 0 : 1;
+  const max = number(row, "max", unit ? Number.NaN : 1, true);
+  const initial = number(row, "start", min, true);
+  if (Number.isNaN(max)) fail(row, "max is empty. An item with a unit needs its highest quantity");
+  if (!unit && (max !== 1 || initial !== 1)) {
+    fail(row, "start and max need a unit, such as templates or hours");
+  }
+  if (min > max) fail(row, `max ${max} is less than ${min}`);
+  if (initial < min || initial > max) fail(row, `start ${initial} is outside ${min} to ${max}`);
+  if (hourInput) blank(row, hourColumns, "its hours are entered in the estimate");
+  const label = row.item;
+
+  const pack = needs<PackageId>(row, "package", rulePackages);
+  if (pack) {
+    rules.push({
+      tileId: row.id,
+      at: pack.at ?? min,
+      exact: false,
+      package: pack.name,
+      reason: packageReason(pack, label, ""),
+    });
+  }
+  const tier = needs<Edition>(row, "tier", ruleEditions);
+  const rule = steppedRule(
+    tier ? [{ name: tier.name, at: tier.at ?? min, reason: editionReason(tier, label, "") }] : [],
+  );
+
+  return {
+    id: row.id,
+    place,
+    ...(isComingSource(row.id, place) ? { source: label } : {}),
+    code,
+    label,
+    group,
+    summary: checkNote(row),
+    build: hourInput ? same(1) : buildRate(row),
+    includedInBase: 0,
+    ...(unit ? { unit } : {}),
+    min,
+    max,
+    initial,
+    step: 1,
+    stepped: !!unit && !hourInput,
+    ...(hourInput ? { hourInput: true } : {}),
+    ...statusOf(row),
+    rule,
+    ...markOf(rule, min),
+    requires: [],
+    bucket: bucketOf(group),
+    design: designRate(row),
+    designLabel: `${label} design`,
+  };
+}
+
+/** A task with a row for each option. What belongs to the whole task (its name, place, type)
+    is written once, on any of its rows, or the same on each. The order of the rows is the order of
+    the options. */
+function modeTile(rows: readonly Row[], entry: CodeEntry, rules: PackageRule[]): Tile {
+  const first = rows[0] as Row;
+  const written = (column: Column) => rows.find((row) => row[column] !== "")?.[column] ?? "";
+  const shared = (column: Column): string => {
+    const value = written(column);
+    const other = rows.find((row) => row[column] !== "" && row[column] !== value);
+    if (other) fail(other, `${column} must be the same on every option of the item, or empty`);
+    return value;
+  };
+  const task: Row = {
+    ...first,
+    item: shared("item"),
+    place: shared("place"),
+    type: shared("type"),
+    note: first.note,
+  };
+  if (!task.item) fail(first, "item is empty");
+  const place = placeOf(task);
+  const group = groupOf(task, place);
+  /* The catalogue's rows are its source: the item is the Product catalogue, from that source */
+  const isCatalogue = first.id === catalogueId;
+  const itemLabel = isCatalogue ? placeName.catalogue : task.item;
+  const names = new Set<string>();
+  let starts = "";
+  for (const row of rows) {
+    if (!row.option) fail(row, "every row of an item with options needs an option");
+    if (names.has(row.option)) fail(row, "two rows of the item have this option");
+    names.add(row.option);
+    if (!["", "soon", "hidden"].includes(row.status)) {
+      fail(row, `status must be empty (live), soon or hidden. It is "${row.status}"`);
+    }
+    if (row.start !== "") {
+      if (row.start !== "1" || starts)
+        fail(row, "start is 1 on the option an item starts with, and empty on the others");
+      starts = row.option;
+    }
+  }
+  /* Each option has its status: a hidden one is left out, a coming one shown but locked. The item
+     is hidden when all are, and coming when none is live */
+  const shown = rows.filter((row) => row.status !== "hidden");
+  const live = shown.filter((row) => row.status === "");
+  if (!hasStatus(first.id) && live.length === 0) {
+    fail(first, "at least one option must be live: the item is always shown");
+  }
+  const itemStatus: Partial<Pick<Tile, "hidden" | "disabled" | "badge">> =
+    shown.length === 0
+      ? { hidden: true }
+      : live.length === 0
+        ? { disabled: true, badge: "planned" }
+        : {};
+  /* The item starts with its start option, or the first live one */
+  let initial = shown.findIndex((row) => row.option === starts && row.status === "") + 1;
+  if (!initial) initial = Math.max(1, shown.findIndex((row) => row.status === "") + 1);
+  const tiers: EditionHit[] = [];
+  const modes = shown.map((row, index): TileMode => {
+    blank(row, ["max"], "an option has no quantity");
+    if (row.unit !== "" && row.unit !== "hours")
+      fail(row, "an option's unit is empty, or hours when its hours are entered");
+    const at = index + 1;
+    const [groupName, label] = row.option.includes(": ")
+      ? (row.option.split(": ", 2) as [string, string])
+      : [undefined, row.option];
+    const pack = needs<PackageId>(row, "package", rulePackages);
+    const tier = needs<Edition>(row, "tier", ruleEditions);
+    if (pack?.at != null || tier?.at != null) {
+      fail(row, `an option's package and tier have no "from"`);
+    }
+    /* Named after the option only when the options ask for different ones */
+    const named = (column: "package" | "tier") =>
+      shown.some((other) => other[column] !== row[column]) ? label : "";
+    if (pack) {
+      rules.push({
+        tileId: row.id,
+        at,
+        exact: true,
+        package: pack.name,
+        reason: packageReason(pack, itemLabel, named("package")),
+      });
+    }
+    tiers.push(
+      tier
+        ? { edition: tier.name, reason: editionReason(tier, itemLabel, named("tier")) }
+        : { edition: "starter", reason: "" },
+    );
+    const detail = checkNote(row);
+    const value = entry.options.indexOf(row.option) + 1;
+    return {
+      label,
+      build: row.unit === "hours" ? noBuild : buildRate(row),
+      ...(detail ? { detail } : {}),
+      ...(groupName ? { group: groupName } : {}),
+      ...(row.unit === "hours" ? { customHours: true } : {}),
+      ...(row.status === "soon" ? { disabled: true } : {}),
+      value,
+      design: designRate(row),
+    };
+  });
+  const level = (qty: number) => Math.min(modes.length, Math.max(1, Math.round(qty))) - 1;
+  const rule: EditionRule = {
+    at: (qty) => tiers[level(qty)] ?? { edition: "starter", reason: "" },
+  };
+  return {
+    id: first.id,
+    place,
+    ...(isCatalogue ? { source: task.item } : {}),
+    code: entry.code,
+    label: itemLabel,
+    group,
+    summary: modes[0]?.detail ?? "",
+    build: noBuild,
+    includedInBase: 0,
+    min: 1,
+    max: Math.max(1, modes.length),
+    initial,
+    step: 1,
+    stepped: false,
+    ...itemStatus,
+    modes,
+    rule,
+    ...markOf(rule, 1),
+    requires: [],
+    bucket: bucketOf(group),
+    design: noDesign,
+    designLabel: `${itemLabel} design`,
+  };
+}
+
+/* ---------- The rules ---------- */
+
+function rule(rules: Rules, name: RuleName, whole = true): number {
+  const text = rules[name];
+  const value = Number(text);
+  if (text === "" || !Number.isFinite(value) || value < 0 || (whole && !Number.isInteger(value))) {
+    throw new Error(
+      `Rule ${name} must be a ${whole ? "whole number" : "number"}, 0 or more. It is "${text}"`,
+    );
+  }
+  return value;
+}
+
+/** A quantity of rounds or variants: so many included, each one past them costs `each`. */
+function roundsTile(
+  id: string,
+  code: number,
+  label: string,
+  unit: string,
+  included: number,
+  max: number,
+  each: number,
+  summary: string,
+): Tile {
+  if (included > max) throw new Error(`${label}: ${included} included is more than ${max}`);
+  return {
+    id,
+    place: "design",
+    code,
+    label,
+    group: "design",
+    summary,
+    build: same(each),
+    includedInBase: included,
+    unit,
+    min: included,
+    max,
+    initial: included,
+    step: 1,
+    stepped: true,
+    rule: steppedRule([]),
+    requires: [],
+    bucket: "design",
+    design: noDesign,
+    designLabel: `${label} design`,
+  };
+}
+
+function choiceTile(id: string, code: number, label: string, summary: string): Tile {
+  return {
+    id,
+    place: "design",
+    code,
+    label,
+    group: "design",
+    summary,
+    build: noBuild,
+    includedInBase: 0,
+    min: 1,
+    max: 1,
+    initial: 1,
+    step: 1,
+    stepped: false,
+    rule: steppedRule([]),
+    requires: [],
+    bucket: "design",
+    design: noDesign,
+    designLabel: `${label} design`,
+  };
+}
+
+const roundsNote = (included: number, each: number) => `${included} included, then ${each}h each`;
+
+/** Design and Languages: the items the rules make. */
+function ruleTiles(rules: Rules, codeOf: (id: string) => number, packages: PackageRule[]): Tile[] {
+  const variants = rule(rules, "ai-variants-included");
+  const percent = rule(rules, "ai-variant-percent");
+  const aiRounds = rule(rules, "ai-feedback-included");
+  const aiEach = rule(rules, "ai-feedback-each", false);
+  const customRounds = rule(rules, "custom-feedback-included");
+  const customEach = rule(rules, "custom-feedback-each", false);
+  const included = rule(rules, "languages-included");
+  const second = rule(rules, "languages-second", false);
+  const each = rule(rules, "languages-each", false);
+  const languagesMax = rule(rules, "languages-max");
+  const growthFrom = rule(rules, "languages-growth-from");
+  const professionalFrom = rule(rules, "languages-professional-from");
+  if (included < 1 || included > languagesMax) {
+    throw new Error(`Languages: ${included} included must be 1 to ${languagesMax}`);
+  }
+  packages.push({
+    tileId: "languages",
+    at: growthFrom,
+    exact: false,
+    package: "growth",
+    reason: (qty) => `${qty} languages`,
+  });
+  const languageRule = steppedRule([
+    {
+      name: "professional",
+      at: professionalFrom,
+      reason: "{qty} languages need Content Hub Professional",
+    },
+  ]);
+  const share = percent === 50 ? "half" : `${percent}%`;
+  return [
+    {
+      ...roundsTile(
+        "ai-design",
+        codeOf("ai-design"),
+        "AI generated design",
+        "variants",
+        variants,
+        rule(rules, "ai-variants-max"),
+        0,
+        `Generates design variants from the features included and how many of each. ${variants === 2 ? "Two" : variants} variants are the starting cost. Each variant after that adds ${share} of that cost, rounded up.`,
+      ),
+    },
+    roundsTile(
+      "ai-feedback",
+      codeOf("ai-feedback"),
+      "AI feedback",
+      "rounds",
+      aiRounds,
+      rule(rules, "ai-feedback-max"),
+      aiEach,
+      roundsNote(aiRounds, aiEach),
+    ),
+    choiceTile(
+      "custom-design",
+      codeOf("custom-design"),
+      "Custom design",
+      "Design depends on the features included and how many of each.",
+    ),
+    roundsTile(
+      "design-feedback",
+      codeOf("design-feedback"),
+      "Custom feedback",
+      "rounds",
+      customRounds,
+      rule(rules, "custom-feedback-max"),
+      customEach,
+      roundsNote(customRounds, customEach),
+    ),
+    {
+      id: "languages",
+      place: "basics",
+      code: codeOf("languages"),
+      label: "Languages",
+      group: "languages",
+      summary: `${included === 1 ? "One included, 2nd" : `${included} included, the next`} is ${second}h, then ${each}h each`,
+      build: same(each),
+      includedInBase: included,
+      firstUnitHours: second,
+      unit: "languages",
+      min: 1,
+      max: languagesMax,
+      initial: 1,
+      step: 1,
+      stepped: true,
+      rule: languageRule,
+      ...markOf(languageRule, 1),
+      requires: [],
+      bucket: "implementation",
+      design: noDesign,
+      designLabel: "Languages design",
+    },
+  ];
+}
+
+function pageRule(rules: Rules): PageRule {
+  const max = rule(rules, "pages-max");
+  const initial = rule(rules, "pages-start");
+  const from = rule(rules, "pages-professional-from");
+  if (initial < 1 || initial > max)
+    throw new Error(`Rule pages-start ${initial} is outside 1 to ${max}`);
+  return { min: 1, max, initial, steps: [{ edition: "professional", at: from }] };
+}
+
+/** Reads the files. Anything it cannot use is an error that names the row or the rule. */
+export function buildCatalog(
+  rows: readonly Row[],
+  rules: Rules,
+  codes: readonly CodeEntry[],
+): Catalog {
+  const byId = new Map<string, Row[]>();
+  for (const row of rows) {
+    if (!row.id) throw new Error("A row has no id");
+    if (ruleTileIds.includes(row.id)) {
+      throw new Error(`${row.id} cannot be an id: it is made from the rules`);
+    }
+    const list = byId.get(row.id);
+    if (list) list.push(row);
+    else byId.set(row.id, [row]);
+  }
+  /* Every item and option has a link code: one given before, or the next one */
+  const merged = withCodes(codes, [
+    ...ruleTileIds.map((id) => ({ id, option: "" })),
+    ...rows.map((row) => ({ id: row.id, option: row.option })),
+  ]);
+  const entryOf = new Map(merged.map((entry) => [entry.id, entry]));
+  const codeOf = (id: string) => entryOf.get(id)?.code ?? 0;
+
+  const packageRules: PackageRule[] = [];
+  const list: Tile[] = ruleTiles(rules, codeOf, packageRules);
+  for (const [id, own] of byId) {
+    const first = own[0] as Row;
+    if (own.length > 1 && own.some((row) => !row.option)) {
+      fail(first, `${id} has ${own.length} rows. An item has one row, or one for each option`);
+    }
+    const entry = entryOf.get(id) as CodeEntry;
+    list.push(
+      first.option
+        ? modeTile(own, entry, packageRules)
+        : plainTile(first, entry.code, packageRules),
+    );
+  }
+
+  const tileById = new Map(list.map((item) => [item.id, item]));
+  const byCode = new Map<number, Tile>();
+  for (const item of list) {
+    const taken = byCode.get(item.code);
+    if (taken) throw new Error(`${item.label} and ${taken.label} have the same code, ${item.code}`);
+    byCode.set(item.code, item);
+    /* A design line is named after its task: "ai-menu". No task may already have that name. */
+    for (const name of [`ai-${item.id}`, `design-${item.id}`]) {
+      if (tileById.has(name)) throw new Error(`${item.id} cannot be an id: ${name} is one already`);
+    }
+  }
+  for (const id of neededIds) {
+    if (!tileById.has(id))
+      throw new Error(`The table has no ${id} row. The page is built around it`);
+  }
+  for (const [id, parts] of Object.entries(partsOf)) {
+    if (!tileById.has(id)) continue;
+    for (const part of parts) {
+      if (!tileById.has(part)) throw new Error(`The table has ${id} and not its part, ${part}`);
+    }
+  }
+  /* "ai-variants" is the line for extra design variants */
+  if (tileById.has("variants")) throw new Error("variants cannot be an id");
+
+  /* Reasons are listed by the tasks' codes, so moving a row in the table never reorders them */
+  const ruleCode = (item: PackageRule) => tileById.get(item.tileId)?.code ?? 0;
+  packageRules.sort((a, b) => ruleCode(a) - ruleCode(b) || a.at - b.at);
+
+  return {
+    tiles: list,
+    byId: tileById,
+    byCode,
+    packageRules,
+    pages: pageRule(rules),
+    variantPercent: rule(rules, "ai-variant-percent"),
+    codes: merged,
+  };
+}
+
+/* The catalog in use. The page is built from the files it was shipped with; the calculations page
+   also reads drafts of them, and puts one in use for as long as it takes to price an estimate. */
+
+let active: Catalog = buildCatalog(
+  parseTable(liveText),
+  parseRules(liveRulesText),
+  parseCodes(liveCodesText),
+);
+
+export let tiles: readonly Tile[] = active.tiles;
+export let packageRules: readonly PackageRule[] = active.packageRules;
+/** More than this many website pages needs Professional. */
+export let starterPageCap: number = (active.pages.steps[0]?.at ?? 1) - 1;
+export let defaultWebsitePages: number = active.pages.initial;
+
+export function currentCatalog(): Catalog {
+  return active;
+}
+
+/** Puts a catalog in use, and returns the one it replaces. */
+export function useCatalog(next: Catalog): Catalog {
+  const before = active;
+  active = next;
+  tiles = next.tiles;
+  packageRules = next.packageRules;
+  starterPageCap = (next.pages.steps[0]?.at ?? 1) - 1;
+  defaultWebsitePages = next.pages.initial;
+  return before;
+}
+
+export function withCatalog<Result>(next: Catalog, run: () => Result): Result {
+  const before = useCatalog(next);
+  try {
+    return run();
+  } finally {
+    useCatalog(before);
+  }
+}
+
+export function comingLaterTiles(): Tile[] {
+  return tiles.filter((item) => item.disabled && !item.hidden);
+}
+
+export function getTile(id: string): Tile {
+  const found = active.byId.get(id);
+  if (!found) throw new Error(`Unknown tile: ${id}`);
+  return found;
+}
+
+export function hasTile(id: string): boolean {
+  return active.byId.has(id);
+}
+
+/** An item that is shown: in the table, and not hidden. */
+export function isShown(id: string): boolean {
+  const found = active.byId.get(id);
+  return !!found && !found.hidden;
+}
+
+/** What the shelf offers, in the table's order: its items, the Blog and the Product catalogue.
+    Hidden ones are left out. */
+export function shelfTiles(): Tile[] {
+  return tiles.filter(
+    (item) =>
+      !item.hidden &&
+      (item.place === "shelf" || item.id === "blog-setups" || item.id === catalogueId),
+  );
+}
+
+/** The Product catalogue's sources, as its Source buttons show them: the one with options first,
+    then those to come. Hidden ones are left out. */
+export function catalogueSources(): Tile[] {
+  return tiles
+    .filter((item) => item.source !== undefined && !item.hidden)
+    .sort((a, b) => Number(b.id === catalogueId) - Number(a.id === catalogueId));
+}
+
+export function tileByCode(code: number): Tile | undefined {
+  return active.byCode.get(code);
+}
+
+/** In the table's order, which is the order hours are listed in. */
+export function tilesInGroup(group: GroupId): Tile[] {
+  return tiles.filter((item) => item.group === group);
+}
+
+export function pageLimits(): { min: number; max: number } {
+  return active.pages;
+}
+
+/** The tier a page count needs, when it needs more than Starter. */
+export function pageEdition(count: number): EditionHit | null {
+  let found: EditionHit | null = null;
+  for (const step of active.pages.steps) {
+    if (count < step.at) continue;
+    found = {
+      edition: step.edition,
+      reason: `${step.at - 1}+ website pages need Content Hub ${editionLabel[step.edition]}`,
+    };
+  }
+  return found;
+}
+
+function modeAt(item: Tile, qty: number): TileMode | undefined {
+  if (!item.modes || item.modes.length === 0) return undefined;
+  return item.modes[Math.min(item.modes.length, Math.max(1, Math.round(qty))) - 1];
+}
+
+export function tileMode(item: Tile, qty: number): TileMode | undefined {
+  return modeAt(item, qty);
+}
+
+/** Build hours of a task at a quantity, for a design choice. */
+export function tileHours(item: Tile, qty: number, choice: Choice): number {
+  if (item.disabled || item.hidden) return 0;
+  const kind = buildKind(choice);
+  if (item.modes && item.modes.length > 0) return modeAt(item, qty)?.build[kind] ?? 0;
+  const rate = item.build[kind];
+  if (!item.unit) return rate;
+  const units = Math.max(0, qty - item.includedInBase);
+  if (units > 0 && item.firstUnitHours !== undefined) {
+    return item.firstUnitHours + rate * (units - 1);
+  }
+  return rate * units;
+}
+
+export function modeLabel(item: Tile, qty: number): string | undefined {
+  return modeAt(item, qty)?.label;
+}
+
 export type DesignPart = {
   id: string;
   label: string;
@@ -1096,302 +1318,55 @@ export type DesignPart = {
   hours: number;
 };
 
-export type DesignInput = {
-  templates: number;
-  landing: number;
-  sections: number;
-  /** 0 off, 1 simple, 2 advanced. */
-  menu: number;
-  header: boolean;
-  footer: boolean;
-  customForms: boolean;
-  /** 0 off, 1 simple, 2 advanced. */
-  search: number;
-  systemPages: boolean;
-  setup: boolean;
-  listTemplates: number;
-  listAdvanced: boolean;
-  postTemplates: number;
-  postAdvanced: boolean;
-  recentPosts: boolean;
-  hubdb: number;
-  /** 0 off, then module based, simple, filtered, multi-level. */
-  catalogue: number;
-  favoriteProducts: number;
-  relatedProducts: boolean;
-};
-
-const catalogueDesignMode = [
-  "",
-  "Module based",
-  "Simple",
-  "Filtered",
-  "Multi-level",
-  "Custom",
-] as const;
-
-type DesignRates = {
-  template: number;
-  landing: number;
-  section: number;
-  menuSimple: number;
-  menuAdvanced: number;
-  header: number;
-  footer: number;
-  customForms: number;
-  searchSimple: number;
-  searchAdvanced: number;
-  system: number;
-  setup: number;
-  blogListSimple: number;
-  blogListAdvanced: number;
-  blogPostSimple: number;
-  blogPostAdvanced: number;
-  recent: number;
-  hubdb: number;
-  catalogue: readonly [number, number, number, number, number, number];
-  favorite: number;
-  related: number;
-};
-
-const customDesignRates: DesignRates = {
-  template: 2,
-  landing: 2,
-  section: 3,
-  menuSimple: 2,
-  menuAdvanced: 8,
-  header: 2,
-  footer: 3,
-  customForms: 4,
-  searchSimple: 3,
-  searchAdvanced: 6,
-  system: 5,
-  setup: 4,
-  blogListSimple: 4,
-  blogListAdvanced: 6,
-  blogPostSimple: 4,
-  blogPostAdvanced: 6,
-  recent: 3,
-  hubdb: 3,
-  catalogue: [0, 16, 10, 18, 28, 0],
-  favorite: 3,
-  related: 3,
-};
-
-const aiDesignRates: DesignRates = {
-  template: 1,
-  landing: 1,
-  section: 1,
-  menuSimple: 1,
-  menuAdvanced: 1,
-  header: 1,
-  footer: 1,
-  customForms: 1,
-  searchSimple: 1,
-  searchAdvanced: 1,
-  system: 1,
-  setup: 4,
-  blogListSimple: 2,
-  blogListAdvanced: 2,
-  blogPostSimple: 2,
-  blogPostAdvanced: 2,
-  recent: 1,
-  hubdb: 1,
-  catalogue: [0, 6, 4, 6, 10, 0],
-  favorite: 1,
-  related: 1,
-};
-
-/** Two variants are the starting cost. Each variant after that adds half of that cost, rounded up. */
-/** One variant beyond the two included: half the base design, rounded up to a whole hour. */
+/** One variant beyond the included ones: a share of the base design, rounded up to a whole hour. */
 export function aiVariantHours(baseHours: number): number {
-  return Math.ceil(baseHours / 2);
+  return Math.ceil((baseHours * active.variantPercent) / 100);
 }
 
-function designLines(
-  input: DesignInput,
-  rates: DesignRates,
-  idPrefix: string,
-  namePrefix: string,
+/** How much of a task is in the estimate: its quantity or mode. */
+export type Amount = { qty: number };
+
+/**
+ * Design hours, one line for each task that has a design rate and is in the estimate. Custom
+ * design is charged only while Custom design is on; AI design is one set of these lines.
+ */
+export function designParts(
+  kind: DesignKind,
+  amountOf: (item: Tile) => Amount | undefined,
 ): DesignPart[] {
-  const menuAdvanced = input.menu >= 2;
-  const searchAdvanced = input.search >= 2;
-  const listRate = input.listAdvanced ? rates.blogListAdvanced : rates.blogListSimple;
-  const postRate = input.postAdvanced ? rates.blogPostAdvanced : rates.blogPostSimple;
-  const catalogueLevel = Math.min(rates.catalogue.length - 1, Math.max(0, input.catalogue));
-  const catalogueMode = catalogueDesignMode[catalogueLevel] ?? "";
-  const parts: DesignPart[] = [
-    {
-      id: `${idPrefix}templates`,
-      label: `${namePrefix}Page template design`,
-      qty: input.templates,
-      unit: "templates",
-      hours: rates.template * input.templates,
-    },
-    {
-      id: `${idPrefix}landing`,
-      label: `${namePrefix}Landing page design`,
-      qty: input.landing,
-      unit: "templates",
-      hours: rates.landing * input.landing,
-    },
-    {
-      id: `${idPrefix}sections`,
-      label: `${namePrefix}Section design`,
-      qty: input.sections,
-      unit: "sections",
-      hours: rates.section * input.sections,
-    },
-    {
-      id: `${idPrefix}menu`,
-      label: `${namePrefix}Menu design`,
-      qty: 1,
-      ...(rates.menuSimple === rates.menuAdvanced
-        ? {}
-        : { mode: menuAdvanced ? "Advanced" : "Simple" }),
-      hours: input.menu === 0 ? 0 : menuAdvanced ? rates.menuAdvanced : rates.menuSimple,
-    },
-    {
-      id: `${idPrefix}header`,
-      label: `${namePrefix}Global header design`,
-      qty: 1,
-      hours: input.header ? rates.header : 0,
-    },
-    {
-      id: `${idPrefix}footer`,
-      label: `${namePrefix}Global footer design`,
-      qty: 1,
-      hours: input.footer ? rates.footer : 0,
-    },
-    {
-      id: `${idPrefix}custom-forms`,
-      label: `${namePrefix}Custom forms design`,
-      qty: 1,
-      hours: input.customForms ? rates.customForms : 0,
-    },
-    {
-      id: `${idPrefix}search`,
-      label: `${namePrefix}Search design`,
-      qty: 1,
-      ...(rates.searchSimple === rates.searchAdvanced
-        ? {}
-        : { mode: searchAdvanced ? "Advanced" : "Simple" }),
-      hours: input.search === 0 ? 0 : searchAdvanced ? rates.searchAdvanced : rates.searchSimple,
-    },
-    {
-      id: `${idPrefix}system`,
-      label: `${namePrefix}Custom system templates design`,
-      qty: 1,
-      hours: input.systemPages ? rates.system : 0,
-    },
-    {
-      id: `${idPrefix}setup`,
-      label: `${namePrefix}Setup and launch design`,
-      qty: 1,
-      hours: input.setup ? rates.setup : 0,
-    },
-    {
-      id: `${idPrefix}blog-list`,
-      label: `${namePrefix}Blog list design`,
-      qty: input.listTemplates,
-      unit: "templates",
-      ...(rates.blogListSimple === rates.blogListAdvanced
-        ? {}
-        : { mode: input.listAdvanced ? "Advanced" : "Simple" }),
-      hours: input.listTemplates * listRate,
-    },
-    {
-      id: `${idPrefix}blog-post`,
-      label: `${namePrefix}Blog post design`,
-      qty: input.postTemplates,
-      unit: "templates",
-      ...(rates.blogPostSimple === rates.blogPostAdvanced
-        ? {}
-        : { mode: input.postAdvanced ? "Advanced" : "Simple" }),
-      hours: input.postTemplates * postRate,
-    },
-    {
-      id: `${idPrefix}recent`,
-      label: `${namePrefix}Recent blog posts design`,
-      qty: 1,
-      hours: input.recentPosts ? rates.recent : 0,
-    },
-    {
-      id: `${idPrefix}hubdb`,
-      label: `${namePrefix}HubDB section design`,
-      qty: input.hubdb,
-      unit: "modules",
-      hours: rates.hubdb * input.hubdb,
-    },
-    {
-      id: `${idPrefix}catalogue`,
-      label: `${namePrefix}Product catalogue design`,
-      qty: 1,
-      ...(catalogueMode ? { mode: catalogueMode } : {}),
-      hours: rates.catalogue[catalogueLevel] ?? 0,
-    },
-    {
-      id: `${idPrefix}favorites`,
-      label: `${namePrefix}Favorite products design`,
-      qty: input.favoriteProducts,
-      unit: "sections",
-      hours: rates.favorite * input.favoriteProducts,
-    },
-    {
-      id: `${idPrefix}related`,
-      label: `${namePrefix}Related products design`,
-      qty: 1,
-      hours: input.relatedProducts ? rates.related : 0,
-    },
-  ];
-  return parts.filter((part) => part.hours > 0);
-}
-
-/** Design hours. Charged only while Custom design is on. Build hours are separate. */
-export function designParts(input: DesignInput): DesignPart[] {
-  return designLines(input, customDesignRates, "design-", "");
-}
-
-/** AI design hours for one set, multiplied by the variant sets. */
-export function aiDesignParts(input: DesignInput): DesignPart[] {
-  return designLines(input, aiDesignRates, "ai-", "AI ");
-}
-
-function assertCatalog(): void {
-  const ids = new Set<string>();
-  for (const item of tiles) {
-    if (ids.has(item.id)) throw new Error(`Duplicate tile: ${item.id}`);
-    ids.add(item.id);
-    if (item.modes && item.max !== item.modes.length) {
-      throw new Error(`${item.id} mode count does not match its max`);
-    }
-    if (item.initial < item.min || item.initial > item.max) {
-      throw new Error(`${item.id} initial quantity is outside its range`);
-    }
-    if (item.stepped && !item.unit) throw new Error(`${item.id} has a stepper and no unit`);
-    for (const req of item.requires) {
-      if (!tileById.has(req)) throw new Error(`${item.id} requires unknown tile ${req}`);
+  const prefix = kind === "ai" ? "ai" : "design";
+  const parts: DesignPart[] = [];
+  for (const group of groups) {
+    for (const item of tilesInGroup(group.id)) {
+      if (item.hidden || item.disabled) continue;
+      const amount = amountOf(item);
+      if (!amount) continue;
+      const id = `${prefix}-${item.id}`;
+      const label = `${kind === "ai" ? "AI " : ""}${item.designLabel}`;
+      let part: DesignPart;
+      if (item.modes && item.modes.length > 0) {
+        const mode = modeAt(item, amount.qty);
+        const rate = mode?.design[kind] ?? 0;
+        /* The mode is named only when it changes the hours */
+        const named = item.modes.some((other) => other.design[kind] !== rate);
+        part = {
+          id,
+          label,
+          qty: 1,
+          ...(named && mode ? { mode: mode.label } : {}),
+          hours: rate,
+        };
+      } else if (item.stepped) {
+        part = {
+          id,
+          label,
+          qty: amount.qty,
+          ...(item.unit ? { unit: item.unit } : {}),
+          hours: item.design[kind] * amount.qty,
+        };
+      } else part = { id, label, qty: 1, hours: item.design[kind] };
+      if (part.hours > 0) parts.push(part);
     }
   }
-
-  for (const parcel of parcels) {
-    const included = new Set(parcel.items.map((item) => item.tileId));
-    for (const item of parcel.items) {
-      const piece = tileById.get(item.tileId);
-      if (!piece) throw new Error(`${parcel.id} includes unknown tile ${item.tileId}`);
-      if (item.min > item.max || item.qty < item.min || item.qty > item.max) {
-        throw new Error(`${parcel.id} ${item.tileId} is outside its own band`);
-      }
-      if (item.qty < piece.min || item.qty > piece.max) {
-        throw new Error(`${parcel.id} ${item.tileId} quantity ${item.qty} is outside the tile`);
-      }
-      for (const req of piece.requires) {
-        if (!included.has(req)) {
-          throw new Error(`${parcel.id} includes ${piece.id} without ${req}`);
-        }
-      }
-    }
-  }
+  return parts;
 }
-
-assertCatalog();

@@ -1,0 +1,1250 @@
+/* The calculations page. It takes its colours, type sizes and radii from the tokens in the :root of
+   ../styles.css, so it reads as the same product: cream page, white cards, ink-blue for what is
+   chosen, orange for design, teal for content. Its own: a changed value is marked in the tick's
+   yellow, and a value not saved yet has a dashed edge. */
+
+body.calc {
+  --cell: color-mix(in srgb, var(--basics) 55%, var(--bg));
+  --cell-hover: color-mix(in srgb, var(--basics) 90%, var(--bg));
+  --own: color-mix(in srgb, var(--features) 50%, var(--bg));
+  /* Live is green, made of content's teal and the tick's yellow; Soon is the locked shelf's beige */
+  --live: color-mix(in srgb, var(--content) 72%, var(--tick));
+  --soon: var(--shelf-text);
+  --soon-bg: color-mix(in srgb, var(--shelf) 45%, var(--bg));
+  --package: var(--chosen);
+  --package-bg: color-mix(in srgb, var(--chosen) 9%, var(--bg));
+  --tier: var(--hub-text);
+  --tier-bg: var(--hub-card);
+  --row-h: 36px;
+  background: var(--basics);
+}
+
+/* ---------- The window: left | the table | estimates. Each scrolls on its own ---------- */
+
+body.calc,
+body.calc #calc {
+  height: 100%;
+}
+.c-page {
+  display: grid;
+  height: 100%;
+  padding: 16px 20px;
+}
+.c-layout {
+  display: grid;
+  grid-template-columns: 296px minmax(0, 1fr) 256px;
+  gap: 16px;
+  min-height: 0;
+}
+.c-side {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  /* Room for the cards' shadows inside the scroller */
+  padding: 2px 4px 8px;
+  margin: -2px -4px -8px;
+}
+.c-middle {
+  min-height: 0;
+}
+.c-page a {
+  color: var(--chosen);
+  text-underline-offset: 3px;
+}
+
+/* ---------- Head: what this is, Save, the state of the draft ---------- */
+
+.c-head {
+  position: sticky;
+  top: -2px;
+  z-index: 2;
+  display: grid;
+  gap: 12px;
+  margin: -2px -4px 0;
+  padding: 2px 4px 12px;
+  background: var(--basics);
+}
+.c-title h1 {
+  margin: 0;
+  font: 400 36px / 1 var(--serif);
+  letter-spacing: -0.01em;
+}
+.c-title p {
+  margin-top: 6px;
+  font-size: var(--fs-sub);
+  color: var(--muted);
+}
+.c-actions {
+  display: flex;
+  gap: 8px;
+}
+.c-actions .c-btn.primary {
+  min-width: 96px;
+}
+.c-status {
+  display: grid;
+  gap: 6px;
+  font-size: var(--fs-sub);
+  color: var(--muted);
+}
+.c-status > p:first-child {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.c-status .c-draft {
+  color: var(--ink);
+  font-weight: 600;
+}
+.c-led {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--control-off);
+}
+.c-led.is-kept {
+  background: var(--tick);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 25%, transparent);
+}
+.c-led.is-pending {
+  background: var(--bg);
+  box-shadow: inset 0 0 0 1.5px var(--ink);
+}
+.c-small {
+  font-size: var(--fs-note);
+  color: var(--faint);
+}
+.c-small.is-done {
+  color: var(--content);
+  font-weight: 600;
+}
+.c-warn {
+  padding: 8px 10px;
+  border-radius: var(--r-ctl);
+  background: color-mix(in srgb, var(--remove) 8%, var(--bg));
+  color: var(--remove);
+  font-size: var(--fs-note);
+  font-weight: 600;
+}
+
+.c-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: var(--r-ctl);
+  background: var(--bg);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  color: var(--ink);
+  font-size: var(--fs-action);
+  font-weight: 600;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.c-btn:hover:not(:disabled) {
+  box-shadow: inset 0 0 0 1px var(--chosen);
+}
+.c-btn.primary {
+  background: var(--chosen);
+  box-shadow: none;
+  color: var(--on-chosen);
+}
+.c-btn.primary:hover:not(:disabled) {
+  background: var(--chosen-hover);
+}
+.c-btn.quiet {
+  background: transparent;
+}
+.c-btn:disabled {
+  background: var(--control);
+  box-shadow: none;
+  color: var(--faint);
+  cursor: default;
+}
+
+/* ---------- Cards ---------- */
+
+.c-card {
+  min-width: 0;
+  padding: 14px 16px 16px;
+  border-radius: var(--r-page);
+  background: var(--bg);
+  box-shadow: var(--shadow-card);
+}
+.c-card h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-section);
+  line-height: 20px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.c-count {
+  padding: 0 6px;
+  border-radius: 9px;
+  background: var(--tick);
+  color: var(--ink);
+  font-size: var(--fs-tag);
+  letter-spacing: 0;
+  line-height: 18px;
+}
+.c-note {
+  margin-top: 4px;
+  font-size: var(--fs-note);
+  color: var(--muted);
+}
+.c-empty {
+  margin-top: 6px;
+  font-size: var(--fs-note);
+  color: var(--faint);
+}
+
+/* What is not the published value */
+.is-changed {
+  border-radius: var(--r-inner);
+  background: var(--tick);
+  box-shadow: 0 0 0 3px var(--tick);
+  color: var(--ink);
+  font-weight: 700;
+}
+/* Not saved yet: a dashed edge */
+.is-unsaved,
+.c-key-unsaved {
+  outline: 1.5px dashed var(--ink);
+  outline-offset: 1px;
+}
+.c-same {
+  color: var(--faint);
+}
+
+/* The list of changes */
+.c-changes {
+  display: grid;
+  margin-top: 6px;
+  font-size: var(--fs-note);
+}
+.c-changes li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.c-changes li:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.c-changes .c-what {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 6px;
+  min-width: 0;
+}
+.c-changes .c-what b {
+  font-size: var(--fs-sub);
+}
+.c-changes .c-what small {
+  color: var(--muted);
+}
+.c-changes .c-fromto {
+  grid-column: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.c-changes .c-fromto .is-changed {
+  padding: 0 2px;
+  box-shadow: none;
+}
+.c-changes .c-was {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+.c-changes .c-arrow {
+  color: var(--faint);
+}
+.c-unsaved {
+  color: var(--faint);
+  font-style: italic;
+}
+.c-undo {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: var(--r-ctl);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  color: var(--ink);
+  font-size: var(--fs-note);
+  font-weight: 600;
+}
+.c-undo:hover {
+  box-shadow: inset 0 0 0 1px var(--chosen);
+}
+
+/* Fields of the side panels */
+.c-in {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  height: 26px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: var(--r-inner);
+  background: var(--cell);
+  color: var(--ink);
+  text-align: right;
+  font-size: var(--fs-sub);
+  font-variant-numeric: tabular-nums;
+  transition: box-shadow 0.12s;
+}
+.c-in:hover {
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+.c-in:focus-visible {
+  outline: 2px solid var(--chosen);
+  outline-offset: 0;
+  background: var(--bg);
+}
+.c-in::placeholder {
+  color: color-mix(in srgb, var(--faint) 55%, transparent);
+}
+.c-in.is-changed {
+  background: var(--tick);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 35%, transparent);
+}
+
+/* Design: a field for each design choice */
+.c-grid-form {
+  width: auto;
+  margin-top: 8px;
+  border-collapse: collapse;
+  font-size: var(--fs-sub);
+}
+.c-grid-form thead th {
+  padding: 0 0 4px;
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-align: right;
+  color: var(--ink);
+}
+.c-grid-form thead th.is-later {
+  color: var(--faint);
+}
+.c-grid-form tbody th {
+  padding: 3px 6px 3px 0;
+  font-weight: 500;
+  text-align: left;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.c-grid-form .c-sub th {
+  padding: 10px 0 2px;
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+.c-grid-form td {
+  width: 48px;
+  padding: 2px 0 2px 6px;
+}
+.c-grid-form td.c-unit {
+  width: 14px;
+  padding-left: 4px;
+  font-size: var(--fs-note);
+  color: var(--faint);
+}
+.c-grid-form .c-na {
+  text-align: right;
+  padding-right: 8px;
+  color: var(--control-off);
+}
+.c-card > .c-small {
+  margin-top: 10px;
+}
+
+/* Languages: a number on each line */
+.c-lines {
+  max-width: 300px;
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+}
+.c-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 52px 66px;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-sub);
+  color: var(--muted);
+}
+.c-line .c-unit {
+  font-size: var(--fs-note);
+  color: var(--faint);
+}
+
+/* Adding an item */
+.c-add {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+.c-field {
+  display: grid;
+  gap: 5px;
+  font-size: var(--fs-sub);
+}
+.c-field-name {
+  font-weight: 600;
+}
+.c-field small {
+  font-size: var(--fs-note);
+  color: var(--muted);
+}
+.c-text {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--r-ctl);
+  background: var(--basics-row);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+.c-text:focus-visible {
+  outline: 2px solid var(--chosen);
+  outline-offset: 0;
+  background: var(--bg);
+}
+.c-seg {
+  display: flex;
+  padding: 3px;
+  border-radius: var(--r-ctl);
+  background: var(--control);
+}
+.c-seg label {
+  position: relative;
+  flex: 1;
+  display: grid;
+  place-items: center;
+  height: 28px;
+  border-radius: var(--r-inner);
+  font-size: var(--fs-control);
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+}
+.c-seg input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.c-seg label.is-on {
+  background: var(--chosen);
+  color: var(--on-chosen);
+}
+.c-seg label:has(input:focus-visible) {
+  outline: 2px solid var(--chosen);
+  outline-offset: 1px;
+}
+.c-add-row {
+  display: flex;
+}
+
+/* Rules in the code: folded */
+.c-fold > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  list-style: none;
+}
+.c-fold > summary::-webkit-details-marker {
+  display: none;
+}
+.c-fold > summary::after {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-right: 1.5px solid var(--muted);
+  border-bottom: 1.5px solid var(--muted);
+  transform: translateY(-2px) rotate(45deg);
+  transition: transform 0.15s;
+}
+.c-fold[open] > summary::after {
+  transform: translateY(2px) rotate(-135deg);
+}
+.c-rules {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+  padding-left: 16px;
+  list-style: disc;
+  font-size: var(--fs-note);
+  color: var(--muted);
+}
+
+/* ---------- Estimates: one card each in the right panel ---------- */
+
+.c-est {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+.c-est-item {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: var(--r-ctl);
+  box-shadow: inset 0 0 0 1px var(--line);
+  font-size: var(--fs-sub);
+  font-variant-numeric: tabular-nums;
+}
+.c-est-item.is-picked {
+  background: var(--own);
+  box-shadow: inset 0 0 0 1.5px var(--chosen);
+}
+.c-est-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.c-est-name input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--chosen);
+}
+.c-est-total {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  font-size: var(--fs-package);
+  font-weight: 700;
+}
+.c-est-total .c-arrow {
+  color: var(--faint);
+  font-weight: 400;
+}
+.c-est-total .c-delta,
+.c-est-total .c-same {
+  font-size: var(--fs-note);
+}
+.c-est-meta {
+  color: var(--muted);
+}
+.c-est-meta .c-dot {
+  margin: 0 6px;
+}
+.c-est-split {
+  display: flex;
+  gap: 14px;
+  margin: 0;
+  font-size: var(--fs-note);
+}
+.c-est-split dt {
+  color: var(--muted);
+}
+.c-est-split dd {
+  margin: 0;
+  font-weight: 650;
+}
+.c-est-split .is-design dd {
+  color: var(--design);
+}
+.c-est-split .is-content dd {
+  color: var(--content);
+}
+.c-links {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  font-size: var(--fs-note);
+  color: var(--faint);
+}
+.c-links a {
+  font-weight: 600;
+}
+.c-links code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font:
+    var(--fs-caption) ui-monospace,
+    "SF Mono",
+    Menlo,
+    monospace;
+  user-select: all;
+}
+.c-load {
+  display: grid;
+  gap: 6px;
+  margin-top: 14px;
+  font-size: var(--fs-name);
+}
+.c-load-row {
+  display: flex;
+  gap: 8px;
+}
+.c-load label {
+  font-weight: 600;
+}
+.c-load .c-text {
+  flex: 1;
+}
+
+/* ---------- The table ---------- */
+
+.c-table-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 0;
+  overflow: hidden;
+}
+.c-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 16px;
+  padding: 12px 16px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.c-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  font-size: var(--fs-note);
+  color: var(--muted);
+}
+.c-legend .c-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.c-legend .c-key::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--dot);
+  box-shadow: var(--ring, none);
+}
+.c-legend .c-sep {
+  width: 1px;
+  height: 14px;
+  background: var(--line-strong);
+}
+.c-key-changed {
+  padding: 0 5px;
+  border-radius: 3px;
+  background: var(--tick);
+  color: var(--ink);
+  font-weight: 600;
+}
+.c-key-unsaved {
+  padding: 0 5px;
+  border-radius: 3px;
+  color: var(--ink);
+}
+.c-legend .c-hint {
+  color: var(--faint);
+}
+.c-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.c-main {
+  width: 100%;
+  min-width: max-content;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: var(--fs-sub);
+}
+.c-main .c-own,
+.c-main .c-num,
+.c-main tfoot .is-changed {
+  font-variant-numeric: tabular-nums;
+}
+.c-main .w-item {
+  width: 228px;
+}
+.c-main .w-stat {
+  width: 92px;
+}
+.c-main .w-type {
+  width: 100px;
+}
+.c-main .w-num {
+  width: 52px;
+}
+.c-main .w-hours {
+  width: 52px;
+}
+.c-main .w-pack {
+  width: 148px;
+}
+.c-main .w-tier {
+  width: 132px;
+}
+.c-main .w-own {
+  width: 54px;
+}
+.c-main th,
+.c-main td {
+  padding: 0 5px;
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.c-main .n {
+  text-align: right;
+}
+.c-main .g1 {
+  box-shadow: inset 1px 0 0 var(--line);
+}
+
+/* Headings: two rows that stay at the top while the table scrolls */
+.c-main thead th {
+  position: sticky;
+  z-index: 3;
+  background: var(--bg);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.c-main thead .c-heads th {
+  top: 0;
+  height: 30px;
+  padding-top: 8px;
+  vertical-align: bottom;
+}
+.c-main thead .c-heads th[rowspan] {
+  height: 58px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line-strong);
+}
+.c-main thead .c-heads2 th {
+  top: 30px;
+  height: 28px;
+  padding-bottom: 8px;
+  vertical-align: bottom;
+  border-bottom: 1px solid var(--line-strong);
+  font-size: var(--fs-note);
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.c-main thead th[data-tip] {
+  cursor: help;
+}
+.c-main thead th[data-tip]:hover {
+  color: var(--ink);
+}
+.c-main thead th:focus-visible {
+  outline: 2px solid var(--chosen);
+  outline-offset: -2px;
+}
+.c-main thead i {
+  display: block;
+  margin-bottom: 1px;
+  font-style: normal;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--faint);
+  line-height: 1;
+}
+.c-main thead .is-later {
+  color: var(--faint);
+}
+/* A heading over a group of columns, in the colour of what they count */
+.c-main thead .c-span {
+  padding-bottom: 6px;
+  text-align: center;
+  letter-spacing: 0.07em;
+}
+.c-main thead .c-span::after {
+  content: "";
+  display: block;
+  height: 2px;
+  margin: 5px 4px 0;
+  border-radius: 1px;
+  background: currentColor;
+}
+.c-main thead .c-span.is-build {
+  color: var(--ink);
+}
+.c-main thead .c-span.is-design {
+  color: var(--design);
+}
+.c-main thead .c-span.is-needs {
+  color: var(--muted);
+}
+.c-main thead .c-span.c-own {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: var(--fs-note);
+  color: var(--chosen);
+}
+
+/* The item: its name stays at the left while the table scrolls sideways */
+.c-main .c-item {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--bg);
+  box-shadow: inset -1px 0 0 var(--line);
+}
+.c-main thead .c-item {
+  z-index: 4;
+  padding-left: 16px;
+}
+
+/* A place: the estimator's four */
+.c-main .c-group th {
+  padding: 22px 0 8px;
+  border-bottom: 1px solid var(--line-strong);
+  background: var(--bg);
+}
+.c-main tbody .c-group:first-child th {
+  padding-top: 14px;
+}
+.c-group-in {
+  position: sticky;
+  left: 16px;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+  padding-left: 16px;
+}
+.c-group-in b {
+  font-size: var(--fs-section);
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--chosen);
+}
+.c-group-in span {
+  font-size: var(--fs-note);
+  font-weight: 400;
+  color: var(--faint);
+}
+
+/* Rows: one for an item, or its name with a row for each option under it */
+.c-main tbody .c-row > * {
+  height: var(--row-h);
+  border-bottom: 1px solid var(--line);
+}
+.c-main tbody .c-row.is-head > *,
+.c-main tbody .c-row.is-option:not(.is-last) > * {
+  border-bottom-color: color-mix(in srgb, var(--line) 55%, transparent);
+}
+.c-main tbody .c-row:hover > * {
+  background-color: color-mix(in srgb, var(--basics) 35%, var(--bg));
+}
+.c-main tbody .c-row:hover > .c-own {
+  background-color: color-mix(in srgb, var(--features) 70%, var(--bg));
+}
+.c-main tbody .c-item {
+  padding: 4px 8px 4px 16px;
+  white-space: normal;
+}
+.c-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.c-main .c-item small {
+  display: block;
+  padding-left: 7px;
+  font-size: var(--fs-caption);
+  color: var(--faint);
+  line-height: 1.3;
+}
+.c-in.c-name-in {
+  flex: 1;
+  height: 26px;
+  padding: 0 6px;
+  background: transparent;
+  text-align: left;
+  font-variant-numeric: normal;
+  font-weight: 650;
+  font-size: var(--fs-sub);
+}
+.c-in.c-name-in:hover {
+  background: var(--cell);
+}
+/* Options sit under their item, on a guide */
+.c-main tbody .c-opt {
+  padding-left: 30px;
+}
+.c-main tbody .c-opt::before,
+.c-main tbody .c-opt::after {
+  content: "";
+  position: absolute;
+  left: 20px;
+  background: var(--line-strong);
+}
+.c-main tbody .c-opt::before {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+}
+.c-main tbody .is-last .c-opt::before {
+  bottom: 50%;
+}
+.c-main tbody .c-opt::after {
+  top: 50%;
+  width: 8px;
+  height: 1px;
+}
+.c-main tbody .c-opt .c-name-in {
+  font-weight: 450;
+}
+/* An item added here and not saved yet: its whole row has the dashed edge */
+.c-main tbody .is-added > .c-item {
+  box-shadow:
+    inset 3px 0 0 var(--ink),
+    inset -1px 0 0 var(--line);
+}
+.c-main tbody .is-added > * {
+  border-bottom: 1.5px dashed var(--ink);
+}
+.c-newtag {
+  flex: none;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--ink);
+  color: var(--bg);
+  font-size: var(--fs-tag);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* Soon and Hidden, on the row */
+.c-main tbody .is-soon .c-name-in {
+  color: var(--muted);
+}
+.c-main tbody .is-hidden > * {
+  background-image: var(--stripes);
+}
+.c-main tbody .is-hidden .c-name-in {
+  color: var(--faint);
+  text-decoration: line-through;
+}
+
+.c-main .c-fixed {
+  display: block;
+  padding-left: 4px;
+  white-space: normal;
+  line-height: 1.2;
+  font-size: var(--fs-note);
+  color: var(--faint);
+}
+.c-main .c-num .c-in {
+  height: 26px;
+}
+.c-main .is-design .c-in {
+  color: var(--design);
+}
+.c-main .is-later .c-in {
+  background: transparent;
+  color: var(--muted);
+}
+.c-main .is-later .c-in:hover {
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+.c-main .is-design .c-in.is-changed,
+.c-main .is-later .c-in.is-changed {
+  background: var(--tick);
+  color: var(--ink);
+}
+.c-main .c-entered {
+  text-align: center;
+  font-size: var(--fs-note);
+  color: var(--faint);
+}
+.c-main .c-entered::before,
+.c-main .c-entered::after {
+  content: "";
+  display: inline-block;
+  width: 28px;
+  height: 1px;
+  margin: 0 8px;
+  vertical-align: middle;
+  background: var(--line-strong);
+}
+.c-start {
+  text-align: center;
+}
+.c-radio {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+}
+.c-radio.is-changed {
+  box-shadow: none;
+}
+.c-radio input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--chosen);
+  cursor: pointer;
+}
+.c-radio input:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+/* Pick-lists: a pill with a dot for what it is, in its colour, and a small caret */
+.c-pick {
+  --dot: transparent;
+  --mark: radial-gradient(circle at 10px 50%, var(--dot) 3.5px, transparent 4px);
+  --caret:
+    linear-gradient(45deg, transparent 50%, var(--faint) 50%) no-repeat right 12px center / 4px 4px,
+    linear-gradient(135deg, var(--faint) 50%, transparent 50%) no-repeat right 8px center / 4px 4px;
+  field-sizing: content;
+  max-width: 100%;
+  height: 24px;
+  padding: 0 22px 0 20px;
+  border: 0;
+  border-radius: 12px;
+  appearance: none;
+  background: var(--mark), var(--caret), var(--pill, transparent);
+  box-shadow: inset 0 0 0 1px var(--pill-line, var(--line));
+  color: var(--pill-text, var(--ink));
+  font-size: var(--fs-note);
+  font-weight: 600;
+  cursor: pointer;
+}
+.c-pick:hover {
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+.c-pick:focus-visible {
+  outline: 2px solid var(--chosen);
+  outline-offset: 1px;
+}
+.status-none {
+  --dot: var(--live);
+}
+.status-soon {
+  --dot: var(--soon);
+  --pill: var(--soon-bg);
+  --pill-line: transparent;
+  --pill-text: color-mix(in srgb, var(--soon) 70%, var(--ink));
+}
+/* Hidden: a ring, not a dot */
+.status-hidden {
+  --ring: inset 0 0 0 1.5px var(--faint);
+  --pill-text: var(--faint);
+}
+.c-pick.status-hidden {
+  --mark: radial-gradient(
+    circle at 10px 50%,
+    transparent 2.5px,
+    var(--faint) 3px,
+    var(--faint) 4px,
+    transparent 4.5px
+  );
+}
+.type-none {
+  --dot: var(--ink);
+}
+.type-content {
+  --dot: var(--content-dot);
+  --pill: color-mix(in srgb, var(--content-dot) 14%, var(--bg));
+  --pill-line: transparent;
+  --pill-text: var(--content);
+}
+.package-none,
+.tier-none {
+  --pill-text: var(--faint);
+  --pill-line: transparent;
+  font-weight: 500;
+}
+.c-main tbody .c-row:hover .package-none,
+.c-main tbody .c-row:hover .tier-none {
+  --pill-line: var(--line);
+}
+.c-pick.package-none,
+.c-pick.tier-none {
+  padding-left: 9px;
+}
+.package-growth,
+.package-platform {
+  --dot: var(--package);
+  --pill: var(--package-bg);
+  --pill-line: transparent;
+  --pill-text: var(--package);
+}
+.tier-professional,
+.tier-enterprise {
+  --dot: var(--hub);
+  --pill: var(--tier-bg);
+  --pill-line: transparent;
+  --pill-text: var(--tier);
+}
+.c-pick.is-changed {
+  --pill: var(--tick);
+  --pill-text: var(--ink);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 35%, transparent);
+}
+.c-need {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.c-from {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--fs-note);
+  color: var(--muted);
+}
+/* An empty "from" shows on the row under the pointer, or while it is being filled */
+.c-from.is-empty {
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.c-main tbody .c-row:hover .c-from.is-empty,
+.c-from.is-empty:focus-within {
+  opacity: 1;
+}
+.c-from .c-in {
+  width: 32px;
+  height: 24px;
+  padding: 0 5px;
+  font-size: var(--fs-note);
+}
+
+/* The chosen estimate's own columns: the pale blue of the estimate in the app */
+.c-main .c-own {
+  background: var(--own);
+  text-align: right;
+  font-weight: 600;
+}
+.c-main thead .c-own {
+  background: var(--own);
+}
+.c-main .c-own.first {
+  box-shadow: inset 1px 0 0 var(--line-strong);
+}
+.c-main .c-own.d {
+  color: var(--design);
+}
+.c-main .c-own .is-changed {
+  padding: 0 2px;
+  box-shadow: none;
+}
+.c-main tfoot th,
+.c-main tfoot td {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  height: 40px;
+  background: var(--bg);
+  box-shadow: inset 0 1px 0 var(--line-strong);
+  font-weight: 700;
+}
+.c-main tfoot th {
+  text-align: right;
+  padding-right: 12px;
+}
+.c-main tfoot .c-own {
+  background: var(--own);
+}
+.c-main tfoot .c-own.first {
+  box-shadow:
+    inset 0 1px 0 var(--line-strong),
+    inset 1px 0 0 var(--line-strong);
+}
+
+/* The popup under a column heading */
+.c-tip {
+  position: fixed;
+  z-index: 20;
+  width: max-content;
+  max-width: 300px;
+  padding: 10px 12px;
+  border-radius: var(--r-ctl);
+  background: var(--ink);
+  color: var(--bg);
+  font-size: var(--fs-note);
+  line-height: 1.4;
+  box-shadow: var(--shadow-pop);
+  pointer-events: none;
+}
+.c-tip[hidden] {
+  display: none;
+}
+.c-tip strong {
+  font-size: var(--fs-sub);
+}
+.c-tip p {
+  margin-top: 4px;
+}
+.c-tip .c-tip-eg {
+  color: var(--tick);
+}
+
+/* Narrower than 1100px the three stack and the page scrolls; the table keeps its own scroller */
+@media (max-width: 1100px) {
+  body.calc,
+  body.calc #calc,
+  .c-page {
+    height: auto;
+  }
+  .c-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .c-side {
+    overflow: visible;
+  }
+  .c-head {
+    position: static;
+  }
+  .c-middle {
+    order: 1;
+  }
+  .c-table-card {
+    height: 85vh;
+  }
+  .c-right {
+    order: 2;
+  }
+}

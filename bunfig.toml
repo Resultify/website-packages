@@ -3,3 +3,7 @@
 printWidth = 100
 # docs/ is the built site, minified by bun run build
 ignorePatterns = ["docs/**"]
+
+[serve.static]
+# Imports the tables as text in the dev server, also after they change (see scripts/csv-text.ts)
+plugins = ["./scripts/csv-text.ts"]

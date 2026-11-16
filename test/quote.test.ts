@@ -107,7 +107,7 @@ describe("package from options", () => {
     const recent = quote(setTile(setTile(essential(), "blog-setups", true), "blog-recent", true));
     expect(recent.shape).toBe("essential");
     expect(recent.lines.find((line) => line.id === "blog-recent")?.openHours).toBe(4);
-    expect(recent.lines.find((line) => line.id === "ai-recent")?.openHours).toBe(1);
+    expect(recent.lines.find((line) => line.id === "ai-blog-recent")?.openHours).toBe(1);
     const advancedMenu = quote(setQuantity(essential(), "menu", 2));
     expect(advancedMenu.lines.find((line) => line.id === "ai-menu")?.openHours).toBe(1);
     const search = quote(setTile(essential(), "search", true));
@@ -149,29 +149,29 @@ describe("package from options", () => {
     expect(catalogue.selection.tiles.hubdb).toBeUndefined();
     expect(catalogue.selection.tiles["product-catalogue"]).toBe(2);
     expect(catalogue.lines.find((line) => line.id === "product-catalogue")?.openHours).toBe(18);
-    expect(catalogue.lines.find((line) => line.id === "ai-catalogue")?.openHours).toBe(4);
+    expect(catalogue.lines.find((line) => line.id === "ai-product-catalogue")?.openHours).toBe(4);
     const moduleBased = quote(setQuantity(catalogue.selection, "product-catalogue", 1));
     expect(moduleBased.lines.find((line) => line.id === "product-catalogue")?.openHours).toBe(22);
-    expect(moduleBased.lines.find((line) => line.id === "ai-catalogue")?.openHours).toBe(6);
+    expect(moduleBased.lines.find((line) => line.id === "ai-product-catalogue")?.openHours).toBe(6);
     const filtered = quote(setQuantity(catalogue.selection, "product-catalogue", 3));
     expect(filtered.lines.find((line) => line.id === "product-catalogue")?.openHours).toBe(28);
-    expect(filtered.lines.find((line) => line.id === "ai-catalogue")?.openHours).toBe(6);
+    expect(filtered.lines.find((line) => line.id === "ai-product-catalogue")?.openHours).toBe(6);
     const multi = quote(setQuantity(catalogue.selection, "product-catalogue", 4));
     expect(multi.lines.find((line) => line.id === "product-catalogue")?.openHours).toBe(40);
-    expect(multi.lines.find((line) => line.id === "ai-catalogue")?.openHours).toBe(10);
+    expect(multi.lines.find((line) => line.id === "ai-product-catalogue")?.openHours).toBe(10);
 
     const favorites = quote(
       setQuantity(setTile(catalogue.selection, "favorite-products", true), "favorite-products", 2),
     );
     expect(favorites.lines.find((line) => line.id === "favorite-products")?.openHours).toBe(12);
-    expect(favorites.lines.find((line) => line.id === "ai-favorites")?.openHours).toBe(2);
+    expect(favorites.lines.find((line) => line.id === "ai-favorite-products")?.openHours).toBe(2);
     expect(
       quote(setTile(essential(), "favorite-products", true)).selection.tiles["favorite-products"],
     ).toBeUndefined();
 
     const related = quote(setTile(catalogue.selection, "related-products", true));
     expect(related.lines.find((line) => line.id === "related-products")?.openHours).toBe(6);
-    expect(related.lines.find((line) => line.id === "ai-related")?.openHours).toBe(1);
+    expect(related.lines.find((line) => line.id === "ai-related-products")?.openHours).toBe(1);
     expect(
       quote(setQuantity(related.selection, "product-catalogue", 1)).selection.tiles[
         "related-products"
@@ -194,21 +194,19 @@ describe("blog, languages, and content", () => {
     expect(three.lines.find((line) => line.id === "languages")?.openHours).toBe(20);
   });
 
-  test("one blog includes one simple list and post, and a second blog needs Growth", () => {
+  test("one blog includes one simple list and post, shared by every blog, and a second blog needs Growth", () => {
     const priced = quote(setQuantity(essential(), "blog-setups", 2));
     expect(priced.shape).toBe("growth");
     expect(priced.edition).toBe("professional");
     expect(priced.lines.find((line) => line.id === "blog-setups")?.openHours).toBe(0);
-    expect(priced.selection.tiles["blog-list-count"]).toBe(1);
-    expect(priced.selection.tiles["blog-post-count"]).toBe(1);
     expect(priced.lines.find((line) => line.id === "blog-list")?.openHours).toBe(4);
 
     const advanced = quote(setQuantity(priced.selection, "blog-list", 2));
     expect(advanced.lines.find((line) => line.id === "blog-list")?.openHours).toBe(8);
     expect(advanced.lines.find((line) => line.id === "ai-blog-list")?.openHours).toBe(2);
-    const twoLists = quote(setQuantity(advanced.selection, "blog-list-count", 2));
-    expect(twoLists.lines.find((line) => line.id === "blog-list")?.openHours).toBe(16);
-    expect(twoLists.lines.find((line) => line.id === "ai-blog-list")?.openHours).toBe(4);
+    /* The templates are shared: more blogs add no template hours */
+    const many = quote(setQuantity(advanced.selection, "blog-setups", 5));
+    expect(many.lines.find((line) => line.id === "blog-list")?.openHours).toBe(8);
   });
 
   test("turning the blog off removes its templates and recent posts", () => {
@@ -222,13 +220,6 @@ describe("blog, languages, and content", () => {
     expect(
       quote(setTile(off.selection, "blog-recent", true)).selection.tiles["blog-recent"],
     ).toBeUndefined();
-  });
-
-  test("additional redirects are not in the build yet", () => {
-    const priced = quote(setTile(essential(), "redirects", true));
-    expect(priced.selection.tiles.redirects).toBeUndefined();
-    expect(priced.lines.find((line) => line.id === "redirects")).toBeUndefined();
-    expect(priced.implementationHours).toBe(60);
   });
 
   test("content hours stay out of the build", () => {
@@ -279,7 +270,8 @@ describe("links", () => {
     const selected = selectionForShape("platform", 40);
     expect(decodeSelection(`#${encodeSelection(selected)}`)).toEqual(selected);
     expect(decodeSelection("")).toBeNull();
-    expect(decodeSelection("#s=nimbly-lite&w=25&b=same&t=")).toBeNull();
+    /* The address the app wrote before short links is not read any more */
+    expect(decodeSelection("#s=cms-react&w=25&b=same&t=templates.3")).toBeNull();
   });
 });
 
@@ -327,7 +319,7 @@ describe("custom catalogue hours", () => {
     const priced = quote(setQuantity(custom(), "catalogue-custom", 25));
     expect(priced.lines.find((line) => line.id === "product-catalogue")?.openHours).toBe(0);
     expect(priced.lines.find((line) => line.id === "catalogue-custom")?.openHours).toBe(25);
-    expect(priced.lines.find((line) => line.id === "ai-catalogue")).toBeUndefined();
+    expect(priced.lines.find((line) => line.id === "ai-product-catalogue")).toBeUndefined();
     expect(priced.shape).toBe("platform");
   });
 
@@ -385,11 +377,34 @@ describe("extra AI variants", () => {
 
 describe("step hours", () => {
   test("steps add up to the total", () => {
-    const decoded = decodeSelection(
-      "#s=cms-react&w=40&b=same&t=ai-design.3,ai-feedback.2,blog-recent.1,blog-setups.2,blog-list.2,blog-post.1,blog-list-count.2,blog-post-count.1,favorite-products.2,footer.1,header.1,hubdb.2,landing-templates.3,languages.3,menu.2,product-catalogue.3,related-products.1,search.2,sections.14,setup.1,system.1,custom-forms.1,templates.6,content-hours.25",
-    );
-    if (!decoded) throw new Error("Could not decode");
-    const priced = quote(decoded);
+    const priced = quote({
+      startingPoint: "cms-react",
+      websitePages: 40,
+      tiles: {
+        "ai-design": 3,
+        "ai-feedback": 2,
+        "blog-recent": 1,
+        "blog-setups": 2,
+        "blog-list": 2,
+        "blog-post": 1,
+        "favorite-products": 2,
+        footer: 1,
+        header: 1,
+        hubdb: 2,
+        "landing-templates": 3,
+        languages: 3,
+        menu: 2,
+        "product-catalogue": 3,
+        "related-products": 1,
+        search: 2,
+        sections: 14,
+        setup: 1,
+        system: 1,
+        "custom-forms": 1,
+        templates: 6,
+        "content-hours": 25,
+      },
+    });
     const steps = ["design", "basics", "addons", "languages", "content"] as const;
     const sum = steps.reduce((total, step) => total + stepHours(priced, step), 0);
     expect(sum).toBeCloseTo(priced.hours);
