@@ -14,6 +14,7 @@ import {
   basicsTileIds,
   type Choice,
   catalogueId,
+  madeLineIds,
   defaultWebsitePages,
   type DesignChoice,
   type DesignPart,
@@ -46,6 +47,7 @@ import {
   type StartingPoint,
   type StartingPointId,
   type StepId,
+  shelfSource,
   sourceTiles,
   startingDesign,
   starterPageCap,
@@ -353,7 +355,7 @@ const isRequiredPart = (id: string) => {
 export function setSource(selection: Selection, sourceId: string): Selection {
   let source = getTile(sourceId);
   if (source.disabled || source.hidden) {
-    const first = sourceTiles().find((item) => !item.disabled && !item.hidden);
+    const first = shelfSource();
     if (sourceId !== catalogueId || !first) return selection;
     source = first;
   }
@@ -490,9 +492,9 @@ type Priced = {
   lines: HourLine[];
 };
 
-const aiVariantsLineId = "ai-variants";
-/** The line of project management, in Build. */
-export const managementLineId = "project-management";
+const aiVariantsLineId = madeLineIds.variants;
+/** The line of project management, in Project. */
+export const managementLineId = madeLineIds.management;
 
 function price(selection: Selection): Priced {
   const parcel = getParcel(packageFor(selection));
