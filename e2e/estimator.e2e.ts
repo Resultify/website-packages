@@ -1,6 +1,7 @@
 /* The page in a browser. Each test names the behaviour it guards, at the sizes that matter most
    (1440 and 1280, and wider). Expected hours come from the app's own logic, run here in Node. */
 import { expect, type Page, test } from "@playwright/test";
+import { appName, currentRelease, releases } from "../src/changelog.ts";
 import {
   buildCatalog,
   designChoices,
@@ -455,6 +456,67 @@ test("the tier name fits on its card, and the shelf's Build / Design key has the
   expect(await colour(".s-key .hb")).toBe(await colour(".s-row .s-hrs .hb"));
   expect(await colour(".s-key .hd")).toBe(await colour(".s-row .s-hrs .hd"));
   expect(await colour(".s-key .hb")).not.toBe(await colour(".s-key .hd"));
+});
+
+test("Changelog, under Reset, lists the releases in a dialog that Escape, Close or a press outside closes; under it, the version and Beta", async ({
+  page,
+}) => {
+  await open(page);
+  /* Last in the sidebar: Reset, Changelog under it, then the version */
+  const label = `${appName}v${currentRelease.version}${currentRelease.stage ?? ""}`;
+  expect(
+    await page
+      .locator(".side-act")
+      .evaluate((nav) => [...nav.children].slice(-2).map((node) => node.textContent?.trim())),
+  ).toEqual([expect.stringMatching(/^Reset.*Changelog/), label]);
+  const below = async (upper: string, lower: string) =>
+    (await page.locator(upper).boundingBox())!.y < (await page.locator(lower).boundingBox())!.y;
+  expect(await below('[data-focus="act-reset"]', '[data-focus="act-changelog"]')).toBe(true);
+  expect(await below('[data-focus="act-changelog"]', ".ver")).toBe(true);
+  /* On a laptop the rail still holds them all, Reset and Changelog side by side */
+  await page.setViewportSize(LAPTOP);
+  expect(
+    await page.locator(".side").evaluate((side) => side.scrollHeight <= side.clientHeight),
+  ).toBe(true);
+  await expect(page.locator(".ver")).toBeInViewport({ ratio: 1 });
+  /* The rail is too narrow for the name: the version and Beta stay */
+  await expect(page.locator(".ver-name")).toBeHidden();
+  await expect(page.locator(".ver .beta")).toBeVisible();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const dialog = page.locator("dialog.changelog");
+  const button = page.getByRole("button", { name: "Changelog" });
+  await button.click();
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator(".cl-release h3")).toHaveText(
+    releases.map((release) => new RegExp(`^v${release.version.replace(".", "\\.")}`)),
+  );
+  await expect(dialog.locator(".cl-release").first().locator("li")).toHaveCount(
+    currentRelease.changes.length,
+  );
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await button.click();
+  await dialog.getByRole("button", { name: "Close" }).click();
+  await expect(dialog).toBeHidden();
+  await button.click();
+  await page.mouse.click(8, 8);
+  await expect(dialog).toBeHidden();
+  /* The estimate is as it was */
+  await expect(page.locator(".big")).toBeVisible();
+});
+
+test("the page's main heading is its name, read but not shown; the favicon loads", async ({
+  page,
+}) => {
+  await open(page);
+  const heading = page.getByRole("heading", { level: 1 });
+  await expect(heading).toHaveText(appName);
+  const box = await heading.boundingBox();
+  expect(box!.width * box!.height).toBeLessThanOrEqual(1);
+  const href = await page.locator('link[rel="icon"]').getAttribute("href");
+  const response = await page.request.get(new URL(href!, page.url()).href);
+  expect(response.ok()).toBe(true);
+  expect(await response.text()).toContain("<svg");
 });
 
 test("Reset is off on the starting estimate and empties any other; Undo brings back the same estimate in the same order", async ({

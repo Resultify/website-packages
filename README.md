@@ -237,6 +237,13 @@ hours, limits, names or the order of rows change. See `src/link.ts` and
 A link holds the estimate, not its hours: opened after the files have changed,
 it shows the hours of the new files.
 
+## Changelog
+
+**Changelog**, under Reset in the sidebar, lists the releases in a dialog; under
+it is the app's name and version, with Beta. Both come from
+[`src/changelog.ts`](src/changelog.ts): add a release at the top of `releases`
+when one ships, in words for the people who use the estimator.
+
 ## Deploying
 
 The site is published from the `docs/` folder with GitHub Pages. After changing

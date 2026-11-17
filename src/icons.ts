@@ -28,6 +28,7 @@ const paths = {
   reset: '<path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/>',
   list: '<path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/>',
   included: '<path d="m3 13 4 4L16 8M11 16l1 1 9-9"/>',
+  log: '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/>',
   arrow: '<path d="M5 12h14m-5-5 5 5-5 5"/>',
   chevron: '<path d="m9 6 6 6-6 6"/>',
 } as const;
