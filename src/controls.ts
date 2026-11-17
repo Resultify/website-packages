@@ -359,8 +359,9 @@ function bindPopover(trigger: HTMLElement, panel: HTMLElement): void {
     trigger.focus();
   };
   const onDoc = (event: Event) => {
+    /* A redraw took it away: drop both document listeners, the click and the Escape one */
     if (!panel.isConnected) {
-      document.removeEventListener("click", onDoc, true);
+      close();
       return;
     }
     const target = event.target;
