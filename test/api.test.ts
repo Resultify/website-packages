@@ -145,6 +145,27 @@ describe("saving the files", () => {
   });
 });
 
+describe("what is sent", () => {
+  test("a body that is no object, such as null, is refused as sending nothing", async () => {
+    const root = await copyOfRepo();
+    const local = { requestIP: () => ({ address: "127.0.0.1" }) } as unknown as Parameters<
+      ReturnType<typeof tableRoute>["POST"]
+    >[1];
+    for (const body of ["null", "3", '"text"']) {
+      const response = await tableRoute(root).POST(
+        new Request("http://localhost:4173/calc/api/table", {
+          method: "POST",
+          headers: { "content-type": "application/json", origin: "http://localhost:4173" },
+          body,
+        }),
+        local,
+      );
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({ error: "No table and rules were sent" });
+    }
+  });
+});
+
 describe("who may save", () => {
   const request = (url: string, headers: Record<string, string>) =>
     new Request(url, { method: "POST", headers });

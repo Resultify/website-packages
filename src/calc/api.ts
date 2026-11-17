@@ -131,7 +131,9 @@ export function tableRoute(root: string) {
       }
       let body: Partial<Edited> = {};
       try {
-        body = (await request.json()) as Partial<Edited>;
+        const sent: unknown = await request.json();
+        /* Valid JSON that is no object, such as null, sends nothing */
+        if (sent && typeof sent === "object") body = sent as Partial<Edited>;
       } catch {
         body = {};
       }
