@@ -299,6 +299,10 @@ export const basicsTileIds = [
   "training",
 ] as const;
 
+/** The site basics whose hours are Project. The others are Build: each has its place on the page,
+    so their type is fixed. */
+export const projectBasicIds: readonly string[] = ["kickoff", "training"];
+
 export const addOnTileIds = [
   "landing-templates",
   "search",
@@ -668,15 +672,13 @@ function fail(row: Row, message: string): never {
   throw new Error(`${row.item || row.id}${row.option ? `, ${row.option}` : ""}: ${message}`);
 }
 
-function number(row: Row, column: Column, fallback: number, whole = false): number {
+/** A number of the table: whole hours, quantities and limits, so every sum is exact. */
+function number(row: Row, column: Column, fallback: number): number {
   const text = row[column];
   if (text === "") return fallback;
   const value = Number(text);
-  if (!Number.isFinite(value) || value < 0 || (whole && !Number.isInteger(value))) {
-    fail(
-      row,
-      `${column} must be a ${whole ? "whole number" : "number"}, 0 or more. It is "${text}"`,
-    );
+  if (!Number.isInteger(value) || value < 0) {
+    fail(row, `${column} must be a whole number, 0 or more. It is "${text}"`);
   }
   return value;
 }
@@ -800,6 +802,12 @@ function placeOf(row: Row): (typeof places)[number] {
   }
   if (row.type === "project" && place !== "shelf" && place !== "basics") {
     fail(row, "type can be project on items of the site basics and the shelf only");
+  }
+  if (place === "basics") {
+    const fixed = projectBasicIds.includes(row.id) ? "project" : "";
+    if (row.type !== fixed) {
+      fail(row, `type is fixed in the site basics: ${fixed ? "project" : "empty (build)"}`);
+    }
   }
   return place;
 }
@@ -926,8 +934,8 @@ function plainTile(row: Row, code: number, rules: PackageRule[]): Tile {
   const unit = withDesign ? "hours" : row.unit || undefined;
   const hourInput = unit === "hours";
   const min = hourInput ? 0 : 1;
-  const max = number(row, "max", unit ? Number.NaN : 1, true);
-  const initial = number(row, "start", min, true);
+  const max = number(row, "max", unit ? Number.NaN : 1);
+  const initial = number(row, "start", min);
   if (Number.isNaN(max)) fail(row, "max is empty. An item with a unit needs its highest quantity");
   if (!unit && (max !== 1 || initial !== 1)) {
     fail(row, "start and max need a unit, such as templates or hours");
@@ -1011,6 +1019,9 @@ function modeTile(rows: readonly Row[], entry: CodeEntry, rules: PackageRule[]):
   for (const row of rows) {
     if (!row.option) fail(row, "every row of an item with options needs an option");
     if (names.has(row.option)) fail(row, "two rows of the item have this option");
+    if (row.option.includes("|")) {
+      fail(row, 'an option name cannot have "|": link-codes.csv keeps the options apart with it');
+    }
     names.add(row.option);
     if (!["", "soon", "hidden"].includes(row.status)) {
       fail(row, `status must be empty (live), soon or hidden. It is "${row.status}"`);
@@ -1110,13 +1121,12 @@ function modeTile(rows: readonly Row[], entry: CodeEntry, rules: PackageRule[]):
 
 /* ---------- The rules ---------- */
 
-function rule(rules: Rules, name: RuleName, whole = true): number {
+/** A rule's number: whole, as the hours are. */
+function rule(rules: Rules, name: RuleName): number {
   const text = rules[name];
   const value = Number(text);
-  if (text === "" || !Number.isFinite(value) || value < 0 || (whole && !Number.isInteger(value))) {
-    throw new Error(
-      `Rule ${name} must be a ${whole ? "whole number" : "number"}, 0 or more. It is "${text}"`,
-    );
+  if (text === "" || !Number.isInteger(value) || value < 0) {
+    throw new Error(`Rule ${name} must be a whole number, 0 or more. It is "${text}"`);
   }
   return value;
 }
@@ -1193,8 +1203,8 @@ function rulePackage(rules: Rules, name: RuleName): PackageId | null {
 function ruleTiles(rules: Rules, codeOf: (id: string) => number, packages: PackageRule[]): Tile[] {
   const variants = rule(rules, "ai-variants-included");
   const included = rule(rules, "languages-included");
-  const second = rule(rules, "languages-second", false);
-  const each = rule(rules, "languages-each", false);
+  const second = rule(rules, "languages-second");
+  const each = rule(rules, "languages-each");
   const languagesMax = rule(rules, "languages-max");
   const growthFrom = rule(rules, "languages-growth-from");
   const professionalFrom = rule(rules, "languages-professional-from");
@@ -1243,7 +1253,7 @@ function ruleTiles(rules: Rules, codeOf: (id: string) => number, packages: Packa
         : choiceTile(choice.id, codeOf(choice.id), choice.name, choice.note);
     if (choice.kind === "none" || !choice.feedbackId) return [design];
     const rounds = rule(rules, `${choice.kind}-feedback-included`);
-    const each = rule(rules, `${choice.kind}-feedback-each`, false);
+    const each = rule(rules, `${choice.kind}-feedback-each`);
     const feedback = roundsTile(
       choice.feedbackId,
       codeOf(choice.feedbackId),
@@ -1386,7 +1396,7 @@ export function buildCatalog(
     packageRules,
     pages: pageRule(rules),
     variantPercent: rule(rules, "ai-variant-percent"),
-    managementPercent: rule(rules, "pm-percent", false),
+    managementPercent: rule(rules, "pm-percent"),
     codes: merged,
   };
 }

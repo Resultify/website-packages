@@ -387,7 +387,7 @@ test("a cell the files cannot take says which row and why, and Save waits; a ref
   await openCalc(page);
   await setCell(page, "sections build-ai", "many");
   await expect(page.locator('.c-status [role="alert"]')).toContainText(
-    "Sections: build-ai must be a number",
+    "Sections: build-ai must be a whole number",
   );
   await expect(page.locator("[data-act=save]")).toBeDisabled();
   await setCell(page, "sections build-ai", "6");

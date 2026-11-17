@@ -17,6 +17,7 @@ import {
 import { lineName, ruleFor, shelfGroupOf, shelfLanes } from "../src/controls.ts";
 import { packLink, unpackLink } from "../src/link.ts";
 import {
+  aiVariantCost,
   decodeSelection,
   encodeSelection,
   type HourLine,
@@ -341,6 +342,27 @@ describe("a draft", () => {
     );
   });
 
+  test("an AI variant's cost shown is the cost charged, also with design hours entered for an item named AI …", () => {
+    const entered = row({
+      id: "ai-integration",
+      item: "AI integration",
+      place: "shelf",
+      unit: "build and design hours",
+      max: "100",
+      note: "A connection to an AI service",
+    });
+    withCatalog(catalog([...rows, entered]), () => {
+      const on = setTile(ai(), "ai-integration", true);
+      const priced = quote(
+        setQuantity(setQuantity(on, "ai-integration-design", 40), "ai-design", 3),
+      );
+      const variants = priced.lines.find((line) => line.id === "ai-variants");
+      /* One extra variant: half of the 18h of AI design; the 40h entered are not a share of it */
+      expect(variants?.openHours).toBe(9);
+      expect(aiVariantCost(priced)).toBe(9);
+    });
+  });
+
   test("at least one feedback round and one AI variant are included: a link writes them from 1", () => {
     expect(() => drafted({}, { "ai-feedback-included": "0" })).toThrow(
       "AI feedback: 0 rounds included must be 1 to 10",
@@ -364,7 +386,21 @@ describe("a draft", () => {
 
   test("a cell or rule the app cannot take is an error that names it", () => {
     expect(() => drafted({ "sections build-ai": "abc" })).toThrow(
-      "Sections: build-ai must be a number",
+      "Sections: build-ai must be a whole number",
+    );
+    /* Hours and rules are whole numbers, so every line and total is exact */
+    expect(() => drafted({ "sections design-ai": "2.5" })).toThrow(
+      'Sections: design-ai must be a whole number, 0 or more. It is "2.5"',
+    );
+    expect(() => drafted({}, { "pm-percent": "12.5" })).toThrow(
+      "Rule pm-percent must be a whole number",
+    );
+    expect(() => drafted({}, { "languages-each": "6.5" })).toThrow(
+      "Rule languages-each must be a whole number",
+    );
+    /* link-codes.csv keeps an item's options apart with | */
+    expect(() => drafted({ "menu·Advanced option": "Advanced | Mega" })).toThrow(
+      'an option name cannot have "|"',
     );
     expect(() => drafted({ "menu·Advanced package": "big" })).toThrow(
       "Menu, Advanced: package must be",
@@ -517,20 +553,30 @@ describe("a draft", () => {
     /* Project management: 15% of 101h of design and build, not of the kick-off and training */
     expect(start.projectHours).toBe(3 + 4 + 16);
     expect(start.implementationHours).toBe(60);
-    /* An item of the site basics or the shelf can be Project; its design hours stay Design */
-    withCatalog(drafted({ "header type": "project", "landing-templates type": "project" }), () => {
+    /* An item of the shelf can be Project; its design hours stay Design */
+    withCatalog(drafted({ "landing-templates type": "project" }), () => {
       const priced = quote(setTile(essential(), "landing-templates", true));
-      expect(priced.lines.find((line) => line.id === "header")?.bucket).toBe("project");
-      expect(priced.lines.find((line) => line.id === "nimbly-header")?.bucket).toBe("design");
-      expect(priced.implementationHours).toBe(60 - 3);
-      /* Header 3h and Landing templates 3h join the kick-off and training: project management is
-         15% of 43h of design and 57h of build, 15h; Project's own hours are not counted */
-      expect(priced.projectHours).toBe(3 + 3 + 3 + 4 + 15);
-      expect(priced.hours).toBe(43 + 57 + 28);
+      expect(priced.lines.find((line) => line.id === "landing-templates")?.bucket).toBe("project");
+      expect(priced.lines.find((line) => line.id === "nimbly-landing-templates")?.bucket).toBe(
+        "design",
+      );
+      expect(priced.implementationHours).toBe(60);
+      /* Landing templates 3h joins the kick-off and training: project management is 15% of 43h of
+         design and 60h of build, 15.45, so 16h; Project's own hours are not counted */
+      expect(priced.projectHours).toBe(3 + 3 + 4 + 16);
+      expect(priced.hours).toBe(43 + 60 + 26);
     });
     expect(() => drafted({ "blog-recent type": "project" })).toThrow(
       "site basics and the shelf only",
     );
+    /* The site basics have their places on the page: their type is fixed */
+    expect(() => drafted({ "header type": "project" })).toThrow(
+      "Global header: type is fixed in the site basics: empty (build)",
+    );
+    expect(() => drafted({ "training type": "" })).toThrow(
+      "Training: type is fixed in the site basics: project",
+    );
+    expect(() => drafted({ "menu·Advanced type": "project" })).toThrow("type is fixed");
   });
 
   test("the Product catalogue's sources come from the table, each with the same options", () => {
