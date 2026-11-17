@@ -1160,6 +1160,29 @@ test("Escape closes an open popup, Hours breakdown or the package's, and the foc
   }
 });
 
+test("a popup a redraw took away leaves no listener behind: the next click drops them all", async ({
+  page,
+}) => {
+  await open(page);
+  const cdp = await page.context().newCDPSession(page);
+  const keydowns = async () => {
+    const { result } = await cdp.send("Runtime.evaluate", { expression: "document" });
+    const { listeners } = await cdp.send("DOMDebugger.getEventListeners", {
+      objectId: result.objectId ?? "",
+    });
+    return listeners.filter((listener) => listener.type === "keydown").length;
+  };
+  const before = await keydowns();
+  await page.locator('button[aria-label="Hours breakdown"]').click();
+  await expect(page.locator(".pop-panel:popover-open")).toHaveCount(1);
+  expect(await keydowns()).toBe(before + 1);
+  /* The same estimate again: the page redraws, and the open popup goes with it */
+  await page.evaluate(() => window.dispatchEvent(new HashChangeEvent("hashchange")));
+  await expect(page.locator(".pop-panel:popover-open")).toHaveCount(0);
+  await page.locator(".sh h2").first().click();
+  expect(await keydowns()).toBe(before);
+});
+
 test("the hours breakdown says what Copy hours copies, the included rounds and variants too, and names its group Build as the rest of the page does", async ({
   page,
 }) => {
