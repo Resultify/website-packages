@@ -151,6 +151,13 @@ export type Quote = {
   pageSpeed: PageSpeed;
 };
 
+/** Project management's hours: `percent` of `base`, rounded up to a whole hour. A share over it by
+    no more than adding decimals leaves (0.1 + 19.6 + 0.3 is 20.000000000000004) is that hour; one
+    truly over it, as 9.0015h, is the next. */
+export function managementHours(base: number, percent: number): number {
+  return Math.ceil((base * percent) / 100 - 1e-9);
+}
+
 function roundHours(value: number): number {
   return Math.round(value * 100) / 100;
 }
@@ -605,7 +612,7 @@ function price(selection: Selection): Priced {
   const base = lines
     .filter((line) => line.bucket !== "project")
     .reduce((sum, line) => sum + line.openHours, 0);
-  const management = Math.ceil(Math.round(base * percent) / 100);
+  const management = managementHours(base, percent);
   listOpen += management;
   parcelOpen += management;
   lines.push({

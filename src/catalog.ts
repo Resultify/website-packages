@@ -1132,7 +1132,10 @@ function roundsTile(
   each: number,
   summary: string,
 ): Tile {
-  if (included > max) throw new Error(`${label}: ${included} included is more than ${max}`);
+  /* At least one: a link writes the number from 1 (see quote.ts) */
+  if (included < 1 || included > max) {
+    throw new Error(`${label}: ${included} ${unit} included must be 1 to ${max}`);
+  }
   return {
     id,
     place: "design",

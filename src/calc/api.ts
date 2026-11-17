@@ -2,7 +2,8 @@
    only (src/server.ts); the built site has no calculations page.
 
    GET  gives the files as saved on disk, and the table and rules as they are in the last commit.
-   POST saves a table and rules, once the app can read them, with the link codes they need. */
+   POST saves a table and rules, once the app can read them, with the link codes they need, one save
+   at a time, and gives the files as it left them. */
 import { join } from "node:path";
 import type { Server } from "bun";
 import { buildCatalog } from "../catalog.ts";
@@ -74,14 +75,27 @@ export async function readTables(root: string): Promise<Tables> {
   };
 }
 
-export async function saveTables(root: string, edited: Edited): Promise<{ error?: string }> {
-  const codes = await Bun.file(join(root, paths.codes)).text();
-  const checked = checkFiles(edited, codes);
-  if ("error" in checked) return checked;
-  await Bun.write(join(root, paths.table), checked.table);
-  await Bun.write(join(root, paths.rules), checked.rules);
-  if (checked.codes !== codes) await Bun.write(join(root, paths.codes), checked.codes);
-  return {};
+/* One save at a time, from reading the link codes to reading back what it wrote. Two saves at once
+   (two tabs) would otherwise both read the same codes, give their new items the same one, and mix
+   their files */
+let saving: Promise<unknown> = Promise.resolve();
+function oneAtATime<Result>(run: () => Promise<Result>): Promise<Result> {
+  const next = saving.then(run);
+  saving = next.catch(() => undefined);
+  return next;
+}
+
+/** Saves a table and rules the app can read, and gives the files as that save left them. */
+export function saveTables(root: string, edited: Edited): Promise<Tables | { error: string }> {
+  return oneAtATime(async () => {
+    const codes = await Bun.file(join(root, paths.codes)).text();
+    const checked = checkFiles(edited, codes);
+    if ("error" in checked) return checked;
+    await Bun.write(join(root, paths.table), checked.table);
+    await Bun.write(join(root, paths.rules), checked.rules);
+    if (checked.codes !== codes) await Bun.write(join(root, paths.codes), checked.codes);
+    return readTables(root);
+  });
 }
 
 const loopback = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
@@ -122,9 +136,7 @@ export function tableRoute(root: string) {
         return Response.json({ error: "No table and rules were sent" }, { status: 400 });
       }
       const result = await saveTables(root, { table: body.table, rules: body.rules });
-      return result.error
-        ? Response.json(result, { status: 422 })
-        : Response.json(await readTables(root));
+      return "error" in result ? Response.json(result, { status: 422 }) : Response.json(result);
     },
   };
 }
