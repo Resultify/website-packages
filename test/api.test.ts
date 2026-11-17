@@ -4,7 +4,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { checkFiles, mayWrite, readTables, saveTables } from "../src/calc/api.ts";
+import { checkFiles, mayWrite, readTables, saveTables, tableRoute } from "../src/calc/api.ts";
 import {
   applyCells,
   columns,
@@ -68,7 +68,9 @@ describe("saving the files", () => {
   test("refuses a table or rules the app cannot read, and leaves the files as they were", async () => {
     const root = await copyOfRepo();
     const broken = serializeTable(applyCells(rows, { "sections build-ai": "many" }));
-    expect(await refused(root, edited(broken))).toContain("Sections: build-ai must be a number");
+    expect(await refused(root, edited(broken))).toContain(
+      "Sections: build-ai must be a whole number",
+    );
     expect(await refused(root, edited("id,code\nx,1\n"))).toContain("columns must be");
     expect(
       await refused(
@@ -120,6 +122,19 @@ describe("saving the files", () => {
     expect(codeOf(second.saved.codes, "alpha")).toBe(highest + 1);
     expect(codeOf(second.saved.codes, "beta")).toBe(highest + 2);
     expect((await readTables(root)).saved).toEqual(second.saved);
+  });
+
+  test("a read made while a save is writing waits for it: never the new table with the old rules", async () => {
+    const root = await copyOfRepo();
+    const table = serializeTable(applyCells(rows, { "sections build-ai": "5" }));
+    const rules = rulesText.replace("ai-feedback-each,3", "ai-feedback-each,4");
+    const saving = saveTables(root, edited(table, rules));
+    const read = (await (await tableRoute(root).GET()).json()) as {
+      saved: { table: string; rules: string };
+    };
+    expect(read.saved.table).toBe(table);
+    expect(read.saved.rules).toBe(rules);
+    await saving;
   });
 
   test("reads the table of the last commit from git", async () => {

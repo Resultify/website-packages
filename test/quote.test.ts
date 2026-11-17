@@ -457,12 +457,10 @@ describe("blog, languages, and content", () => {
     });
     /* An item adds its share: system templates, 6h + 5h, make 112h, and 15% is 16.8 */
     expect(share(setTile(essential(), "system", true))?.openHours).toBe(17);
-    /* A whole share stays whole: 20h is 3h at 15%, also when adding decimals left a trace */
+    /* A whole share stays whole, and any part of an hour more is the next hour: 15% of 20h is 3h,
+       of 21h 3.15h, so 4h */
     expect(managementHours(20, 15)).toBe(3);
-    expect(managementHours(0.1 + 19.6 + 0.3, 15)).toBe(3);
-    /* Any part of an hour more is the next hour: 15% of 60.01h is 9.0015h */
-    expect(managementHours(60.01, 15)).toBe(10);
-    expect(managementHours(60, 15)).toBe(9);
+    expect(managementHours(21, 15)).toBe(4);
     /* Extra rounds count, and so does content: 101h + 40h, and 15% of 141h is 21.15 */
     expect(share(setQuantity(essential(), "nimbly-feedback", 3))?.mode).toBe("15% of 107h");
     const content = setQuantity(setTile(essential(), "content-hours", true), "content-hours", 40);

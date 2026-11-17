@@ -75,9 +75,10 @@ export async function readTables(root: string): Promise<Tables> {
   };
 }
 
-/* One save at a time, from reading the link codes to reading back what it wrote. Two saves at once
-   (two tabs) would otherwise both read the same codes, give their new items the same one, and mix
-   their files */
+/* One save at a time, from reading the link codes to reading back what it wrote, and a read only
+   between saves. Two saves at once (two tabs) would otherwise both read the same codes, give their
+   new items the same one, and mix their files; a read between a save's writes would get the new
+   table with the old rules */
 let saving: Promise<unknown> = Promise.resolve();
 function oneAtATime<Result>(run: () => Promise<Result>): Promise<Result> {
   const next = saving.then(run);
@@ -117,7 +118,9 @@ export function mayWrite(request: Request, address: string | undefined): boolean
 export function tableRoute(root: string) {
   return {
     async GET() {
-      return Response.json(await readTables(root), { headers: { "cache-control": "no-store" } });
+      /* After a save in progress, never between its writes */
+      const tables = await oneAtATime(() => readTables(root));
+      return Response.json(tables, { headers: { "cache-control": "no-store" } });
     },
     async POST(request: Request, server: Server<undefined>) {
       if (!mayWrite(request, server.requestIP(request)?.address)) {

@@ -151,11 +151,10 @@ export type Quote = {
   pageSpeed: PageSpeed;
 };
 
-/** Project management's hours: `percent` of `base`, rounded up to a whole hour. A share over it by
-    no more than adding decimals leaves (0.1 + 19.6 + 0.3 is 20.000000000000004) is that hour; one
-    truly over it, as 9.0015h, is the next. */
+/** Project management's hours: `percent` of `base`, rounded up to a whole hour. Hours and
+    percents are whole numbers, so the share is exact: 15% of 101h is 15.15, so 16h. */
 export function managementHours(base: number, percent: number): number {
-  return Math.ceil((base * percent) / 100 - 1e-9);
+  return Math.ceil((base * percent) / 100);
 }
 
 function roundHours(value: number): number {
@@ -850,10 +849,8 @@ export function aiDesignHours(result: Quote): number {
   return result.lines
     .filter(
       (line) =>
-        line.bucket === "design" &&
-        line.id.startsWith("ai-") &&
-        line.id !== "ai-feedback" &&
-        line.id !== aiVariantsLineId,
+        /* Named so by designParts; not design hours entered for an item whose id starts with ai- */
+        line.bucket === "design" && line.id === `ai-${line.item}`,
     )
     .reduce((sum, line) => sum + line.openHours, 0);
 }

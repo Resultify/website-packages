@@ -988,7 +988,7 @@ function ruleField(name: RuleName): HTMLElement {
   return h("input", {
     class: classes("c-in", "c-rule", changed && "is-changed", unsaved && "is-unsaved"),
     type: "text",
-    inputmode: "decimal",
+    inputmode: "numeric",
     value,
     autocomplete: "off",
     spellcheck: "false",
@@ -1475,7 +1475,7 @@ function input(
       unsaved && "is-unsaved",
     ),
     type: "text",
-    inputmode: options.name ? null : "decimal",
+    inputmode: options.name ? null : "numeric",
     value: row[column],
     placeholder: options.placeholder ?? null,
     autocomplete: "off",
@@ -1566,11 +1566,13 @@ function statusPick(row: Row): HTMLElement {
   return pick(row, "status", names, { tone: "status", label: "status" });
 }
 
-/** Build, Content or Project on an item of the shelf; Build or Project in the site basics. */
+/** Build, Content or Project on an item of the shelf. */
 function typePick(row: Row): HTMLElement {
-  const names: [string, string][] = [["", "Build"]];
-  if (row.place === "shelf") names.push(["content", "Content"]);
-  names.push(["project", projectName]);
+  const names: [string, string][] = [
+    ["", "Build"],
+    ["content", "Content"],
+    ["project", projectName],
+  ];
   return pick(row, "type", names, {
     tone: "type",
     label: "type",
@@ -1578,8 +1580,13 @@ function typePick(row: Row): HTMLElement {
   });
 }
 
-/** Where a row's type can be chosen: the shelf and the site basics. */
-const hasType = (row: Row) => row.place === "shelf" || row.place === "basics";
+/** A row's type: chosen on the shelf; fixed in the site basics, where each item has its place on
+    the page. */
+function typeCell(row: Row): HTMLElement | null {
+  if (row.place === "shelf") return typePick(row);
+  if (row.place !== "basics") return null;
+  return h("span", { class: "c-fixed" }, row.type === "project" ? projectName : "Build");
+}
 
 /** Where an item sits when it has no status of its own. */
 function fixedStatus(id: string): string {
@@ -1754,7 +1761,7 @@ function itemRows(
             ? statusPick(first)
             : h("span", { class: "c-fixed" }, fixedStatus(first.id)),
         ),
-        h("td", { class: "c-type" }, hasType(first) ? typePick(first) : null),
+        h("td", { class: "c-type" }, typeCell(first)),
         h("td", { class: "c-num" }, counted ? input(first, "start") : null),
         h("td", { class: "c-num" }, first.unit ? input(first, "max") : null),
         hourCells(first),
@@ -1788,7 +1795,7 @@ function itemRows(
       },
       nameCell,
       h("td", { class: "c-stat" }, h("span", { class: "c-fixed" }, summary)),
-      h("td", { class: "c-type" }, hasType(first) ? typePick(first) : null),
+      h("td", { class: "c-type" }, typeCell(first)),
       h("td", { colspan: String(2 + hourColumns.length + 2), class: "c-head-fill" }),
       ownCells(pricing, null, null),
     ),

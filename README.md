@@ -51,18 +51,20 @@ The estimator is built from three files in `src/`:
 
 The columns of `estimator.csv`:
 
-| Column                                        | What it holds                                                                                                                                                                   |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`                                          | The item's name in the code. The rows of one item share it                                                                                                                      |
-| `item`, `option`                              | The names in the estimator. `Dynamic pages: Simple` puts the option under a small heading                                                                                       |
-| `place`                                       | Where the estimator shows it: `basics`, `shelf`, `blog`, `catalogue` or `membership`. The basics, the Blog's and Memberships' rows are fixed                                    |
-| `type`                                        | Empty: build hours. `content`: content hours, counted apart (shelf). `project`: Project hours, with project management (site basics and shelf)                                  |
-| `status`                                      | Empty: live. `soon`: shown, locked. `hidden`: nowhere, left out of every estimate. Shelf items, the catalogue's sources, the parts added on their own, and each option          |
-| `unit`, `start`, `max`                        | What the item counts, the quantity it starts at, and the most. Empty unit: on or off. `hours`: hours are entered. `build and design hours`: both are entered, each in its field |
-| `build-ai`, `build-nimbly`, `build-custom`    | Build hours for each design choice (no design takes Custom's): for each unit when the item counts something                                                                     |
-| `design-ai`, `design-nimbly`, `design-custom` | Design hours for AI generated, Nimbly and Custom design, the same way                                                                                                           |
-| `package`, `tier`                             | `growth` or `platform`; `professional` or `enterprise`. `growth from 5` means from 5 on. On an option: while chosen                                                             |
-| `note`                                        | The line under the name, edited in the file only. `{build}` shows the build hours for the design choice                                                                         |
+| Column                                        | What it holds                                                                                                                                                                                                                     |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                                          | The item's name in the code. The rows of one item share it                                                                                                                                                                        |
+| `item`, `option`                              | The names in the estimator. `Dynamic pages: Simple` puts the option under a small heading. An option name cannot have `                                                                                                           | `   |
+| `place`                                       | Where the estimator shows it: `basics`, `shelf`, `blog`, `catalogue` or `membership`. The basics, the Blog's and Memberships' rows are fixed                                                                                      |
+| `type`                                        | Empty: build hours. `content`: content hours, counted apart. `project`: Project hours, with project management. Shelf items choose; in the site basics it is fixed: `project` for the kick-off and training, empty for the others |
+| `status`                                      | Empty: live. `soon`: shown, locked. `hidden`: nowhere, left out of every estimate. Shelf items, the catalogue's sources, the parts added on their own, and each option                                                            |
+| `unit`, `start`, `max`                        | What the item counts, the quantity it starts at, and the most. Empty unit: on or off. `hours`: hours are entered. `build and design hours`: both are entered, each in its field                                                   |
+| `build-ai`, `build-nimbly`, `build-custom`    | Build hours for each design choice (no design takes Custom's): for each unit when the item counts something                                                                                                                       |
+| `design-ai`, `design-nimbly`, `design-custom` | Design hours for AI generated, Nimbly and Custom design, the same way                                                                                                                                                             |
+| `package`, `tier`                             | `growth` or `platform`; `professional` or `enterprise`. `growth from 5` means from 5 on. On an option: while chosen                                                                                                               |
+| `note`                                        | The line under the name, edited in the file only. `{build}` shows the build hours for the design choice                                                                                                                           |
+
+Every number, in `estimator.csv` and in `rules.csv`, is a whole number: hours, quantities and percents.
 
 Every estimate has one of four designs. Each has its own build and design
 hours; its feedback rounds and the package it needs are in `rules.csv`. Every
@@ -183,7 +185,7 @@ no calculations page.
   and its parts) and **Memberships**. An item with options has its name once,
   with its options under it; the radio in Start marks the one it starts with
 - **Type** says where an item's hours count: Build, Content or Project on the
-  shelf, Build or Project in the site basics. **Status** is on each item of the shelf, on each part added on its
+  shelf. In the site basics it is fixed: the kick-off and training are Project, the others Build. **Status** is on each item of the shelf, on each part added on its
   own, and on each option: Live, Soon
   (shown, locked) or Hidden. An item with options is hidden when all of them
   are, and locked when none is live: so is a source of products
