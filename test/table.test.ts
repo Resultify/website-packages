@@ -28,7 +28,6 @@ import {
   setTile,
   setWebsitePages,
 } from "../src/quote.ts";
-import scenarioText from "../src/scenarios.csv" with { type: "text" };
 import {
   applyCells,
   type Cells,
@@ -150,17 +149,6 @@ describe("the files", () => {
             expect(decodeSelection(encodeSelection(priced.selection))).toEqual(priced.selection);
           }
         }
-      }
-    });
-  });
-
-  test("the estimates on the calculations page are links the app reads", () => {
-    const links = parseCsv(scenarioText).slice(1);
-    expect(links.length).toBeGreaterThan(0);
-    withCatalog(liveCatalog(), () => {
-      for (const [name, link] of links) {
-        expect(name).toBeTruthy();
-        expect(decodeSelection(link ?? "")).not.toBeNull();
       }
     });
   });

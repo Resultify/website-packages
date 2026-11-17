@@ -12,8 +12,10 @@ import {
   type DesignChoice,
   designChoices,
   designInputUnit,
+  type Edition,
   editionLabel,
   hasStatus,
+  hasTile,
   isSource,
   partsOf,
   placeName,
@@ -38,7 +40,6 @@ import {
   selectionForShape,
   setTile,
 } from "../quote.ts";
-import scenarioText from "../scenarios.csv" with { type: "text" };
 import {
   applyCells,
   type Cells,
@@ -48,7 +49,6 @@ import {
   columns,
   designKinds,
   parseCodes,
-  parseCsv,
   parseRules,
   parseTable,
   type Row,
@@ -67,30 +67,57 @@ const root: HTMLElement = found;
 
 /* ---------- What the page knows ---------- */
 
-/** An estimate on the right. A starting estimate is made from the files it is priced with, so a
+/** What the page's own estimates add to the starting estimate: a row of the Estimates panel, with
+    each design that has design hours. title: the row's heading. */
+type Setup = { name: string; title: string; adds: readonly string[] };
+const setups: readonly Setup[] = [
+  { name: "Starting estimate", title: "Starting estimate", adds: [] },
+  { name: "Blog and Search", title: "+ Blog and Search", adds: ["blog-setups", "search"] },
+  {
+    name: "Blog, Search and Products",
+    title: "+ Products",
+    adds: ["blog-setups", "search", "product-catalogue"],
+  },
+];
+/** The panel's columns: each design that has design hours, in the estimator's order. */
+const pricedDesigns = designChoices.filter((choice) => choice.kind !== "none");
+/** A design's name in the panel, as the Design panel and the table name it. */
+const designShort: Record<DesignChoice["kind"], string> = {
+  ai: "AI",
+  nimbly: "Nimbly",
+  custom: "Custom",
+  none: "None",
+};
+
+/** An estimate on the right. One of the page's own is made from the files it is priced with, so a
     change to what an estimate starts with (an option, a quantity) shows in it; its code is the
     one the saved files make, for its link. */
-type Estimate = { name: string; code: string; design?: DesignChoice };
+type Estimate = { name: string; code: string; design?: DesignChoice; setup?: Setup };
 
-/** The estimate a new page starts with, with a design, under the catalog in use. */
-const startWith = (design: DesignChoice) =>
-  setTile(selectionForShape("essential"), design.id, true);
+/** The estimate a new page starts with, with a design and what a row adds (each at what the table
+    starts it with), under the catalog in use. */
+const startWith = (design: DesignChoice, adds: readonly string[] = []) =>
+  adds
+    .filter((id) => hasTile(id))
+    .reduce(
+      (selection, id) => setTile(selection, id, true),
+      setTile(selectionForShape("essential"), design.id, true),
+    );
 
-/** The estimate a new page starts with, once for each design that has design hours: the starting
-    design first. */
-const startingEstimates: Estimate[] = [
-  startingDesign,
-  ...designChoices.filter((choice) => choice !== startingDesign && choice.kind !== "none"),
-].map((choice) => ({
-  name: `Starting estimate · ${choice.label}`,
-  code: encodeSelection(startWith(choice)),
-  design: choice,
-}));
+/** The page's own estimates: each row, once for each design. */
+const startingEstimates: Estimate[] = setups.flatMap((setup) =>
+  pricedDesigns.map((choice) => ({
+    name: `${setup.name} · ${choice.label}`,
+    code: encodeSelection(startWith(choice, setup.adds)),
+    design: choice,
+    setup,
+  })),
+);
 
-/** An estimate under a catalog: a starting one made with it, any other read from its code. */
+/** An estimate under a catalog: one of the page's own made with it, any other read from its code. */
 function selectionOf(item: Estimate, catalog: Catalog): Selection | null {
   return withCatalog(catalog, () =>
-    item.design ? startWith(item.design) : decodeSelection(item.code),
+    item.design ? startWith(item.design, item.setup?.adds) : decodeSelection(item.code),
   );
 }
 
@@ -99,13 +126,6 @@ function codeWith(item: Estimate, catalog: Catalog): string {
   const selection = selectionOf(item, catalog);
   return selection ? withCatalog(catalog, () => encodeSelection(selection)) : item.code;
 }
-
-/** More estimates to price every change against: src/scenarios.csv, a name and a link on each
-    line. */
-const scenarios: Estimate[] = parseCsv(scenarioText)
-  .slice(1)
-  .map(([name = "", link = ""]) => ({ name, code: codeIn(link) }))
-  .filter((item) => decodeSelection(item.code) !== null);
 
 const unsavedKey = "website-packages.unsaved";
 /** Items added on this page, new items taken out again, and rules changed, until Save. */
@@ -156,20 +176,14 @@ const state = {
 
 type Help = { name: string; text: string; example?: string };
 
-/* Build and design hours for each design choice, named as the estimator's Design choices */
-const buildColumns = [
-  ["build-ai", "AI"],
-  ["build-nimbly", "Nimbly"],
-  ["build-custom", "Custom"],
+/* Each design choice, named as the Design panel names it, with its design and build hours side by
+   side */
+const designPairs = [
+  ["AI", "design-ai", "build-ai"],
+  ["Nimbly", "design-nimbly", "build-nimbly"],
+  ["Custom", "design-custom", "build-custom"],
 ] as const;
-const designColumns = [
-  ["design-ai", "AI"],
-  ["design-nimbly", "Nimbly"],
-  ["design-custom", "Custom"],
-] as const;
-const hourColumns: readonly Column[] = [...buildColumns, ...designColumns].map(
-  ([column]) => column,
-);
+const hourColumns: readonly Column[] = designPairs.flatMap(([, design, build]) => [design, build]);
 
 /** What each column is, for the popups and the list of changes. */
 const help: Record<Column, Help> = {
@@ -644,7 +658,7 @@ function startingList(): Estimate[] {
 
 /** The estimates on the right: the one in the address first, unless it is one of the others. */
 function estimates(): Estimate[] {
-  const listed = [...startingList(), ...scenarios];
+  const listed = startingList();
   const own =
     decodeSelection(state.code) && !listed.some((item) => item.code === state.code)
       ? [{ name: "From your link", code: state.code }]
@@ -652,12 +666,15 @@ function estimates(): Estimate[] {
   return [...own, ...listed];
 }
 
-/** The estimate the address names, picked for the table's last columns. */
+/** The estimate the address names, picked for the table's last columns; with none, the starting
+    estimate with the starting design, as a new estimate in the estimator. */
 function pickAddress(): void {
-  state.picked = Math.max(
-    0,
-    estimates().findIndex((item) => item.code === state.code),
+  const list = estimates();
+  const named = list.findIndex((item) => item.code === state.code);
+  const starting = list.findIndex(
+    (item) => item.design === startingDesign && item.setup === setups[0],
   );
+  state.picked = Math.max(0, named !== -1 ? named : starting);
 }
 
 /** What a row adds to an estimate: how much of it is in, its build hours, and its design hours.
@@ -1259,100 +1276,144 @@ function addCard(): HTMLElement {
 
 /* ---------- The right column ---------- */
 
+/** A tier in an estimate's cell: short, as the estimator's badges have it. */
+const tierShort: Record<Edition, string> = {
+  free: "Free tools",
+  starter: "Starter",
+  professional: "Pro",
+  enterprise: "Ent",
+};
+
 function estimatesCard(
   list: Estimate[],
   priced: (Priced | null)[],
   error: string | null,
 ): HTMLElement {
-  const items = list.map((item, index) => {
+  const figures =
+    ({ live, draft }: Priced) =>
+    (read: (result: Quote) => string, figureName: string, title?: string) =>
+      h(
+        "span",
+        { data: { figure: figureName }, title },
+        figure(read(live), draft ? read(draft) : null),
+      );
+  /* One estimate: its hours, then how they differ from the last commit, its package and tier. The
+     whole cell picks it */
+  const cell = (item: Estimate, wide = false) => {
+    const index = list.indexOf(item);
     const pair = priced[index];
-    if (!pair) return null;
+    if (!pair) return h("span", { class: "c-est-item is-none" }, "–");
     const { live, draft } = pair;
-    const pickFigure = (read: (result: Quote) => string, figureName: string) =>
-      h("span", { data: { figure: figureName } }, figure(read(live), draft ? read(draft) : null));
+    const pickFigure = figures(pair);
     return h(
-      "li",
+      "label",
       {
-        class: index === state.picked ? "c-est-item is-picked" : "c-est-item",
+        class: classes("c-est-item", index === state.picked && "is-picked", wide && "is-wide"),
+        title: item.name,
         data: { estimate: item.name },
       },
-      h(
-        "label",
-        { class: "c-est-name" },
-        h("input", {
-          type: "radio",
-          name: "estimate",
-          value: String(index),
-          checked: index === state.picked,
-          data: { focus: `pick ${index}` },
-        }),
-        h("span", null, item.name),
-      ),
-      h(
-        "div",
-        { class: "c-est-total" },
-        h(
-          "span",
-          { data: { figure: "committed" }, title: "With the last commit" },
-          hoursLabel(live.hours),
-        ),
-        draft
-          ? [
-              h("span", { class: "c-arrow", "aria-hidden": "true" }, "→"),
-              h(
-                "span",
-                { data: { figure: "table" }, title: "With the files on this page" },
-                figure(hoursLabel(live.hours), hoursLabel(draft.hours)),
-              ),
-              h(
-                "span",
-                {
-                  data: { figure: "change" },
-                  class: draft.hours === live.hours ? "c-same" : "c-delta",
-                },
-                signed(draft.hours - live.hours),
-              ),
-            ]
-          : null,
-      ),
-      h(
-        "div",
-        { class: "c-est-meta" },
-        pickFigure((result) => result.label, "package"),
-        h("span", { class: "c-dot", "aria-hidden": "true" }, "·"),
-        pickFigure((result) => editionLabel[result.edition], "tier"),
-      ),
-      h(
-        "dl",
-        { class: "c-est-split" },
-        (
-          [
-            ["Design", (result: Quote) => result.designHours, "design"],
-            ["Build", (result: Quote) => result.implementationHours, "build"],
-            ["Content", (result: Quote) => result.contentHours, "content"],
-            [projectName, (result: Quote) => result.projectHours, "project"],
-          ] as const
-        ).map(([name, read, key]) =>
-          h(
-            "div",
-            { class: `is-${key}` },
-            h("dt", null, name),
-            h(
-              "dd",
-              null,
-              pickFigure((result) => hoursLabel(read(result)), key),
-            ),
+      h("input", {
+        type: "radio",
+        name: "estimate",
+        value: String(index),
+        checked: index === state.picked,
+        "aria-label": item.name,
+        data: { focus: `pick ${index}` },
+      }),
+      draft
+        ? h(
+            "span",
+            { class: "c-est-total", data: { figure: "table" } },
+            figure(hoursLabel(live.hours), hoursLabel(draft.hours)),
+          )
+        : h(
+            "span",
+            { class: "c-est-total", data: { figure: "committed" } },
+            hoursLabel(live.hours),
           ),
-        ),
-      ),
-      h(
-        "div",
-        { class: "c-links" },
-        h("a", { href: `../#${item.code}`, title: `Open ${item.name} in the estimator` }, "Open"),
-        h("code", { title: "The estimate's link code" }, item.code),
+      draft
+        ? h(
+            "span",
+            {
+              class: draft.hours === live.hours ? "c-same" : "c-delta",
+              data: { figure: "change" },
+            },
+            signed(draft.hours - live.hours),
+          )
+        : null,
+      pickFigure((result) => result.label, "package"),
+      pickFigure(
+        (result) => tierShort[result.edition],
+        "tier",
+        `Content Hub ${editionLabel[(draft ?? live).edition]}`,
       ),
     );
-  });
+  };
+  const own = list.filter((item) => !item.setup);
+  const grid = h(
+    "div",
+    {
+      class: "c-est",
+      role: "radiogroup",
+      "aria-label": "Estimates",
+      style: `grid-template-columns: repeat(${pricedDesigns.length}, minmax(0, 1fr))`,
+    },
+    own.length > 0
+      ? [h("p", { class: "c-est-row" }, "From your link"), own.map((item) => cell(item, true))]
+      : null,
+    pricedDesigns.map((choice) => h("p", { class: "c-est-col" }, designShort[choice.kind])),
+    setups.map((setup) => [
+      h("p", { class: "c-est-row" }, setup.title),
+      pricedDesigns.map((choice) => {
+        const item = list.find((one) => one.setup === setup && one.design === choice);
+        return item ? cell(item) : h("span", { class: "c-est-item is-none" }, "–");
+      }),
+    ]),
+  );
+  /* The chosen estimate: its hours by kind, and its link */
+  const picked = list[state.picked];
+  const pair = priced[state.picked];
+  const detail =
+    picked && pair
+      ? h(
+          "div",
+          { class: "c-est-detail", data: { estimate: picked.name } },
+          h("b", null, picked.name),
+          h(
+            "dl",
+            { class: "c-est-split" },
+            (
+              [
+                ["Design", (result: Quote) => result.designHours, "design"],
+                ["Build", (result: Quote) => result.implementationHours, "build"],
+                ["Content", (result: Quote) => result.contentHours, "content"],
+                [projectName, (result: Quote) => result.projectHours, "project"],
+              ] as const
+            ).map(([name, read, key]) =>
+              h(
+                "div",
+                { class: `is-${key}` },
+                h("dt", null, name),
+                h(
+                  "dd",
+                  null,
+                  figures(pair)((result) => hoursLabel(read(result)), key),
+                ),
+              ),
+            ),
+          ),
+          h(
+            "div",
+            { class: "c-links" },
+            h(
+              "a",
+              { href: `../#${picked.code}`, title: `Open ${picked.name} in the estimator` },
+              "Open",
+            ),
+            h("code", { title: "The estimate's link code" }, picked.code),
+          ),
+        )
+      : null;
   return h(
     "section",
     { class: "c-card", "aria-label": "Estimates" },
@@ -1360,9 +1421,10 @@ function estimatesCard(
     h(
       "p",
       { class: "c-note" },
-      "Priced with the last commit and, when they differ, with this page's files. The one chosen fills the table's last columns.",
+      "Hours with this page's files. Yellow: not what the last commit gives, which pointing at it shows. The one chosen fills the table's last columns.",
     ),
-    h("ul", { class: "c-est" }, items),
+    grid,
+    detail,
     h(
       "form",
       { class: "c-load", data: { form: "load" } },
@@ -1563,13 +1625,13 @@ function ownCells(pricing: Pricing, live: Share | null, draft: Share | null): HT
     ),
     h(
       "td",
-      { class: "c-own" },
-      own((item) => item.hours),
+      { class: "c-own d" },
+      own((item) => item.design),
     ),
     h(
       "td",
-      { class: "c-own d" },
-      own((item) => item.design),
+      { class: "c-own" },
+      own((item) => item.hours),
     ),
   ];
 }
@@ -1603,7 +1665,7 @@ function hourCells(row: Row): HTMLElement[] {
       {
         class: classes(
           "c-num",
-          (index === 0 || index === buildColumns.length) && "g1",
+          index % 2 === 0 && "g1",
           column.startsWith("design-") && "is-design",
         ),
       },
@@ -1917,23 +1979,8 @@ function tableCard(picked: Estimate, pricing: Pricing): HTMLElement {
             heading("Type", help.type, { rowspan: "2" }),
             heading("Start", help.start, { class: "n", rowspan: "2" }),
             heading("Max", help.max, { class: "n", rowspan: "2" }),
-            h(
-              "th",
-              {
-                class: "c-span is-build g1",
-                colspan: String(buildColumns.length),
-                scope: "colgroup",
-              },
-              "Build hours",
-            ),
-            h(
-              "th",
-              {
-                class: "c-span is-design g1",
-                colspan: String(designColumns.length),
-                scope: "colgroup",
-              },
-              "Design hours",
+            designPairs.map(([name]) =>
+              h("th", { class: "c-span is-choice g1", colspan: "2", scope: "colgroup" }, name),
             ),
             h("th", { class: "c-span is-needs g1", colspan: "2", scope: "colgroup" }, "Needs"),
             h("th", { class: "c-span c-own first", colspan: "3", scope: "colgroup" }, picked.name),
@@ -1941,16 +1988,15 @@ function tableCard(picked: Estimate, pricing: Pricing): HTMLElement {
           h(
             "tr",
             { class: "c-heads2" },
-            [...buildColumns, ...designColumns].map(([column, label], index) =>
-              heading(label, help[column], {
-                class: classes("n", (index === 0 || index === buildColumns.length) && "g1"),
-              }),
-            ),
+            designPairs.flatMap(([, design, build]) => [
+              heading("Design", help[design], { class: "n g1 is-design" }),
+              heading("Build", help[build], { class: "n" }),
+            ]),
             heading("Package", help.package, { class: "g1" }),
             heading("Tier", help.tier),
             heading("In it", own.qty, { class: "c-own n first" }),
-            heading("Build", own.build, { class: "c-own n" }),
             heading("Design", own.design, { class: "c-own n" }),
+            heading("Build", own.build, { class: "c-own n" }),
           ),
         ),
         h("tbody", null, body),
@@ -1973,16 +2019,16 @@ function tableCard(picked: Estimate, pricing: Pricing): HTMLElement {
                 h("td", { class: "c-own first" }),
                 h(
                   "td",
-                  { class: "c-own" },
-                  figure(sum(pair.live), pair.draft ? sum(pair.draft) : null),
-                ),
-                h(
-                  "td",
                   { class: "c-own d" },
                   figure(
                     hoursLabel(pair.live.designHours),
                     pair.draft ? hoursLabel(pair.draft.designHours) : null,
                   ),
+                ),
+                h(
+                  "td",
+                  { class: "c-own" },
+                  figure(sum(pair.live), pair.draft ? sum(pair.draft) : null),
                 ),
               ),
             )

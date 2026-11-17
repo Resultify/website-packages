@@ -1,5 +1,5 @@
 /* The page: summary sidebar | Design and Site basics | Features in the estimate | the shelf.
-   Every row has one anatomy: lead mark | name and note | control | hours (Build over Design).
+   Every row has one anatomy: lead mark | name and note | control | hours (Design over Build).
 
    Hours, package and tier, and every row action are the app's own (controls.ts, quote.ts): the buttons
    and fields drawn here carry data-action, data-id and data-focus, so bindActions handles them. Copy
@@ -171,8 +171,8 @@ function reserved<T extends Element>(node: T, unused: boolean): T {
   return node;
 }
 
-/** Build over Design, the same column everywhere. A row that never has design hours keeps one line.
-    project: its hours are Project, not Build, and have Project's colour. */
+/** Design over Build, the same column everywhere. A row that never has design hours keeps one line:
+    Languages, and Project's rows (project: its hours are Project, not Build, in Project's colour). */
 function hrs(
   build: number | null,
   design: number,
@@ -183,9 +183,26 @@ function hrs(
   const format = signed ? plus : hoursLabel;
   return h(
     "span",
-    { class: one ? "hrs one" : "hrs" },
-    h("span", { class: project ? "hb hp" : "hb" }, build === null ? "" : format(build)),
+    { class: one || project ? "hrs one" : "hrs" },
     h("span", { class: "hd" }, design > 0 ? format(design) : ""),
+    h("span", { class: project ? "hb hp" : "hb" }, build === null ? "" : format(build)),
+  );
+}
+
+/** An item's total, over the rows of its parts: each figure after its label, as the column's head
+    writes its sums, so it reads apart from the parts' bare figures. Design over Build, as the
+    parts' figures; project: Project hours, on one line. */
+function itemTotal(build: number, design: number, project = false): HTMLElement {
+  return h(
+    "span",
+    { class: project ? "hrs tot one" : "hrs tot" },
+    h("span", { class: "hd" }, design > 0 ? [h("small", null, "Design"), hoursLabel(design)] : ""),
+    h(
+      "span",
+      { class: project ? "hb hp" : "hb" },
+      h("small", null, project ? projectName : "Build"),
+      hoursLabel(build),
+    ),
   );
 }
 
@@ -202,7 +219,7 @@ export function fitHeads(root: ParentNode): void {
   }
 }
 
-/** The figure that leads a column title's line, before Build and Design, in its own colour: Content
+/** The figure that leads a column title's line, before Design and Build, in its own colour: Content
     in the estimate, Project in the site basics. Its label shows where there is room. */
 function lead(kind: "c" | "p", name: string, hours: number): HTMLElement {
   return h(
@@ -216,8 +233,8 @@ function lead(kind: "c" | "p", name: string, hours: number): HTMLElement {
   );
 }
 
-/** The figures on a column title's line, each after its label: Build, Design, and Project when
-    there is some. */
+/** The figures on a column title's line, each after its label: Project when there is some, then
+    Design and Build. */
 function sums(
   build: number | null,
   design: number | null,
@@ -227,19 +244,19 @@ function sums(
   return h(
     "span",
     { class: "hrs sum" },
-    h(
-      "span",
-      { class: "hb" },
-      build === null ? "" : [h("small", null, "Build"), hoursLabel(build)],
-    ),
+    project === null
+      ? null
+      : h("span", { class: "hp" }, h("small", null, projectName), hoursLabel(project)),
     h(
       "span",
       { class: "hd" },
       design === null ? "" : [h("small", null, designCaption), hoursLabel(design)],
     ),
-    project === null
-      ? null
-      : h("span", { class: "hp" }, h("small", null, projectName), hoursLabel(project)),
+    h(
+      "span",
+      { class: "hb" },
+      build === null ? "" : [h("small", null, "Build"), hoursLabel(build)],
+    ),
   );
 }
 
@@ -563,7 +580,7 @@ function launch(result: Quote): HTMLElement {
       lead: "rocket",
       name: "Header, footer and launch",
       note: "Always in: on every page, and the go-live",
-      hours: hrs(fixedHours(result), designFor(result, ...fixedIds)),
+      hours: itemTotal(fixedHours(result), designFor(result, ...fixedIds)),
     },
     fixedIds.map((id) => foldPart(result, id)),
   );
@@ -578,11 +595,9 @@ function project(result: Quote): HTMLElement {
       lead: "calendar",
       name: projectName,
       note: "Always in: kick-off, training, project management",
-      hours: hrs(
+      hours: itemTotal(
         ids.reduce((sum, id) => sum + lineHours(result, id), 0),
         designFor(result, ...ids),
-        false,
-        false,
         true,
       ),
     },
@@ -600,7 +615,7 @@ function basicsPart(result: Quote): HTMLElement[] {
       { class: "sh" },
       h("h2", null, "Site basics"),
       /* Project first, as Content heads the estimate: the kick-off, training and project
-         management. Then Build and Design */
+         management. Then Design and Build */
       lead("p", projectName, stepHours(result, "basics", "project")),
       sums(
         stepHours(result, "basics", "implementation") + stepHours(result, "languages"),
@@ -710,7 +725,7 @@ function enteredItem(result: Quote, id: string, missing: boolean): HTMLElement {
 }
 
 /** An item whose build hours and design hours are both entered, such as Custom integration: a field
-    for each, and its hours as Build over Design, as any item of the shelf has them. */
+    for each, and its hours as Design over Build, as any item of the shelf has them. */
 function enteredBuildAndDesign(result: Quote, tile: Tile, missing: boolean): HTMLElement {
   const name = laneName(tile.id);
   const note = stack(
@@ -747,8 +762,8 @@ function buildAndDesignFields(result: Quote, tile: Tile, missing: boolean): HTML
   return h(
     "div",
     { class: "duos" },
-    field(tile.id, "Build"),
     tile.designInput ? field(tile.designInput, "Design") : null,
+    field(tile.id, "Build"),
   );
 }
 
@@ -921,7 +936,7 @@ function blogItem(result: Quote): HTMLElement {
         blogs > 1 ? 1 : 0,
       ),
       control: stepper(tile, blogs),
-      hours: hrs(
+      hours: itemTotal(
         ids.reduce((sum, id) => sum + lineHours(result, id), 0),
         designFor(result, ...ids),
       ),
@@ -1021,7 +1036,7 @@ function catalogueItem(result: Quote, missing = false): HTMLElement {
       name: [placeName.catalogue, tag(tile, shown)],
       hint: hint(tile.id, result),
       note: `Catalogue with ${tile.source} as its source`,
-      hours: hrs(
+      hours: itemTotal(
         ids.reduce((sum, id) => sum + lineHours(result, id), 0),
         designFor(result, ...ids),
       ),
@@ -1067,7 +1082,7 @@ function membershipItem(result: Quote, missing: ReadonlySet<string>): HTMLElemen
       name: [laneName("membership"), tag(tile, shown)],
       hint: hint("membership", result),
       note: `${tileMode(tile, shown)?.label ?? ""}, ${count} ${count === 1 ? "access group" : "access groups"}`,
-      hours: hrs(
+      hours: itemTotal(
         ids.reduce((sum, id) => sum + lineHours(result, id), 0),
         designFor(result, ...ids),
       ),
@@ -1129,7 +1144,7 @@ function estimate(result: Quote, state: PageState): Kid[] {
         "Features in the estimate",
         h("span", { class: "count" }, `${store.order.length} of ${laneIds.length}`),
       ),
-      /* Content, in its own colour, before Build and Design */
+      /* Content, in its own colour, before Design and Build */
       lead("c", "Content", content),
       sums(
         stepHours(result, "addons", "implementation"),
@@ -1181,8 +1196,8 @@ function shelfRow(result: Quote, id: string): HTMLElement {
     right = h(
       "span",
       { class: "s-hrs" },
-      h("span", { class: "hb" }, add.build > 0 ? plus(add.build) : ""),
       h("span", { class: "hd" }, add.design > 0 ? plus(add.design) : ""),
+      h("span", { class: "hb" }, add.build > 0 ? plus(add.build) : ""),
     );
   }
   return h(
@@ -1234,8 +1249,8 @@ function shelf(result: Quote): HTMLElement {
             ? h(
                 "span",
                 { class: "s-key", "aria-hidden": "true" },
-                h("span", { class: "hb" }, "Build"),
                 h("span", { class: "hd" }, "Design"),
+                h("span", { class: "hb" }, "Build"),
               )
             : null,
         ),

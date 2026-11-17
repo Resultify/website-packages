@@ -3,7 +3,14 @@
    files on disk and in the last commit, so a change made on the page changes none of the numbers
    here. Save is caught before it reaches the server, so the tests never write the files in src/. */
 import { expect, type Page, type Route, test } from "@playwright/test";
-import { buildCatalog, designChoices, startingDesign, withCatalog } from "../src/catalog.ts";
+import {
+  buildCatalog,
+  designChoices,
+  getTile,
+  startingDesign,
+  tileMode,
+  withCatalog,
+} from "../src/catalog.ts";
 import { hoursLabel } from "../src/controls.ts";
 import {
   decodeSelection,
@@ -17,11 +24,9 @@ import {
   setSource,
   setTile,
 } from "../src/quote.ts";
-import scenarioText from "../src/scenarios.csv" with { type: "text" };
 import {
   applyCells,
   type Cells,
-  parseCsv,
   parseRules,
   parseTable,
   type Rules,
@@ -35,17 +40,29 @@ const EXAMPLE = "-FMRqQVcGc";
 /** The starting estimate, as the estimator writes it with the frozen files: Nimbly design. Made
     with those files, not src/, as the page here is served them */
 const START = withCatalog(fixtureCatalog, () => encodeSelection(selectionForShape("essential")));
-/** The starting estimate with each design, on the right of the calculations page. */
-const starting = (choice: (typeof designChoices)[number]) => ({
-  name: `Starting estimate · ${choice.label}`,
+/** The rows of estimates on the right of the calculations page: the starting estimate, then with
+    Blog and Search, then with the Product catalogue too, each with every design that has design
+    hours. */
+const setups = [
+  ["Starting estimate", []],
+  ["Blog and Search", ["blog-setups", "search"]],
+  ["Blog, Search and Products", ["blog-setups", "search", "product-catalogue"]],
+] as const;
+const ownEstimate = (
+  [setup, adds]: (typeof setups)[number],
+  choice: (typeof designChoices)[number],
+) => ({
+  name: `${setup} · ${choice.label}`,
   code: withCatalog(fixtureCatalog, () =>
-    encodeSelection(setTile(selectionForShape("essential"), choice.id, true)),
+    encodeSelection(
+      adds.reduce(
+        (selection, id) => setTile(selection, id, true),
+        setTile(selectionForShape("essential"), choice.id, true),
+      ),
+    ),
   ),
 });
-const STARTING = starting(startingDesign).name;
-/** An estimate of src/scenarios.csv, by its name. */
-const scenario = (name: string) =>
-  parseCsv(scenarioText).find((line) => line[0] === name)?.[1] ?? "";
+const STARTING = ownEstimate(setups[0], startingDesign).name;
 /* Sections with AI design: 5h each becomes 6h */
 const CHANGE: Cells = { "sections build-ai": "6" };
 
@@ -90,7 +107,9 @@ async function setRule(page: Page, name: string, value: string) {
   await field.fill(value);
   await field.press("Enter");
 }
-const estimate = (page: Page, name: string) => page.locator(`.c-est-item[data-estimate="${name}"]`);
+/** An estimate on the right: its cell, and when it is the one chosen, its hours by kind under the
+    grid. */
+const estimate = (page: Page, name: string) => page.locator(`.c-right [data-estimate="${name}"]`);
 const figure = (page: Page, name: string, which: string) =>
   estimate(page, name).locator(`[data-figure="${which}"]`);
 const total = (page: Page) => page.locator(".big").evaluate((node) => node.firstChild?.textContent);
@@ -151,9 +170,10 @@ test("the calculations page reads the files from the server and prices the link'
     let hours = 0;
     let design = 0;
     for (const line of document.querySelectorAll(".c-main tbody tr:not(.c-group)")) {
+      /* In it, then Design and Build, as everywhere */
       const cells = line.querySelectorAll(".c-own");
-      hours += figure(cells[1] ?? null);
-      design += figure(cells[2] ?? null);
+      design += figure(cells[1] ?? null);
+      hours += figure(cells[2] ?? null);
     }
     return { hours, design };
   });
@@ -179,10 +199,12 @@ test("a changed cell is compared with the last commit, stays through a reload, a
   await expect(page.locator(".c-status")).toContainText(
     "1 change from the last commit, 1 edit not saved yet",
   );
-  await expect(own.locator('[data-figure="committed"]')).toHaveText(
-    hoursLabel(priced(EXAMPLE).hours),
-  );
+  /* The hours with this page's files, and the last commit's when pointing at them */
   await expect(own.locator('[data-figure="table"]')).toHaveText(hoursLabel(want.hours));
+  await expect(own.locator('[data-figure="table"] .is-changed')).toHaveAttribute(
+    "title",
+    `Last commit: ${hoursLabel(priced(EXAMPLE).hours)}`,
+  );
   /* 8 sections, 1h more each, and project management's share of them */
   await expect(own.locator('[data-figure="change"]')).toHaveText(
     `+${hoursLabel(want.hours - priced(EXAMPLE).hours)}`,
@@ -238,7 +260,12 @@ test("the Design, Project and Languages panels change the rules, and Save sends 
   await expect(
     page.locator('.c-card[aria-label="Project"] input[data-rule="pm-percent"]'),
   ).toHaveValue(rules["pm-percent"]);
-  await expect(page.locator(".c-heads2 th", { hasText: "Nimbly" })).toHaveCount(2);
+  /* The table: each design choice's design and build hours side by side */
+  await expect(page.locator(".c-heads .c-span.is-choice")).toHaveText(["AI", "Nimbly", "Custom"]);
+  await expect(page.locator(".c-heads2 th")).toHaveText([
+    ...["Design", "Build", "Design", "Build", "Design", "Build"],
+    ...["Package", "Tier", "In it", "Design", "Build"],
+  ]);
   await expect(languages).toContainText("The 2nd");
   await expect(languages.locator('input[data-rule="languages-second"]')).toHaveValue("14");
 
@@ -377,13 +404,20 @@ test("choosing an estimate fills the table's last columns with it, and a pasted 
 }) => {
   await serveTable(page);
   await openCalc(page, START);
-  await estimate(page, "Platform with a catalogue").locator("input").check();
+  const products = ownEstimate(setups[2], startingDesign);
+  await estimate(page, products.name).locator("input").check();
   await expect(page.locator(".c-main tfoot th")).toContainText(
-    `Platform with a catalogue: ${hoursLabel(priced(scenario("Platform with a catalogue")).hours)}`,
+    `${products.name}: ${hoursLabel(priced(products.code).hours)}`,
   );
+  /* The catalogue at the option it starts with */
+  const option = withCatalog(fixtureCatalog, () => {
+    const catalogue = getTile("product-catalogue");
+    const mode = tileMode(catalogue, catalogue.initial);
+    return mode?.group ? `${mode.group}: ${mode.label}` : (mode?.label ?? "");
+  });
   await expect(
     page
-      .locator(".c-main tr", { has: page.locator('input[value="Dynamic pages: Filtered"]') })
+      .locator(".c-main tr", { has: page.locator(`input[value="${option}"]`) })
       .locator(".c-own")
       .first(),
   ).toHaveText("in");
@@ -402,30 +436,43 @@ test("choosing an estimate fills the table's last columns with it, and a pasted 
   expect(await page.evaluate(() => location.hash)).toBe(`#${EXAMPLE}`);
 });
 
-test("the estimates start with the starting estimate once for each design, the starting design first; a link to one of them picks it", async ({
+test("the estimates are a grid: the starting estimate, then with Blog and Search, then with Products too, each with every design; all in sight, and a link to one of them picks it", async ({
   page,
 }) => {
   await serveTable(page);
-  /* Each design that has design hours: the starting one first */
-  const first = [
-    startingDesign,
-    ...designChoices.filter((choice) => choice !== startingDesign && choice.kind !== "none"),
-  ];
-  const want = first.map(starting);
-  await openCalc(page, want[1]?.code);
+  /* Each design that has design hours, in the estimator's order */
+  const designs = designChoices.filter((choice) => choice.kind !== "none");
+  const want = setups.flatMap((setup) => designs.map((choice) => ownEstimate(setup, choice)));
+  expect(want).toHaveLength(9);
+  await openCalc(page, want[4]?.code);
   /* Its own link is one of the estimates already, so it has no From your link of its own */
-  await expect(page.locator(".c-est-item")).toHaveCount(want.length + 2);
+  await expect(page.locator(".c-est-item")).toHaveCount(want.length);
   expect(
     await page
       .locator(".c-est-item")
       .evaluateAll((items) => items.map((item) => (item as HTMLElement).dataset.estimate)),
-  ).toEqual([...want.map((item) => item.name), "Growth with a blog", "Platform with a catalogue"]);
-  await expect(estimate(page, want[1]?.name ?? "").locator("input")).toBeChecked();
+  ).toEqual(want.map((item) => item.name));
+  await expect(page.locator(".c-est-col")).toHaveText(["AI", "Nimbly", "Custom"]);
+  await expect(page.locator(".c-est-row")).toHaveText([
+    "Starting estimate",
+    "+ Blog and Search",
+    "+ Products",
+  ]);
+  await expect(estimate(page, want[4]?.name ?? "").locator("input")).toBeChecked();
   for (const item of want) {
     await expect(figure(page, item.name, "committed")).toHaveText(
       hoursLabel(priced(item.code).hours),
     );
   }
+  /* All nine, the chosen one's hours and the field for another link, with no scrolling */
+  expect(
+    await page.locator(".c-right").evaluate((node) => node.scrollHeight <= node.clientHeight),
+  ).toBe(true);
+
+  /* With no link, the starting estimate with the starting design, as the estimator starts */
+  await page.goto("about:blank");
+  await page.goto("/calc/", { waitUntil: "domcontentloaded" });
+  await expect(estimate(page, STARTING).locator("input")).toBeChecked();
 });
 
 test("the server refuses a save that does not come from the calculations page", async ({
@@ -586,7 +633,7 @@ test("an item can take its build and design hours from the estimate; project man
   await expect(management.locator(".c-type")).toHaveText("Project");
   await expect(management).toContainText(`${rules["pm-percent"]}%, whatever the design`);
   const hours = priced(EXAMPLE).lines.find((line) => line.id === "project-management");
-  await expect(management.locator(".c-own").nth(1)).toHaveText(hoursLabel(hours?.openHours ?? 0));
+  await expect(management.locator(".c-own").nth(2)).toHaveText(hoursLabel(hours?.openHours ?? 0));
   /* Custom integration: both entered */
   const integration = page.locator(".c-main tr", {
     has: page.locator('input[data-cell="custom-integration item"]'),
