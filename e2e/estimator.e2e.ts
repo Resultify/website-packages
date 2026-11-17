@@ -101,9 +101,9 @@ test("the total, its parts and the estimate's figures come from the app's own qu
     expect(s.legend).toEqual(
       [q.designHours, q.implementationHours, q.contentHours, q.projectHours].map(hoursLabel),
     );
-    expect(s.head.slice(0, 2)).toEqual(
-      [stepHours(q, "content"), stepHours(q, "addons", "implementation")].map(hoursLabel),
-    );
+    /* Content first, Build last */
+    expect(s.head[0]).toBe(hoursLabel(stepHours(q, "content")));
+    expect(s.head.at(-1)).toBe(hoursLabel(stepHours(q, "addons", "implementation")));
   }
 });
 
@@ -395,6 +395,44 @@ test("fixed parts start where the item's name starts, parts with a switch sit to
   expect(
     Math.abs((await left(".fold-body .r .tx b")) - (await left(".fold summary .tx b"))),
   ).toBeLessThanOrEqual(1);
+});
+
+test("Design comes before Build everywhere: the heads after Content or Project, each item's figures, the totals, the shelf and its key, the fields", async ({
+  page,
+}) => {
+  await open(page);
+  await addFromShelf(page, "product-catalogue");
+  await addFromShelf(page, "custom-integration");
+  const orders = await page.evaluate(() => {
+    const kind = (node: Element) =>
+      node.classList.contains("hd")
+        ? "design"
+        : node.classList.contains("hb")
+          ? "build"
+          : node.classList.contains("hp")
+            ? "project"
+            : "other";
+    /* Every figure column that has figures; a row with no hours has an empty one */
+    return [...document.querySelectorAll(".hrs:not(.one, .c, .p), .s-hrs, .s-key")]
+      .filter((node) => node.children.length > 0)
+      .map((node) => [...node.children].map(kind).join(" "));
+  });
+  expect(orders.length).toBeGreaterThan(20);
+  for (const order of orders) expect(["design build", "project design build"]).toContain(order);
+  /* The panel heads: Content or Project first, then Design and Build */
+  await expect(page.locator(".est .sh > .hrs")).toHaveText([
+    /^Content\d+h$/,
+    /^Design\d+hBuild\d+h$/,
+  ]);
+  await expect(page.locator(".basics .sh:has(> .hrs.p) > .hrs")).toHaveText([
+    /^Project\d+h$/,
+    /^Design\d+hBuild\d+h$/,
+  ]);
+  await expect(page.locator(".s-key").first()).toHaveText("DesignBuild");
+  await expect(page.locator('.feat[data-key="custom-integration"] .duo')).toHaveText([
+    /Design/,
+    /Build/,
+  ]);
 });
 
 test("the tier name fits on its card, and the shelf's Build / Design key has the colours of the hours under it", async ({
@@ -795,7 +833,7 @@ test("column figures sit on their title's line, labels have no dots and their fi
     expect(await lead.evaluate((n) => getComputedStyle(n).color)).toBe(
       await page.locator(dot).evaluate((n) => getComputedStyle(n).color),
     );
-    /* Before Build and Design */
+    /* Before Design and Build */
     expect(
       await lead.evaluate((n) => n.nextElementSibling?.classList.contains("sum") ?? false),
     ).toBe(true);
@@ -1083,7 +1121,7 @@ test("Custom integration takes build hours and design hours, each in its field, 
   const card = page.locator('.feat[data-key="custom-integration"]');
   const build = card.locator("#hours-custom-integration");
   const design = card.locator("#hours-custom-integration-design");
-  await expect(card.locator(".duo")).toHaveText([/Build/, /Design/]);
+  await expect(card.locator(".duo")).toHaveText([/Design/, /Build/]);
   await page.locator(".ab.primary").click();
   await expect(page.locator(".toast.is-warn")).toContainText("Add hours to Custom integration");
   await expect(card.locator(".r")).toHaveClass(/missing/);
@@ -1237,6 +1275,40 @@ test("Memberships: a way to sign in, access groups (Enterprise from 3), Social s
   expect(text).toContain("  - Memberships · SSO: ");
   expect(text).toContain("  - Access groups · 3 access groups: ");
   expect(text).toContain("  - Member area: 20h");
+});
+
+test("an item's total reads apart from its parts' hours: each figure labelled, larger, and the parts' figures lighter", async ({
+  page,
+}) => {
+  await open(page);
+  const style = (locator: ReturnType<Page["locator"]>) =>
+    locator.first().evaluate((node) => {
+      const { fontSize, fontWeight } = getComputedStyle(node);
+      return { size: Number.parseFloat(fontSize), weight: Number(fontWeight) };
+    });
+  const totals = [
+    { at: page.locator('.feat[data-key="blog-setups"] > .r'), label: /^Build\d+h$/ },
+    { at: page.locator('details.fold[data-fold="fixed"] > summary'), label: /^Build\d+h$/ },
+    { at: page.locator('details.fold[data-fold="project"] > summary'), label: /^Project\d+h$/ },
+  ];
+  const parts = [
+    page.locator('.feat[data-key="blog-setups"] .subs .r'),
+    page.locator('details.fold[data-fold="fixed"] .fold-body .r'),
+    page.locator('details.fold[data-fold="project"] .fold-body .r'),
+  ];
+  for (const [index, { at, label }] of totals.entries()) {
+    const figure = at.locator(":scope > .hrs.tot .hb");
+    await expect(figure).toHaveText(label);
+    const part = parts[index]?.locator(":scope > .hrs .hb") ?? figure;
+    /* A part's figure has no label */
+    await expect(part.first()).toHaveText(/^\d+h$/);
+    const [whole, one] = [await style(figure), await style(part)];
+    expect(whole.size).toBeGreaterThan(one.size);
+    expect(whole.weight).toBeGreaterThan(one.weight);
+  }
+  await expect(page.locator('.feat[data-key="blog-setups"] > .r > .hrs.tot .hd')).toHaveText(
+    /^Design\d+h$/,
+  );
 });
 
 test("the site basics always have the kick-off, training and project management in a Project fold of their own, without design hours, their hours Project's", async ({

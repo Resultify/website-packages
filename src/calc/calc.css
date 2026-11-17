@@ -528,60 +528,102 @@ body.calc #calc {
   display: flex;
 }
 
-/* ---------- Estimates: one card each in the right panel ---------- */
+/* ---------- Estimates: a grid, a design in each column and what the estimate has in each row, then
+   the chosen one ---------- */
 
 .c-est {
   display: grid;
-  gap: 8px;
-  margin-top: 12px;
+  gap: 4px;
+  margin-top: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.c-est-col {
+  padding: 0 7px;
+  font-size: var(--fs-caption);
+  font-weight: 650;
+  color: var(--muted);
+}
+.c-est-row {
+  grid-column: 1 / -1;
+  margin-top: 6px;
+  font-size: var(--fs-tag);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.c-est-row:first-child {
+  margin-top: 0;
 }
 .c-est-item {
+  position: relative;
   display: grid;
-  gap: 6px;
-  padding: 10px 12px;
+  align-content: start;
+  gap: 1px;
+  min-width: 0;
+  padding: 6px 7px 7px;
   border-radius: var(--r-ctl);
   box-shadow: inset 0 0 0 1px var(--line);
-  font-size: var(--fs-sub);
-  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-caption);
+  line-height: 1.35;
+  color: var(--muted);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.c-est-item:hover {
+  box-shadow: inset 0 0 0 1px var(--line-strong);
 }
 .c-est-item.is-picked {
   background: var(--own);
   box-shadow: inset 0 0 0 1.5px var(--chosen);
 }
-.c-est-name {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 650;
+.c-est-item:has(input:focus-visible) {
+  outline: 2px solid var(--chosen);
+  outline-offset: 1px;
+}
+/* The radio covers the cell, out of sight: the cell is what shows it is chosen */
+.c-est-item input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
   cursor: pointer;
 }
-.c-est-name input {
-  width: 15px;
-  height: 15px;
-  margin: 0;
-  accent-color: var(--chosen);
-}
-.c-est-total {
+.c-est-item.is-wide {
+  grid-column: 1 / -1;
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 4px 8px;
-  font-size: var(--fs-package);
-  font-weight: 700;
+  gap: 2px 10px;
 }
-.c-est-total .c-arrow {
+.c-est-item.is-none {
   color: var(--faint);
-  font-weight: 400;
+  cursor: default;
 }
-.c-est-total .c-delta,
-.c-est-total .c-same {
-  font-size: var(--fs-note);
+.c-est-total {
+  margin-bottom: 1px;
+  font-size: var(--fs-hours);
+  font-weight: 700;
+  color: var(--ink);
 }
-.c-est-meta {
-  color: var(--muted);
+.c-est-item .c-delta {
+  font-weight: 650;
+  color: var(--ink);
 }
-.c-est-meta .c-dot {
-  margin: 0 6px;
+.c-est-item .is-changed {
+  box-shadow: 0 0 0 2px var(--tick);
+}
+.c-est-detail {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: var(--r-ctl);
+  background: var(--own);
+  font-size: var(--fs-sub);
+  font-variant-numeric: tabular-nums;
 }
 .c-est-split {
   display: flex;
@@ -818,10 +860,10 @@ body.calc #calc {
   border-radius: 1px;
   background: currentColor;
 }
-.c-main thead .c-span.is-build {
+.c-main thead .c-span.is-choice {
   color: var(--ink);
 }
-.c-main thead .c-span.is-design {
+.c-main thead .c-heads2 th.is-design {
   color: var(--design);
 }
 .c-main thead .c-span.is-needs {

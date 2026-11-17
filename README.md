@@ -92,6 +92,17 @@ blue), first on the site basics' title line (as Content is first on the
 estimate's; their labels show from 1341px wide, their colour alone below) and
 in a fold of its own in the site basics.
 
+Design comes before Build everywhere: on the title lines (after Content or
+Project), in each item's figures (Design over Build; with no design hours,
+Build alone on the first line), on the shelf and its key, in the fields of
+Custom integration and in the calculations page's columns. The total on the
+left and the hours breakdown keep their own order.
+
+An item with parts (the Blog, the Product catalogue, Memberships, and the site
+basics' two folds) has its total on its first line, larger, each figure after
+its label (Design, Build, or Project) as the column's head writes its sums. The
+parts' figures under it are bare and lighter.
+
 The shelf lists its items, the Blog, the Product catalogue and Memberships in
 the order of their rows in `estimator.csv` (an item's first row), in the group
 of the package each needs; what is coming soon sits locked at the end of its
@@ -157,11 +168,14 @@ rule, open to change. It is part of the dev server only; the published site has
 no calculations page.
 
 - Each estimate on the page is priced with the files in the last commit and
-  with the files on the page, side by side. The estimates are the starting
-  estimate with each design (made from the files it is priced with, so a change
-  to what an estimate starts with shows in it), the links in
-  [`src/scenarios.csv`](src/scenarios.csv), and the one in the address:
-  `/calc/#<code>`
+  with the files on the page. The estimates are a grid, all in sight: a column
+  for each design (AI, Nimbly, Custom) and three rows, the starting estimate,
+  then with the Blog and Search, then with the Product catalogue too, each item
+  at what it starts with. They are made from the files they are priced with, so
+  a change to what an estimate starts with shows in them. A cell has the hours,
+  their difference from the last commit, the package and the tier; the chosen
+  one's hours by kind and its link are under the grid. Above it is the estimate
+  in the address, `/calc/#<code>`, when it is none of the nine
 - A number that differs from the last commit is yellow; a dashed edge means it
   is not saved yet. Unsaved changes survive a reload of the tab
 - The table is laid out as the estimator is: **Site basics**, the **Shelf**,
