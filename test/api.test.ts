@@ -36,14 +36,29 @@ afterAll(async () => {
 
 const rows = parseTable(tableText);
 const edited = (table: string, rules = rulesText) => ({ table, rules });
+/** Why a save was refused, or undefined when it was saved. */
+async function refused(root: string, files: ReturnType<typeof edited>) {
+  const result = await saveTables(root, files);
+  return "error" in result ? result.error : undefined;
+}
+/** A new shelf item, with build hours. */
+const newItem = (id: string): Row => ({
+  ...(Object.fromEntries(columns.map((column) => [column, ""])) as Row),
+  id,
+  item: id,
+  place: "shelf",
+  "build-ai": "4",
+});
 
 describe("saving the files", () => {
   test("writes a table the app can read, in the file's own layout", async () => {
     const root = await copyOfRepo();
     const changed = serializeTable(applyCells(rows, { "sections build-ai": "5" }));
     /* Written another way (CRLF line ends): saved as the file is always written */
-    expect(await saveTables(root, edited(changed.replaceAll("\n", "\r\n")))).toEqual({});
+    const saved = await saveTables(root, edited(changed.replaceAll("\n", "\r\n")));
     const tables = await readTables(root);
+    /* It answers with the files as it left them */
+    expect(saved).toEqual(tables);
     expect(tables.saved.table).toBe(changed);
     expect(tables.saved.rules).toBe(rulesText);
     expect(tables.saved.codes).toBe(codesText);
@@ -53,17 +68,13 @@ describe("saving the files", () => {
   test("refuses a table or rules the app cannot read, and leaves the files as they were", async () => {
     const root = await copyOfRepo();
     const broken = serializeTable(applyCells(rows, { "sections build-ai": "many" }));
-    expect((await saveTables(root, edited(broken))).error).toContain(
-      "Sections: build-ai must be a number",
-    );
-    expect((await saveTables(root, edited("id,code\nx,1\n"))).error).toContain("columns must be");
+    expect(await refused(root, edited(broken))).toContain("Sections: build-ai must be a number");
+    expect(await refused(root, edited("id,code\nx,1\n"))).toContain("columns must be");
     expect(
-      (
-        await saveTables(
-          root,
-          edited(tableText, rulesText.replace("ai-feedback-each,3", "ai-feedback-each,x")),
-        )
-      ).error,
+      await refused(
+        root,
+        edited(tableText, rulesText.replace("ai-feedback-each,3", "ai-feedback-each,x")),
+      ),
     ).toContain("Rule ai-feedback-each");
     expect((await readTables(root)).saved).toEqual({
       table: tableText,
@@ -80,17 +91,35 @@ describe("saving the files", () => {
   test("gives a new item the next link code, and writes it to link-codes.csv", async () => {
     const root = await copyOfRepo();
     const highest = Math.max(...parseCodes(codesText).map((entry) => entry.code));
-    const booking = Object.fromEntries(columns.map((column) => [column, ""])) as Row;
-    Object.assign(booking, {
-      id: "booking",
-      item: "Booking",
-      place: "shelf",
-      "build-ai": "4",
-    });
-    expect(await saveTables(root, edited(serializeTable([...rows, booking])))).toEqual({});
+    expect(
+      await refused(root, edited(serializeTable([...rows, newItem("booking")]))),
+    ).toBeUndefined();
     const saved = parseCodes((await readTables(root)).saved.codes);
     expect(saved.find((entry) => entry.id === "booking")?.code).toBe(highest + 1);
     expect(saved.length).toBe(parseCodes(codesText).length + 1);
+  });
+
+  test("two saves at once: one after the other, so each new item gets a code of its own", async () => {
+    const root = await copyOfRepo();
+    const highest = Math.max(...parseCodes(codesText).map((entry) => entry.code));
+    /* Two tabs, each adding an item of its own, saved at the same moment */
+    const [first, second] = await Promise.all([
+      saveTables(root, edited(serializeTable([...rows, newItem("alpha")]))),
+      saveTables(root, edited(serializeTable([...rows, newItem("beta")]))),
+    ]);
+    if ("error" in first || "error" in second) throw new Error("not saved");
+    const codeOf = (codes: string, id: string) =>
+      parseCodes(codes).find((entry) => entry.id === id)?.code;
+    /* Each answers with the files as it left them: the first with its item */
+    expect(first.saved.table).toContain("\nalpha,");
+    expect(codeOf(first.saved.codes, "alpha")).toBe(highest + 1);
+    /* The second came after: its table is the one on disk, and alpha keeps its code, so a link
+       made with it never names beta */
+    expect(second.saved.table).toContain("\nbeta,");
+    expect(second.saved.table).not.toContain("\nalpha,");
+    expect(codeOf(second.saved.codes, "alpha")).toBe(highest + 1);
+    expect(codeOf(second.saved.codes, "beta")).toBe(highest + 2);
+    expect((await readTables(root)).saved).toEqual(second.saved);
   });
 
   test("reads the table of the last commit from git", async () => {

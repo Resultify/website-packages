@@ -341,6 +341,17 @@ describe("a draft", () => {
     );
   });
 
+  test("at least one feedback round and one AI variant are included: a link writes them from 1", () => {
+    expect(() => drafted({}, { "ai-feedback-included": "0" })).toThrow(
+      "AI feedback: 0 rounds included must be 1 to 10",
+    );
+    expect(() => drafted({}, { "custom-feedback-included": "0" })).toThrow("must be 1 to 10");
+    expect(() => drafted({}, { "ai-variants-included": "0" })).toThrow(
+      "0 variants included must be 1 to 10",
+    );
+    expect(() => drafted({}, { "nimbly-feedback-included": "11" })).toThrow("must be 1 to 10");
+  });
+
   test("changes the hours of one option only", () => {
     const advanced = setQuantity(essential(), "menu", 2);
     const draft = drafted({ "menu·Advanced build-nimbly": "14" });

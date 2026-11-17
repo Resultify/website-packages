@@ -544,8 +544,10 @@ export function hoursSummary(result: Quote): HoursSummary {
     }));
     /* One line named as its group says nothing more */
     if (rows.length === 1 && rows[0]?.label === group.label) lines = [];
+    /* No design: the client provides the site's. Design hours entered for an item (Custom
+       integration) are still charged, so their lines stay under the note */
     if (group.key === "design" && design.kind === "none") {
-      lines = [{ name: "Provided by the client", hours: null }];
+      lines = [{ name: "Provided by the client", hours: null }, ...lines];
     }
     const named = (name: string) => (group.key === "design" ? `${name} (${design.label})` : name);
     groups.push({

@@ -69,6 +69,20 @@ describe("Copy hours", () => {
     expect(text).toEndWith("- Total: 90h");
   });
 
+  test("with no design, design hours entered for an item stay as lines under the note", () => {
+    const none = setTile(setTile(essential(), "no-design", true), "custom-integration", true);
+    const entered = setQuantity(none, "custom-integration-design", 5);
+    expect(hoursText(quote(entered))).toStartWith(
+      [
+        "Growth package · Content Hub Starter",
+        "- Design (None): 5h",
+        "  - Provided by the client",
+        "  - Custom integration: 5h",
+        "- Build:",
+      ].join("\n"),
+    );
+  });
+
   test("every group adds up to its hours, and the groups to the total", () => {
     const busy = [
       "search",
