@@ -363,6 +363,16 @@ describe("a draft", () => {
     });
   });
 
+  test("a count of the Blog's templates goes as high as the blogs can", () => {
+    withCatalog(drafted({ "blog-setups max": "150" }), () => {
+      expect(getTile("blog-list-count").max).toBe(150);
+      expect(getTile("blog-recent-count").max).toBe(150);
+      const blogs = setQuantity(setTile(essential(), "blog-setups", true), "blog-setups", 150);
+      const counted = setQuantity(blogs, "blog-list-count", 150);
+      expect(quote(counted).selection.tiles["blog-list-count"]).toBe(150);
+    });
+  });
+
   test("at least one feedback round and one AI variant are included: a link writes them from 1", () => {
     expect(() => drafted({}, { "ai-feedback-included": "0" })).toThrow(
       "AI feedback: 0 rounds included must be 1 to 10",

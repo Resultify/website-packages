@@ -904,7 +904,7 @@ export const templateCounts: Readonly<Record<string, { id: string; unit: string 
 };
 
 /** How many of an item the estimate has: an item of its own, so a link holds it, with no hours of
-    its own. It multiplies the item's. */
+    its own. It multiplies the item's. Its most is the blogs' most (set once the table is read). */
 function countTile(item: Tile, id: string, unit: string, code: number): Tile {
   return {
     id,
@@ -1372,6 +1372,12 @@ export function buildCatalog(
   }
 
   const tileById = new Map(list.map((item) => [item.id, item]));
+  /* A count is never more than the blogs, so it goes as high as they can */
+  for (const item of list) {
+    const owner = item.counts ? ownerOf(item.counts) : undefined;
+    const most = owner ? tileById.get(owner)?.max : undefined;
+    if (most !== undefined) item.max = most;
+  }
   const byCode = new Map<number, Tile>();
   for (const item of list) {
     const taken = byCode.get(item.code);
