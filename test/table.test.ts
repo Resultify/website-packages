@@ -395,6 +395,23 @@ describe("a draft", () => {
     expect(() => drafted({}, { "pm-percent": "12.5" })).toThrow(
       "Rule pm-percent must be a whole number",
     );
+    /* The estimate's own lines: an item with one of their ids would show as that line */
+    for (const [id, item] of [
+      ["project-management", "Project management"],
+      ["ai-variants", "AI variants"],
+    ]) {
+      const own = row({ id, item, place: "shelf", ...allBuild("7"), note: "An item" });
+      expect(() => catalog([...rows, own])).toThrow(
+        `${item}: ${id} cannot be an id: it is a line the estimate makes`,
+      );
+    }
+    /* Website pages: a new estimate starts under the cap, and both sides of it can be chosen */
+    expect(() => drafted({}, { "pages-professional-from": "20" })).toThrow(
+      "Rule pages-professional-from 20 must be 26 to 200: above pages-start, up to pages-max",
+    );
+    expect(() => drafted({}, { "pages-professional-from": "25" })).toThrow("must be 26 to 200");
+    expect(() => drafted({}, { "pages-professional-from": "201" })).toThrow("must be 26 to 200");
+    expect(() => drafted({}, { "pages-professional-from": "26" })).not.toThrow();
     expect(() => drafted({}, { "languages-each": "6.5" })).toThrow(
       "Rule languages-each must be a whole number",
     );
@@ -718,7 +735,13 @@ describe("a draft", () => {
         const added = quote(setTile(essential(), "product-catalogue", true)).selection.tiles;
         expect(added).not.toHaveProperty("product-catalogue");
         expect(added["catalogue-crm"]).toBe(2);
+        /* On the shelf it needs what CRM Object, the source it comes with, needs */
+        expect(shelfGroupOf("product-catalogue")).toBe("Needs Platform");
       },
+    );
+    withCatalog(
+      drafted({ ...every("product-catalogue", "hidden"), ...every("catalogue-crm", "") }),
+      () => expect(shelfGroupOf("product-catalogue")).toBe("Needs Platform"),
     );
     withCatalog(drafted(every("product-catalogue", "soon")), () => {
       expect(shelfLanes().laneIds).not.toContain("product-catalogue");

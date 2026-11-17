@@ -580,6 +580,18 @@ test("an item added on the page goes to the shelf, gets a link code on Save, and
   expect(sent.table).toBe(tableText);
 });
 
+test("an item added with the name of a line the estimate makes gets an id of its own", async ({
+  page,
+}) => {
+  await serveTable(page);
+  await openCalc(page);
+  const add = page.locator("form.c-add");
+  await add.locator("input[name=label]").fill("Project management");
+  await add.locator("button[type=submit]").click();
+  await expect(page.locator('input[data-cell="project-management-2 item"]')).toBeFocused();
+  await expect(page.locator('.c-status [role="alert"]')).toHaveCount(0);
+});
+
 test("an item of content with its hours entered in the estimate goes to the shelf as Content, with an empty hours field", async ({
   page,
 }) => {

@@ -299,6 +299,10 @@ export const basicsTileIds = [
   "training",
 ] as const;
 
+/** The ids of the lines an estimate makes itself, apart from the table's items: no item may have
+    one, or the page would show the item's hours as that line's. */
+export const madeLineIds = { variants: "ai-variants", management: "project-management" } as const;
+
 /** The site basics whose hours are Project. The others are Build: each has its place on the page,
     so their type is fixed. */
 export const projectBasicIds: readonly string[] = ["kickoff", "training"];
@@ -1297,6 +1301,12 @@ function pageRule(rules: Rules): PageRule {
   const from = rule(rules, "pages-professional-from");
   if (initial < 1 || initial > max)
     throw new Error(`Rule pages-start ${initial} is outside 1 to ${max}`);
+  /* A new estimate starts under the cap, and the estimator's two buttons each have a side */
+  if (from <= initial || from > max) {
+    throw new Error(
+      `Rule pages-professional-from ${from} must be ${initial + 1} to ${max}: above pages-start, up to pages-max`,
+    );
+  }
   return { min: 1, max, initial, steps: [{ edition: "professional", at: from }] };
 }
 
@@ -1384,6 +1394,11 @@ export function buildCatalog(
   }
   /* "ai-variants" is the line for extra design variants */
   if (tileById.has("variants")) throw new Error("variants cannot be an id");
+  for (const id of Object.values(madeLineIds)) {
+    const item = tileById.get(id);
+    if (item)
+      throw new Error(`${item.label}: ${id} cannot be an id: it is a line the estimate makes`);
+  }
 
   /* Reasons are listed by the tasks' codes, so moving a row in the table never reorders them */
   const ruleCode = (item: PackageRule) => tileById.get(item.tileId)?.code ?? 0;
@@ -1486,6 +1501,12 @@ export function sourceTiles(): Tile[] {
   return tiles
     .filter((item) => item.source !== undefined)
     .sort((a, b) => Number(b.id === catalogueId) - Number(a.id === catalogueId));
+}
+
+/** The source the shelf's Product catalogue comes with: HubDB, or the first live one when HubDB is
+    hidden or coming soon. */
+export function shelfSource(): Tile | undefined {
+  return sourceTiles().find((item) => !item.disabled && !item.hidden);
 }
 
 /** The sources its Source buttons show: the hidden ones are left out. */

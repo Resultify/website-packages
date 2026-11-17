@@ -1,5 +1,6 @@
 /* State, actions and the controls of the page. Hours and rules come only from quote.ts. */
 import {
+  catalogueId,
   defaultWebsitePages,
   designChoices,
   editionLabel,
@@ -12,6 +13,7 @@ import {
   projectName,
   type ShapeId,
   shapeChoices,
+  shelfSource,
   shelfTiles,
   sourceTiles,
   starterPageCap,
@@ -296,9 +298,11 @@ function fromStart(rule: { tileId: string; at: number }): boolean {
   return rule.at <= Math.max(1, getTile(rule.tileId).min);
 }
 
-/** Fixed groups for the shelf: what the item needs in itself, whatever the current package is. */
+/** Fixed groups for the shelf: what the item needs in itself, whatever the current package is.
+    The Product catalogue needs what the source it comes with needs. */
 export function shelfGroupOf(id: string): "Any package" | "Needs Growth" | "Needs Platform" {
-  const rule = packageRules.find((item) => item.tileId === id && fromStart(item));
+  const own = id === catalogueId ? (shelfSource()?.id ?? id) : id;
+  const rule = packageRules.find((item) => item.tileId === own && fromStart(item));
   if (rule?.package === "platform") return "Needs Platform";
   if (rule?.package === "growth") return "Needs Growth";
   return "Any package";
@@ -343,6 +347,16 @@ function bindPopover(trigger: HTMLElement, panel: HTMLElement): void {
     if (panel.matches(":popover-open")) panel.hidePopover();
     trigger.setAttribute("aria-expanded", "false");
     document.removeEventListener("click", onDoc, true);
+    document.removeEventListener("keydown", onKey);
+  };
+  /* A manual popover gets no Escape from the browser: it closes here, back to its button */
+  const onKey = (event: KeyboardEvent) => {
+    if (event.key !== "Escape") return;
+    const open = panel.isConnected && panel.matches(":popover-open");
+    close();
+    if (!open) return;
+    event.preventDefault();
+    trigger.focus();
   };
   const onDoc = (event: Event) => {
     if (!panel.isConnected) {
@@ -363,6 +377,7 @@ function bindPopover(trigger: HTMLElement, panel: HTMLElement): void {
     place();
     trigger.setAttribute("aria-expanded", "true");
     window.setTimeout(() => document.addEventListener("click", onDoc, true), 0);
+    document.addEventListener("keydown", onKey);
   });
 }
 

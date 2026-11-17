@@ -1144,6 +1144,22 @@ test("Copy hours copies the app's own text and keeps its icon while it says Copi
   await expect(page.locator(".ab.primary .al")).toHaveText("Copy hours", { timeout: 4000 });
 });
 
+test("Escape closes an open popup, Hours breakdown or the package's, and the focus goes back to its button", async ({
+  page,
+}) => {
+  await open(page);
+  for (const trigger of ['button[aria-label="Hours breakdown"]', ".badge"]) {
+    const button = page.locator(trigger).first();
+    await button.click();
+    await expect(page.locator(".pop-panel:popover-open")).toHaveCount(1);
+    await expect(button).toHaveAttribute("aria-expanded", "true");
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".pop-panel:popover-open")).toHaveCount(0);
+    await expect(button).toHaveAttribute("aria-expanded", "false");
+    await expect(button).toBeFocused();
+  }
+});
+
 test("the hours breakdown says what Copy hours copies, the included rounds and variants too, and names its group Build as the rest of the page does", async ({
   page,
 }) => {

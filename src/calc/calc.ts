@@ -17,6 +17,7 @@ import {
   hasStatus,
   hasTile,
   isSource,
+  madeLineIds,
   partsOf,
   placeName,
   projectName,
@@ -561,9 +562,11 @@ function newId(label: string): string {
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "") || "item";
-  const taken = new Set(
-    [...baseRows(), ...state.savedRows, ...state.added, ...state.codes].map((row) => row.id),
-  );
+  /* Not an id the estimate gives a line of its own */
+  const taken = new Set([
+    ...[...baseRows(), ...state.savedRows, ...state.added, ...state.codes].map((row) => row.id),
+    ...Object.values(madeLineIds),
+  ]);
   let id = base;
   for (let index = 2; taken.has(id); index += 1) id = `${base}-${index}`;
   return id;
