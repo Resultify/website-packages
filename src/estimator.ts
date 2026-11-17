@@ -49,6 +49,7 @@ import {
   store,
   tierPop,
 } from "./controls.ts";
+import { appName, currentRelease, releaseDay, releases } from "./changelog.ts";
 import { h, type Kid } from "./dom.ts";
 import { type IconName, icon, logo, sprocket } from "./icons.ts";
 import { inPreview } from "./preview.ts";
@@ -629,7 +630,7 @@ function basicsPart(result: Quote): HTMLElement[] {
     row({
       lead: icon("layers"),
       name: "Website pages",
-      note: `Not build hours. ${starterPageCap}+ needs Professional`,
+      note: `Adds no hours. ${starterPageCap}+ needs Professional`,
       control: stacked(pagesControl(result)),
     }),
     launch(result),
@@ -1522,10 +1523,93 @@ function side(result: Quote, state: PageState): HTMLElement {
         includedCount(result),
       ),
       h("span", { class: "gap" }),
-      /* Nothing to reset on the starting estimate */
-      actButton(state, "reset", "reset", "Reset", "Reset", "warn", state.reset, !state.canReset),
+      /* Reset (off on the starting estimate, with nothing to reset) and Changelog: one under the
+         other, side by side in the narrow rail */
+      h(
+        "div",
+        { class: "side-end" },
+        actButton(state, "reset", "reset", "Reset", "Reset", "warn", state.reset, !state.canReset),
+        changelogButton(),
+      ),
+      h(
+        "p",
+        { class: "ver" },
+        h("span", { class: "ver-name" }, appName),
+        h("span", { class: "ver-num" }, `v${currentRelease.version}`),
+        currentRelease.stage ? h("span", { class: "beta" }, currentRelease.stage) : null,
+      ),
     ),
   );
+}
+
+/** Changelog: opens the list of releases in a dialog over the page. */
+function changelogButton(): HTMLElement {
+  return h(
+    "button",
+    {
+      type: "button",
+      class: "ab quiet",
+      "aria-label": "Changelog",
+      "aria-haspopup": "dialog",
+      data: { focus: "act-changelog" },
+      on: { click: () => changelogDialog().showModal() },
+    },
+    icon("log"),
+    h("span", { class: "al" }, "Changelog"),
+    h("small", null, "Log"),
+  );
+}
+
+/** The releases, newest first, in a dialog of its own outside the page, so a redraw of the page
+    leaves it open. Escape, Close or a press outside it closes it. */
+function changelogDialog(): HTMLDialogElement {
+  const found = document.querySelector<HTMLDialogElement>("dialog.changelog");
+  if (found) return found;
+  const dialog = h(
+    "dialog",
+    { class: "changelog", "aria-labelledby": "changelog-title" },
+    h(
+      "div",
+      { class: "cl-head" },
+      h("h2", { id: "changelog-title" }, "Changelog"),
+      h(
+        "button",
+        { type: "button", class: "cl-close", "aria-label": "Close", data: { close: "" } },
+        icon("cross"),
+      ),
+    ),
+    h(
+      "div",
+      { class: "cl-body", tabindex: "-1", autofocus: true },
+      releases.map((release) =>
+        h(
+          "section",
+          { class: "cl-release", "aria-label": `Version ${release.version}` },
+          h(
+            "h3",
+            null,
+            `v${release.version}`,
+            release.stage ? h("span", { class: "beta" }, release.stage) : null,
+            h("time", { datetime: release.date }, releaseDay(release.date)),
+          ),
+          h(
+            "ul",
+            null,
+            release.changes.map((change) => h("li", null, change)),
+          ),
+        ),
+      ),
+    ),
+  );
+  dialog.addEventListener("click", (event) => {
+    const target = event.target;
+    /* The backdrop is the dialog itself: its content fills it */
+    if (target === dialog || (target instanceof Element && target.closest("[data-close]"))) {
+      dialog.close();
+    }
+  });
+  document.body.append(dialog);
+  return dialog;
 }
 
 function toast(state: PageState): HTMLElement | null {

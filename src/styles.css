@@ -161,6 +161,18 @@ body {
   font: var(--fs-hours) / 1.35 var(--font);
   -webkit-font-smoothing: antialiased;
 }
+/* Read by screen readers and search engines, not shown: the page's name as its main heading */
+.vh {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
 button,
 input {
   margin: 0;
@@ -1756,6 +1768,128 @@ ul {
   flex: 1;
   min-height: 12px;
 }
+/* Reset, and Changelog under it, as quiet as Reset */
+.side-end {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ab.quiet {
+  color: var(--muted);
+  box-shadow: none;
+}
+/* The app and its version, last in the sidebar */
+.ver {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 5px;
+  margin: 0;
+  padding: 2px 0 0 12px;
+  font-size: var(--fs-caption);
+  line-height: 16px;
+  font-weight: 600;
+  color: var(--faint);
+  white-space: nowrap;
+}
+/* Beta: a tag, as Pro and Ent are, in the colour of what is chosen */
+.beta {
+  padding: 0 5px;
+  border-radius: var(--r-inner);
+  box-shadow: inset 0 0 0 1px currentColor;
+  font-size: var(--fs-tag);
+  line-height: 15px;
+  font-weight: 700;
+  color: var(--chosen);
+}
+
+/* ---------- Changelog: a dialog over the page ---------- */
+
+.changelog {
+  width: min(540px, calc(100vw - 32px));
+  max-height: min(680px, calc(100vh - 48px));
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-page);
+  background: var(--bg);
+  color: var(--ink);
+  box-shadow: var(--shadow-pop);
+}
+.changelog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.changelog::backdrop {
+  background: color-mix(in srgb, var(--ink) 36%, transparent);
+}
+.cl-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 16px 10px 22px;
+  border-bottom: 1px solid var(--line);
+}
+.cl-head h2 {
+  font: 400 30px / 1 var(--serif);
+  letter-spacing: -0.01em;
+}
+.cl-close {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-ctl);
+  color: var(--muted);
+}
+.cl-close:hover {
+  background: var(--control);
+  color: var(--ink);
+}
+.cl-close .ic {
+  width: 18px;
+  height: 18px;
+}
+.cl-body {
+  overflow: auto;
+  padding: 16px 22px 22px;
+  overscroll-behavior: contain;
+}
+/* It takes the focus on opening, so the arrow keys scroll it; no ring for that */
+.cl-body:focus {
+  outline: 0;
+}
+.cl-release + .cl-release {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.cl-release h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-package);
+  font-weight: 700;
+}
+.cl-release time {
+  margin-left: auto;
+  font-size: var(--fs-note);
+  font-weight: 550;
+  color: var(--faint);
+}
+.cl-release ul {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+  padding-left: 18px;
+  list-style: disc;
+  font-size: var(--fs-sub);
+  line-height: 1.45;
+  color: var(--muted);
+}
+.cl-release li::marker {
+  color: var(--faint);
+}
 
 /* ---------- Popovers ---------- */
 
@@ -2150,6 +2284,26 @@ body.is-preview #app {
     right: 24px;
     left: auto;
   }
+  /* The rail: Reset and Changelog side by side, then the version and Beta, without the name */
+  .side-end {
+    flex-direction: row;
+    gap: 2px;
+  }
+  .side-end .ab {
+    flex: 1;
+    min-width: 0;
+  }
+  .side-end .ab.warn::after {
+    right: 8px;
+  }
+  .ver {
+    justify-content: center;
+    gap: 4px;
+    padding: 0;
+  }
+  .ver-name {
+    display: none;
+  }
 }
 
 /* ---------- Tablet and phone, up to 1000px: one column, the page scrolls ---------- */
@@ -2284,6 +2438,24 @@ body.is-preview #app {
   }
   .side-act .gap {
     display: none;
+  }
+  /* In the row of actions: Reset, Changelog, then the version, on one line */
+  .side-end {
+    display: contents;
+  }
+  .side-end .ab {
+    flex: none;
+  }
+  .side-end .ab.warn::after {
+    right: auto;
+  }
+  .ver {
+    flex: none;
+    flex-direction: row;
+    padding: 0 4px;
+  }
+  .ver-name {
+    display: inline;
   }
   .basics {
     margin: 8px 8px 0;
