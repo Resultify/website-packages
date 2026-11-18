@@ -42,6 +42,7 @@ import {
   setTile,
 } from "../quote.ts";
 import {
+  addedRules,
   applyCells,
   type Cells,
   type CodeEntry,
@@ -2196,7 +2197,7 @@ function take(tables: Tables): void {
   if (tables.committed !== null) {
     try {
       state.committedRows = parseTable(tables.committed.table);
-      state.committedRules = parseRules(tables.committed.rules);
+      state.committedRules = parseRules(tables.committed.rules, addedRules);
     } catch {
       state.committedRows = null;
       state.committedRules = null;
