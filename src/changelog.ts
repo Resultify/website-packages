@@ -1,5 +1,6 @@
 /* What changed in the estimator, for the people who use it: newest first. The first release is the
-   version the sidebar shows under Changelog. Add a release at the top when one ships. */
+   version the sidebar shows under Changelog. Add a release at the top when one ships. A release's
+   notes give the values it shipped with, such as 15%: a rule changed later doesn't rewrite them. */
 
 export type Release = {
   version: string;
