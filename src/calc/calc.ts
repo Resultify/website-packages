@@ -2247,6 +2247,13 @@ async function save(): Promise<void> {
   state.saving = true;
   state.saveError = "";
   draw();
+  /* What goes: an edit made while it is on its way is not in it, and stays unsaved */
+  const sent = {
+    cells: { ...state.cells },
+    rules: { ...state.rules },
+    added: state.added.map(rowKey),
+    dropped: [...state.dropped],
+  };
   try {
     const response = await fetch("api/table", {
       method: "POST",
@@ -2258,10 +2265,14 @@ async function save(): Promise<void> {
     });
     const answer = (await response.json()) as Tables & { error?: string };
     if (!response.ok) throw new Error(answer.error ?? `the server answered ${response.status}`);
-    state.cells = {};
-    state.added = [];
-    state.dropped = [];
-    state.rules = {};
+    for (const [key, value] of Object.entries(sent.cells)) {
+      if (state.cells[key] === value) delete state.cells[key];
+    }
+    for (const [name, value] of Object.entries(sent.rules) as [RuleName, string][]) {
+      if (state.rules[name] === value) delete state.rules[name];
+    }
+    state.added = state.added.filter((row) => !sent.added.includes(rowKey(row)));
+    state.dropped = state.dropped.filter((key) => !sent.dropped.includes(key));
     take(answer);
     state.saving = false;
     try {

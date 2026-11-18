@@ -238,6 +238,31 @@ test("a changed cell is compared with the last commit, stays through a reload, a
   await expect(page.locator("[data-act=save]")).toBeDisabled();
 });
 
+test("an edit made while Save is on its way stays, not saved yet", async ({ page }) => {
+  let release = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await serveTable(page, async (body, route) => {
+    await held;
+    await route.fulfill(savedAs(body));
+  });
+  await openCalc(page);
+  await setCell(page, "sections build-ai", "6");
+  await page.locator("[data-act=save]").click();
+  await expect(page.locator("[data-act=save]")).toHaveText("Saving");
+  /* Sent as 6: changed to 7, and a rule changed, before the answer comes */
+  await setCell(page, "sections build-ai", "7");
+  await setRule(page, "pm-percent", "10");
+  release();
+  await expect(page.locator(".c-small.is-done")).toContainText("Saved");
+  const cell = page.locator('input[data-cell="sections build-ai"]');
+  await expect(cell).toHaveValue("7");
+  await expect(cell).toHaveClass(/is-unsaved/);
+  await expect(page.locator('input[data-rule="pm-percent"]')).toHaveValue("10");
+  await expect(page.locator(".c-status")).toContainText("2 edits not saved yet");
+});
+
 test("the Design, Project and Languages panels change the rules, and Save sends them", async ({
   page,
 }) => {
