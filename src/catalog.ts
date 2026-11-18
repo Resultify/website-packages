@@ -307,6 +307,10 @@ export const madeLineIds = { variants: "ai-variants", management: "project-manag
     so their type is fixed. */
 export const projectBasicIds: readonly string[] = ["kickoff", "training"];
 
+/** The site basics in every estimate once: a link holds no number for them (quote.ts), so they
+    take no unit and no options. */
+export const onceBasicIds: readonly string[] = ["header", "footer", "setup", "kickoff"];
+
 export const addOnTileIds = [
   "landing-templates",
   "search",
@@ -811,6 +815,9 @@ function placeOf(row: Row): (typeof places)[number] {
     const fixed = projectBasicIds.includes(row.id) ? "project" : "";
     if (row.type !== fixed) {
       fail(row, `type is fixed in the site basics: ${fixed ? "project" : "empty (build)"}`);
+    }
+    if (onceBasicIds.includes(row.id) && (row.unit || row.option)) {
+      fail(row, "unit and option must be empty: it is in every estimate once");
     }
   }
   return place;

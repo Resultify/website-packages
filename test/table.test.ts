@@ -604,6 +604,13 @@ describe("a draft", () => {
       "Training: type is fixed in the site basics: project",
     );
     expect(() => drafted({ "menu·Advanced type": "project" })).toThrow("type is fixed");
+    /* The header, footer, setup and kick-off are in once: a link keeps no number for them */
+    expect(() => drafted({ "header unit": "variants", "header max": "2" })).toThrow(
+      "Global header: unit and option must be empty: it is in every estimate once",
+    );
+    expect(() => drafted({ "kickoff option": "Short" })).toThrow(
+      "Kick-off meeting, Short: unit and option must be empty",
+    );
   });
 
   test("the Product catalogue's sources come from the table, each with the same options", () => {
