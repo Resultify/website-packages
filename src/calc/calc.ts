@@ -1719,7 +1719,7 @@ function managementRow(pricing: Pricing): HTMLElement {
     h(
       "td",
       { class: "c-entered g1", colspan: String(hourColumns.length) },
-      `${share}%, whatever the design, and with no design of ${clientShare}% of Custom's design hours too: in the Project panel`,
+      `${share}%, whatever the design.${clientShare === "0" ? "" : ` With no design, it also counts ${clientShare}% of the design hours Custom would have.`} In the Project panel`,
     ),
     h("td", { class: "c-needs g1" }),
     h("td", { class: "c-needs" }),

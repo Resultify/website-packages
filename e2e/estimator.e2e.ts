@@ -1473,7 +1473,7 @@ test("the site basics always have the kick-off, training and project management 
     "The kick-off and training are not counted",
   );
   await expect(trigger.locator(".info-pop")).toContainText(
-    `With no design, also of ${formatHours(clientDesignPercent())}% of the design hours Custom would have`,
+    `With no design, it also counts ${formatHours(clientDesignPercent())}% of the design hours Custom would have`,
   );
   await expect(trigger.locator(".info-pop .info-list")).toHaveCount(0);
   /* With no design, the client's design counts too, a share of what Custom's would be */

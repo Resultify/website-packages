@@ -433,7 +433,7 @@ function managementRow(result: Quote): HTMLElement {
         h(
           "span",
           { class: "info-p" },
-          `Planning, meetings and coordination for the whole project: ${formatHours(managementPercent())}% of its design, build and content hours, rounded up. With no design, also of ${formatHours(clientDesignPercent())}% of the design hours Custom would have: the client's design is still checked, handed over and built from. The kick-off and training are not counted.`,
+          `Planning, meetings and coordination for the whole project: ${formatHours(managementPercent())}% of its design, build and content hours, rounded up.${clientDesignPercent() > 0 ? ` With no design, it also counts ${formatHours(clientDesignPercent())}% of the design hours Custom would have: the client's design is still checked, handed over and built from.` : ""} The kick-off and training are not counted.`,
         ),
       ],
     },
