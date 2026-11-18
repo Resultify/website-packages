@@ -679,6 +679,18 @@ export function isSource(id: string, place: string): boolean {
   return place === "catalogue" && !isPart(id);
 }
 
+/** Options a part doesn't go with, found by their name: Related products don't go with a
+    source's Module based, nor Social sign-in with Memberships' SSO. Renamed, they would no longer
+    block the part, so the table must keep them. */
+export const moduleBasedOption = "Module based";
+export const ssoOption = "SSO";
+
+function blockingOption(id: string, place: string): { option: string; part: string } | undefined {
+  if (isSource(id, place)) return { option: moduleBasedOption, part: "related-products" };
+  if (id === "membership") return { option: ssoOption, part: "membership-social" };
+  return undefined;
+}
+
 function fail(row: Row, message: string): never {
   throw new Error(`${row.item || row.id}${row.option ? `, ${row.option}` : ""}: ${message}`);
 }
@@ -1406,6 +1418,17 @@ export function buildCatalog(
     if (!tileById.has(id)) continue;
     for (const part of parts) {
       if (!tileById.has(part)) throw new Error(`The table has ${id} and not its part, ${part}`);
+    }
+  }
+  /* An item with options keeps the one that blocks its part; one with none yet has nothing to block */
+  for (const [id, own] of byId) {
+    const first = own[0] as Row;
+    const blocking = blockingOption(id, first.place);
+    if (blocking && first.option && !own.some((row) => row.option === blocking.option)) {
+      const part = tileById.get(blocking.part)?.label ?? blocking.part;
+      throw new Error(
+        `${first.item || id}: one option must be called ${blocking.option}: by that name, it blocks ${part}`,
+      );
     }
   }
   /* "ai-variants" is the line for extra design variants */

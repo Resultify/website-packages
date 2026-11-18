@@ -35,6 +35,7 @@ import {
   isAlwaysOn,
   managementPercent,
   modeLabel,
+  moduleBasedOption,
   ownerOf,
   type PackageId,
   type PackageRule,
@@ -50,6 +51,7 @@ import {
   type StepId,
   shelfSource,
   sourceTiles,
+  ssoOption,
   startingDesign,
   starterPageCap,
   type Tile,
@@ -242,7 +244,9 @@ export function isIn(chosen: Readonly<Record<string, number>>, id: string): bool
 /** Related products do not go with the catalogue's Module based option, from any source. */
 export function isModuleBased(chosen: Readonly<Record<string, number>>): boolean {
   const source = sourceIn(chosen);
-  return source !== undefined && modeLabel(getTile(source), chosen[source] ?? 0) === "Module based";
+  return (
+    source !== undefined && modeLabel(getTile(source), chosen[source] ?? 0) === moduleBasedOption
+  );
 }
 
 /** A source's option whose hours are entered, counted from 1. 0 when it has none. */
@@ -261,7 +265,7 @@ const catalogueParts = ["catalogue-custom", "favorite-products", "related-produc
 export function isSso(chosen: Readonly<Record<string, number>>): boolean {
   const level = chosen.membership;
   return level !== undefined && hasTile("membership")
-    ? modeLabel(getTile("membership"), level) === "SSO"
+    ? modeLabel(getTile("membership"), level) === ssoOption
     : false;
 }
 

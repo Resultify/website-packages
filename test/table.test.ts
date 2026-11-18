@@ -454,6 +454,16 @@ describe("a draft", () => {
       "Sections: start 50 is outside 1 to 40",
     );
     expect(() => drafted({ "sections status": "hidden" })).toThrow("always shown");
+    /* The options that block a part by their name keep it */
+    expect(() => drafted({ "product-catalogue·Module based option": "Module-based" })).toThrow(
+      "HubDB: one option must be called Module based: by that name, it blocks Related products",
+    );
+    expect(() => drafted({ "catalogue-crm·Module based option": "Modules" })).toThrow(
+      "CRM Object: one option must be called Module based",
+    );
+    expect(() => drafted({ "membership·SSO option": "Single sign-on" })).toThrow(
+      "Memberships: one option must be called SSO: by that name, it blocks Social sign-in",
+    );
     expect(() => drafted({}, { "ai-feedback-each": "x" })).toThrow("Rule ai-feedback-each");
     expect(() => parseRules("rule,value\nnope,1\n")).toThrow("no rule called nope");
     /* A file from before a rule was added, such as the last commit's, reads as it priced then */
