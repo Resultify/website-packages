@@ -651,7 +651,7 @@ test("an item can take its build and design hours from the estimate; project man
   await expect(management).toContainText("Always in");
   await expect(management.locator(".c-type")).toHaveText("Project");
   await expect(management).toContainText(
-    `${rules["pm-percent"]}%, whatever the design, and with no design of ${rules["pm-none-design-percent"]}% of Custom's design hours too`,
+    `${rules["pm-percent"]}%, whatever the design. With no design, it also counts ${rules["pm-none-design-percent"]}% of the design hours Custom would have. In the Project panel`,
   );
   const hours = priced(EXAMPLE).lines.find((line) => line.id === "project-management");
   await expect(management.locator(".c-own").nth(2)).toHaveText(hoursLabel(hours?.openHours ?? 0));
@@ -679,6 +679,11 @@ test("an item can take its build and design hours from the estimate; project man
     start: "0",
     max: "400",
   });
+  /* With no share of Custom's design hours, the row doesn't speak of one */
+  await setRule(page, "pm-none-design-percent", "0");
+  await expect(management).toContainText(
+    `${rules["pm-percent"]}%, whatever the design. In the Project panel`,
+  );
 });
 
 test("Preview opens the estimator with this page's files, unsaved, and follows the changes made here; the estimator keeps the saved ones", async ({
