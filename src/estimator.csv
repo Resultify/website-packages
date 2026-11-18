@@ -10,28 +10,28 @@ kickoff,Kick-off meeting,,basics,project,,,,,3,3,3,,,,,,"Starts the project with
 training,Training,,basics,project,,sessions,2,40,2,2,2,,,,,,"Training for the client's editors, {build}h a session"
 blog-setups,Blogs,,blog,,,blogs,1,100,,,,,,,growth from 2,professional from 2,With list and post templates
 blog-list,List template,Simple,blog,,,,,,2,2,4,1,2,4,,,List with pagination
-blog-list,List template,Advanced,blog,,,,,,4,4,8,2,4,6,growth,,"Grid, favorites, filters, paging"
+blog-list,List template,Advanced,blog,,,,,,4,4,8,2,4,8,growth,,"Grid, favorites, filters, paging"
 blog-post,Post template,Simple,blog,,,,,,2,2,4,1,2,4,,,Standard post template
-blog-post,Post template,Advanced,blog,,,,,,4,4,8,2,4,6,growth,,"Simple, plus related posts"
+blog-post,Post template,Advanced,blog,,,,,,4,4,8,2,4,8,growth,,"Simple, plus related posts"
 blog-recent,Recent blog posts,,blog,,,,,,2,2,4,1,2,4,,,Lists the latest posts
 custom-forms,Custom forms,,shelf,,,forms,1,20,3,3,5,1,2,4,,,"HubSpot form with custom styling, faster loading. {build}h each"
-search,Search,Simple,shelf,,,,,,2,2,4,1,2,3,,,Search field and results page
-search,Search,Advanced,shelf,,,,,,4,4,10,2,3,5,growth,,"Dialog with favorites, suggestions, results page"
-landing-templates,Landing templates,,shelf,,,templates,1,50,3,3,4,2,3,4,growth from 3,,{build}h each to build
+search,Search,Simple,shelf,,,,,,2,2,4,1,2,4,,,Search field and results page
+search,Search,Advanced,shelf,,,,,,4,4,10,2,3,6,growth,,"Dialog with favorites, suggestions, results page"
+landing-templates,Landing templates,,shelf,,,templates,1,50,3,3,5,2,3,5,growth from 3,,{build}h each to build
 content-hours,Content,,shelf,content,,hours,0,900,,,,,,,,,Estimate for content work
 migrate-posts,Blog import,,shelf,content,,hours,0,900,,,,,,,,,Importing the old blog's posts
 migrate-pages,Page migration,,shelf,content,,hours,0,900,,,,,,,,,Moving the old site's pages
 system,Custom system templates,,shelf,,,,,,2,2,4,1,2,4,growth,,Custom error and subscription pages
 external-forms,Forms with external data,HubDB,shelf,,soon,,,,0,0,0,,,,growth,professional,"A custom form filled from HubDB, or from an external API through a serverless function"
 external-forms,Forms with external data,External API,shelf,,soon,,,,0,0,0,,,,growth,enterprise,
-hubdb,HubDB section,,shelf,,,modules,1,50,4,4,8,2,4,6,growth,professional,"Library, directory, filterable list"
+hubdb,HubDB section,,shelf,,,modules,1,50,4,4,8,2,4,8,growth,professional,"Library, directory, filterable list"
 crm-section,CRM Object section,,shelf,,soon,modules,1,50,,,,,,,growth,professional,
 crm-custom-section,Custom Object section,,shelf,,soon,modules,1,50,,,,,,,growth,enterprise,
-cookie-banner,Custom cookie banner,,shelf,,,,,,5,5,7,2,3,5,growth,,"A cookie banner built to the site's design, instead of HubSpot's"
-product-catalogue,HubDB,Module based,catalogue,,,,,,18,18,28,8,14,24,platform,professional,"One product with sub-levels, no listing page"
-product-catalogue,HubDB,Dynamic pages: Simple,catalogue,,,,1,,16,16,26,6,10,20,platform,professional,"Listing page, pagination, product detail pages"
-product-catalogue,HubDB,Dynamic pages: Filtered,catalogue,,,,,,20,20,30,8,14,24,platform,professional,"Simple, plus filters and sorting"
-product-catalogue,HubDB,Dynamic pages: Multi-level,catalogue,,,,,,30,30,40,12,20,30,platform,professional,"Filtered, plus SEO category pages, breadcrumbs"
+cookie-banner,Custom cookie banner,,shelf,,,,,,5,5,6,2,3,5,growth,,"A cookie banner built to the site's design, instead of HubSpot's"
+product-catalogue,HubDB,Module based,catalogue,,,,,,18,18,30,8,14,28,platform,professional,"One product with sub-levels, no listing page"
+product-catalogue,HubDB,Dynamic pages: Simple,catalogue,,,,1,,16,16,28,6,10,20,platform,professional,"Listing page, pagination, product detail pages"
+product-catalogue,HubDB,Dynamic pages: Filtered,catalogue,,,,,,20,20,34,8,14,28,platform,professional,"Simple, plus filters and sorting"
+product-catalogue,HubDB,Dynamic pages: Multi-level,catalogue,,,,,,30,30,44,12,20,36,platform,professional,"Filtered, plus SEO category pages, breadcrumbs"
 product-catalogue,HubDB,Custom,catalogue,,,hours,,,,,,,,,platform,professional,Hours entered by hand
 catalogue-custom,Custom catalogue,,catalogue,,,hours,0,900,,,,,,,,,
 catalogue-crm,CRM Object,Module based,catalogue,,soon,,,,,,,,,,platform,professional,"One product with sub-levels, no listing page"
@@ -44,8 +44,8 @@ catalogue-objects,Custom Object,Dynamic pages: Simple,catalogue,,soon,,1,,,,,,,,
 catalogue-objects,Custom Object,Dynamic pages: Filtered,catalogue,,soon,,,,,,,,,,platform,enterprise,"Simple, plus filters and sorting"
 catalogue-objects,Custom Object,Dynamic pages: Multi-level,catalogue,,soon,,,,,,,,,,platform,enterprise,"Filtered, plus SEO category pages, breadcrumbs"
 catalogue-objects,Custom Object,Custom,catalogue,,soon,hours,,,,,,,,,platform,enterprise,Hours entered by hand
-favorite-products,Favorite products,,catalogue,,,sections,1,50,5,5,8,2,3,5,platform,,Section on a static page
-related-products,Related products,,catalogue,,,,,,4,4,8,2,3,5,platform,,On the product detail page
+favorite-products,Favorite products,,catalogue,,,sections,1,50,5,5,8,2,3,6,platform,,Section on a static page
+related-products,Related products,,catalogue,,,,,,4,4,8,2,3,6,platform,,On the product detail page
 custom-integration,Custom integration,,shelf,,,build and design hours,0,900,,,,,,,platform,professional,"A connection to another system, with its build and design hours entered"
 membership,Memberships,Invitation,membership,,soon,,1,,,,,0,,,platform,professional,"Members are invited by email and set a password. The theme's sign-in, password and access pages, and the emails in the site's style"
 membership,Memberships,Self-registration,membership,,soon,,,,,,,,,,platform,professional,"Visitors sign up themselves and confirm their email. Invitation's pages, plus sign-up, verification and consent"

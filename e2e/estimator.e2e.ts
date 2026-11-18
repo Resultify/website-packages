@@ -4,6 +4,7 @@ import { expect, type Page, test } from "@playwright/test";
 import { appName, currentRelease, releases } from "../src/changelog.ts";
 import {
   buildCatalog,
+  clientDesignPercent,
   designChoices,
   getTile,
   getTile as getTileLive,
@@ -1471,7 +1472,19 @@ test("the site basics always have the kick-off, training and project management 
   await expect(trigger.locator(".info-pop")).toContainText(
     "The kick-off and training are not counted",
   );
+  await expect(trigger.locator(".info-pop")).toContainText(
+    `With no design, also of ${formatHours(clientDesignPercent())}% of the design hours Custom would have`,
+  );
   await expect(trigger.locator(".info-pop .info-list")).toHaveCount(0);
+  /* With no design, the client's design counts too, a share of what Custom's would be */
+  await page.locator("#design-no-design").check();
+  const none = quoteOf(await page.evaluate(() => location.hash));
+  const noneManagement = none.lines.find((line) => line.id === "project-management");
+  expect(noneManagement?.mode).toContain("client design");
+  await expect(part("Project management")).toContainText(noneManagement?.mode ?? "");
+  await expect(part("Project management").locator(".hrs")).toHaveText(
+    hoursLabel(noneManagement?.openHours ?? 0),
+  );
 });
 
 test("Feedback and Variants say more about themselves while the pointer or the focus is on their name", async ({

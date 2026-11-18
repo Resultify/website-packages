@@ -522,6 +522,9 @@ export type Catalog = {
   /** Project management: this share of the estimate's design, build and content hours, in percent, whatever the
       design. */
   managementPercent: number;
+  /** With no design, project management also counts this share of the design hours Custom would
+      have, in percent: the client's design is still checked, handed over and built from. */
+  clientDesignPercent: number;
   /** The link codes with every item of the table in them: what Save and the build write. */
   codes: readonly CodeEntry[];
 };
@@ -1425,6 +1428,7 @@ export function buildCatalog(
     pages: pageRule(rules),
     variantPercent: rule(rules, "ai-variant-percent"),
     managementPercent: rule(rules, "pm-percent"),
+    clientDesignPercent: rule(rules, "pm-none-design-percent"),
     codes: merged,
   };
 }
@@ -1594,6 +1598,12 @@ export type DesignPart = {
 /** Project management's share of the estimate's design, build and content hours, in percent. */
 export function managementPercent(): number {
   return active.managementPercent;
+}
+
+/** With no design: the share of the design hours Custom would have that project management also
+    counts, in percent. */
+export function clientDesignPercent(): number {
+  return active.clientDesignPercent;
 }
 
 /** One variant beyond the included ones: a share of the base design, rounded up to a whole hour. */

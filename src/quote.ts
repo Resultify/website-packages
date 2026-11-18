@@ -14,6 +14,7 @@ import {
   basicsTileIds,
   type Choice,
   catalogueId,
+  clientDesignPercent,
   madeLineIds,
   defaultWebsitePages,
   type DesignChoice,
@@ -157,6 +158,12 @@ export type Quote = {
     percents are whole numbers, so the share is exact: 15% of 101h is 15.15, so 16h. */
 export function managementHours(base: number, percent: number): number {
   return Math.ceil((base * percent) / 100);
+}
+
+/** With no design, the hours of the client's design project management counts: `share` percent
+    of the design hours Custom would have, rounded up to a whole hour, as every share is. */
+export function clientDesignHours(customDesign: number, share: number): number {
+  return Math.ceil((customDesign * share) / 100);
 }
 
 function roundHours(value: number): number {
@@ -608,19 +615,30 @@ function price(selection: Selection): Priced {
   for (const id of feedbackIds) pushFeedback(id);
 
   /* Project management: a share of the design, build and content hours above, rounded up; not of
-     the kick-off and training, which are Project too. The same share whatever the design */
+     the kick-off and training, which are Project too. The same share whatever the design. With no
+     design, the client's design is still checked, handed over and built from: it also counts a
+     share of the design hours Custom would have for the same items */
   const percent = managementPercent();
   const base = lines
     .filter((line) => line.bucket !== "project")
     .reduce((sum, line) => sum + line.openHours, 0);
-  const management = managementHours(base, percent);
+  const share = clientDesignPercent();
+  const customDesign =
+    choice === "none"
+      ? designParts("custom", amountOf(selection)).reduce((sum, part) => sum + part.hours, 0)
+      : 0;
+  const clientDesign = clientDesignHours(customDesign, share);
+  const management = managementHours(base + clientDesign, percent);
   listOpen += management;
   parcelOpen += management;
   lines.push({
     id: managementLineId,
     label: "Project management",
     qty: 1,
-    mode: `${formatHours(percent)}% of ${formatHours(base)}h`,
+    mode:
+      clientDesign > 0
+        ? `${formatHours(percent)}% of ${formatHours(base + clientDesign)}h (${formatHours(base)}h + ${formatHours(share)}% of ${formatHours(customDesign)}h client design)`
+        : `${formatHours(percent)}% of ${formatHours(base)}h`,
     openHours: management,
     billedHours: management,
     extra: false,

@@ -182,6 +182,7 @@ export const ruleNames = [
   "custom-package",
   "none-package",
   "pm-percent",
+  "pm-none-design-percent",
   "languages-included",
   "languages-second",
   "languages-each",
@@ -196,12 +197,21 @@ export const ruleNames = [
 export type RuleName = (typeof ruleNames)[number];
 export type Rules = Record<RuleName, string>;
 
+/** Rules added after the file was first written, and the value that prices as before they were:
+    a file without one, such as the last commit's on the calculations page, still reads. */
+const addedRules: Partial<Rules> = { "pm-none-design-percent": "0" };
+
 export function parseRules(text: string): Rules {
   const rules = Object.fromEntries(ruleNames.map((name) => [name, ""])) as Rules;
+  const listed = new Set<RuleName>();
   for (const { rule, value } of readTable(text, ["rule", "value"] as const, "The rules")) {
     const name = ruleNames.find((item) => item === rule);
     if (!name) throw new Error(`The rules have no rule called ${rule}`);
     rules[name] = value;
+    listed.add(name);
+  }
+  for (const [name, value] of Object.entries(addedRules) as [RuleName, string][]) {
+    if (!listed.has(name)) rules[name] = value;
   }
   return rules;
 }
