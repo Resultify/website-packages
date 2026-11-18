@@ -5,13 +5,15 @@ import { expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import csvText from "../scripts/csv-text.ts";
 
 test("the built page keeps its description, link preview, favicon and hidden main heading", async () => {
   const outdir = await mkdtemp(join(tmpdir(), "page-test-"));
   try {
     const result = await Bun.build({
-      entrypoints: [new URL("../src/index.html", import.meta.url).pathname],
+      /* A path, not the URL's pathname: a space in the folder's name stays a space */
+      entrypoints: [fileURLToPath(new URL("../src/index.html", import.meta.url))],
       outdir,
       target: "browser",
       minify: true,
