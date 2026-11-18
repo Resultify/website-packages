@@ -62,11 +62,14 @@ describe("Copy hours", () => {
     expect(text).toStartWith("Growth package · Content Hub Starter\n- Design (None): 0h\n");
     expect(text).toContain("  - Provided by the client\n");
     expect(text).not.toContain("Feedback");
-    /* Build 60h and content 12h: project management 15% of 72h (10.8, so 11h), not of the
-       kick-off and training (7h). Project comes after Content */
-    expect(text).toContain("  - Project management · 15% of 72h: 11h\n");
-    expect(text).toContain("- Content: 12h\n- Project: 18h\n");
-    expect(text).toEndWith("- Total: 90h");
+    /* Build 60h and content 12h, and half the 41h design Custom would have (21h): project
+       management 15% of 93h (13.95, so 14h), not of the kick-off and training (7h). Project comes
+       after Content */
+    expect(text).toContain(
+      "  - Project management · 15% of 93h (72h + 50% of 41h client design): 14h\n",
+    );
+    expect(text).toContain("- Content: 12h\n- Project: 21h\n");
+    expect(text).toEndWith("- Total: 93h");
   });
 
   test("with no design, design hours entered for an item stay as lines under the note", () => {

@@ -326,6 +326,7 @@ const ruleLabels: Record<RuleName, string> = {
   "custom-package": "Custom · package it needs",
   "none-package": "No design · package it needs",
   "pm-percent": "Project management · %",
+  "pm-none-design-percent": "Project management · with no design, % of Custom's design hours",
   "languages-included": "Languages · included",
   "languages-second": "Languages · the 2nd",
   "languages-each": "Languages · each after it",
@@ -1095,8 +1096,9 @@ function designPanel(): HTMLElement {
   );
 }
 
-/** Project: project management's share, the same whatever the design. The kick-off and training
-    are rows of the site basics, Project by their type. */
+/** Project: project management's share, the same whatever the design, and with no design, the
+    share of Custom's design hours it counts too. The kick-off and training are rows of the site
+    basics, Project by their type. */
 function projectPanel(): HTMLElement {
   return h(
     "section",
@@ -1112,11 +1114,18 @@ function projectPanel(): HTMLElement {
         ruleField("pm-percent"),
         h("span", { class: "c-unit" }, "%"),
       ),
+      h(
+        "label",
+        { class: "c-line" },
+        h("span", null, "No design: Custom's design"),
+        ruleField("pm-none-design-percent"),
+        h("span", { class: "c-unit" }, "%"),
+      ),
     ),
     h(
       "p",
       { class: "c-small" },
-      "Of the estimate's design, build and content hours, not the kick-off and training, rounded up, whatever the design.",
+      "Of the estimate's design, build and content hours, not the kick-off and training, rounded up. With no design, it also counts that share of the design hours Custom would have: the client's design is still checked and built from.",
     ),
   );
 }
@@ -1693,6 +1702,7 @@ function managementRow(pricing: Pricing): HTMLElement {
     design: 0,
   }));
   const share = formatHours((pricing.working ?? pricing.base).managementPercent);
+  const clientShare = formatHours((pricing.working ?? pricing.base).clientDesignPercent);
   return h(
     "tr",
     { class: "c-row is-item is-rule" },
@@ -1709,7 +1719,7 @@ function managementRow(pricing: Pricing): HTMLElement {
     h(
       "td",
       { class: "c-entered g1", colspan: String(hourColumns.length) },
-      `${share}%, whatever the design: in the Project panel`,
+      `${share}%, whatever the design, and with no design of ${clientShare}% of Custom's design hours too: in the Project panel`,
     ),
     h("td", { class: "c-needs g1" }),
     h("td", { class: "c-needs" }),

@@ -16,6 +16,7 @@ nimbly-package,
 custom-package,growth
 none-package,growth
 pm-percent,15
+pm-none-design-percent,50
 languages-included,1
 languages-second,14
 languages-each,6

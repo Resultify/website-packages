@@ -260,6 +260,10 @@ test("the Design, Project and Languages panels change the rules, and Save sends 
   await expect(
     page.locator('.c-card[aria-label="Project"] input[data-rule="pm-percent"]'),
   ).toHaveValue(rules["pm-percent"]);
+  /* and with no design, the share of Custom's design hours it counts too */
+  await expect(
+    page.locator('.c-card[aria-label="Project"] input[data-rule="pm-none-design-percent"]'),
+  ).toHaveValue(rules["pm-none-design-percent"]);
   /* The table: each design choice's design and build hours side by side */
   await expect(page.locator(".c-heads .c-span.is-choice")).toHaveText(["AI", "Nimbly", "Custom"]);
   await expect(page.locator(".c-heads2 th")).toHaveText([
@@ -272,6 +276,8 @@ test("the Design, Project and Languages panels change the rules, and Save sends 
   await setRule(page, "ai-variant-percent", "100");
   await setRule(page, "languages-growth-from", "3");
   await setRule(page, "pm-percent", "10");
+  await setRule(page, "pm-none-design-percent", "25");
+  await expect(page.locator(".c-changes")).toContainText("with no design, % of Custom's design");
   await expect(page.locator(".c-changes")).toContainText("each extra, % of AI design");
   await expect(page.locator(".c-changes")).toContainText("Project management");
   await expect(page.locator(".c-changes")).toContainText("Growth from");
@@ -288,6 +294,7 @@ test("the Design, Project and Languages panels change the rules, and Save sends 
   expect(parseRules(sent.rules)["ai-variant-percent"]).toBe("100");
   expect(parseRules(sent.rules)["languages-growth-from"]).toBe("3");
   expect(parseRules(sent.rules)["pm-percent"]).toBe("10");
+  expect(parseRules(sent.rules)["pm-none-design-percent"]).toBe("25");
   expect(sent.table).toBe(tableText);
 });
 
@@ -643,7 +650,9 @@ test("an item can take its build and design hours from the estimate; project man
   await expect(management).toContainText("Project management");
   await expect(management).toContainText("Always in");
   await expect(management.locator(".c-type")).toHaveText("Project");
-  await expect(management).toContainText(`${rules["pm-percent"]}%, whatever the design`);
+  await expect(management).toContainText(
+    `${rules["pm-percent"]}%, whatever the design, and with no design of ${rules["pm-none-design-percent"]}% of Custom's design hours too`,
+  );
   const hours = priced(EXAMPLE).lines.find((line) => line.id === "project-management");
   await expect(management.locator(".c-own").nth(2)).toHaveText(hoursLabel(hours?.openHours ?? 0));
   /* Custom integration: both entered */

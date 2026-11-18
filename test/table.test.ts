@@ -321,6 +321,22 @@ describe("a draft", () => {
       }
     });
     expect(() => drafted({}, { "pm-percent": "" })).toThrow("Rule pm-percent");
+    /* With no design, the share of Custom's design hours it counts too: 50%, or 0 for none of it */
+    const none = setTile(essential(), "no-design", true);
+    expect(hours(none, "project-management")).toBe(13);
+    withCatalog(drafted({}, { "pm-none-design-percent": "100" }), () => {
+      /* 15% of 60h + 41h is 15.15, so 16h: as much as with Custom */
+      expect(hours(none, "project-management")).toBe(16);
+    });
+    withCatalog(drafted({}, { "pm-none-design-percent": "0" }), () => {
+      expect(quote(none).lines.find((line) => line.id === "project-management")).toMatchObject({
+        mode: "15% of 60h",
+        openHours: 9,
+      });
+    });
+    expect(() => drafted({}, { "pm-none-design-percent": "" })).toThrow(
+      "Rule pm-none-design-percent must be a whole number",
+    );
   });
 
   test("the package a design needs comes from the rules: Custom and None need Growth", () => {
@@ -439,6 +455,11 @@ describe("a draft", () => {
     expect(() => drafted({ "sections status": "hidden" })).toThrow("always shown");
     expect(() => drafted({}, { "ai-feedback-each": "x" })).toThrow("Rule ai-feedback-each");
     expect(() => parseRules("rule,value\nnope,1\n")).toThrow("no rule called nope");
+    /* A file from before a rule was added, such as the last commit's, reads as it priced then */
+    const before = parseRules("rule,value\npm-percent,15\n");
+    expect(before["pm-none-design-percent"]).toBe("0");
+    expect(before["pm-percent"]).toBe("15");
+    expect(parseRules("rule,value\npm-none-design-percent,\n")["pm-none-design-percent"]).toBe("");
   });
 
   test("a new row is a new item on the shelf: its hours, design hours and package work at once", () => {

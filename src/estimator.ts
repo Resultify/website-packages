@@ -7,6 +7,7 @@
 import {
   catalogueId,
   catalogueSources,
+  clientDesignPercent,
   currentCatalog,
   type DesignChoice,
   designChoices,
@@ -418,7 +419,8 @@ function feedbackInfo(chosen: DesignChoice): Kid {
   ];
 }
 
-/** Project management, in the Project fold of the site basics: one share, whatever the design. */
+/** Project management, in the Project fold of the site basics: one share, whatever the design, and
+    with no design, of a share of the design hours Custom would have too. */
 function managementRow(result: Quote): HTMLElement {
   const line = result.lines.find((item) => item.id === managementLineId);
   return row({
@@ -431,7 +433,7 @@ function managementRow(result: Quote): HTMLElement {
         h(
           "span",
           { class: "info-p" },
-          `Planning, meetings and coordination for the whole project: ${formatHours(managementPercent())}% of its design, build and content hours, rounded up. The kick-off and training are not counted.`,
+          `Planning, meetings and coordination for the whole project: ${formatHours(managementPercent())}% of its design, build and content hours, rounded up. With no design, also of ${formatHours(clientDesignPercent())}% of the design hours Custom would have: the client's design is still checked, handed over and built from. The kick-off and training are not counted.`,
         ),
       ],
     },

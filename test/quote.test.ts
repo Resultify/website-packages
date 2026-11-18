@@ -4,6 +4,7 @@ import { getTile, packageName } from "../src/catalog.ts";
 import { hoursText } from "../src/controls.ts";
 import {
   aiVariantCost,
+  clientDesignHours,
   decodeSelection,
   encodeSelection,
   managementHours,
@@ -148,8 +149,8 @@ describe("Essential", () => {
     expect(none.selection.tiles["nimbly-feedback"]).toBeUndefined();
     expect(none.designHours).toBe(0);
     expect(itemsBuild(none)).toBe(itemsBuild(custom));
-    /* 15% of 60h is 9h */
-    expect(lineOf(none, "project-management")?.openHours).toBe(9);
+    /* 15% of 60h, and of half Custom's 41h design hours (20.5h, so 21h): 15% of 81h is 12.15, so 13h */
+    expect(lineOf(none, "project-management")?.openHours).toBe(13);
     expect(none.shape).toBe("growth");
     expect(none.packageReasons).toEqual(["No design → Growth"]);
     /* Taking the design out gives the starting one back */
@@ -450,10 +451,20 @@ describe("blog, languages, and content", () => {
       mode: "15% of 101h",
       openHours: 16,
     });
-    /* None: 60h; 15% is 9 */
+    /* None: 60h, and the client's design still to check and build from: 50% of the 41h design
+       Custom would have, 20.5h, so 21h. 15% of 81h is 12.15 */
     expect(share(setTile(essential(), "no-design", true))).toMatchObject({
-      mode: "15% of 60h",
-      openHours: 9,
+      mode: "15% of 81h (60h + 50% of 41h client design)",
+      openHours: 13,
+    });
+    expect(clientDesignHours(41, 50)).toBe(21);
+    expect(clientDesignHours(40, 50)).toBe(20);
+    expect(clientDesignHours(41, 0)).toBe(0);
+    /* The client's design grows with the items, as Custom's would: system templates, 6h of Custom
+       build and 5h of its design, make 66h and 46h; 15% of 89h is 13.35 */
+    expect(share(setTile(setTile(essential(), "no-design", true), "system", true))).toMatchObject({
+      mode: "15% of 89h (66h + 50% of 46h client design)",
+      openHours: 14,
     });
     /* An item adds its share: system templates, 6h + 5h, make 112h, and 15% is 16.8 */
     expect(share(setTile(essential(), "system", true))?.openHours).toBe(17);

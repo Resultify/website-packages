@@ -84,7 +84,10 @@ The site basics always have the kick-off meeting (3h, apart from setup and
 launch), training (2 sessions of 2h) and project management: one share of the
 estimate's design, build and content hours (not of the kick-off, training or
 anything else of type `project`), rounded up, whatever the design: 15%, the
-rule `pm-percent`. None of them has design hours.
+rule `pm-percent`. With no design, the client's design is still checked, handed
+over and built from, so it also counts half the design hours Custom would have
+for the same items, rounded up: the rule `pm-none-design-percent`, 50. None of
+them has design hours.
 
 Hours count in four groups: **Design**, **Build**, **Content** and
 **Project**, the work around the site: the kick-off and training (type
@@ -116,7 +119,7 @@ each with its lines and hours, and the total. Feedback rounds, variants and
 languages are listed even when all are included ("Feedback · 1 round:
 included"); past that, with how many are extra ("3 rounds (1 included, 2
 extra): 6h"). Project management is the last line of Project ("15% of 101h:
-16h").
+16h"; with no design "15% of 81h (60h + 50% of 41h client design): 13h").
 
 In the catalogue, every item that is not a part is a source of products, with
 the same options: `product-catalogue` (HubDB, the catalogue on the shelf),
@@ -191,7 +194,8 @@ no calculations page.
   are, and locked when none is live: so is a source of products
 - The **Design**, **Project** and **Languages** panels on the left hold
   `rules.csv`. Design has each design's feedback rounds and, under **Each
-  design**, the package it needs. Project has project management's share.
+  design**, the package it needs. Project has project management's share, and
+  the share of Custom's design hours it also counts with no design.
   Project management is also a row of the site basics in the table, with its
   hours in the chosen estimate
 - **Add an item** puts a new item at the end of the shelf, as Build or Content.
