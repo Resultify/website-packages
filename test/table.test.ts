@@ -732,6 +732,13 @@ describe("a draft", () => {
       expect(shelfGroupOf("custom-integration")).toBe("Any package");
       expect(ruleFor("custom-integration", quote(essential()))?.text).toBe("40+ → Platform");
     });
+    /* From 1 hour too: in with no hours, the price still needs no Platform */
+    withCatalog(drafted({ "custom-integration package": "platform from 1" }), () => {
+      expect(shelfGroupOf("custom-integration")).toBe("Any package");
+      const priced = quote(setTile(essential(), "custom-integration", true));
+      expect(priced.shape).toBe("essential");
+      expect(ruleFor("custom-integration", priced)?.text).toBe("1+ → Platform");
+    });
   });
 
   test("the shelf has the Product catalogue while any of its sources is live; it comes with the first", () => {
