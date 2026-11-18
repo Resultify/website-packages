@@ -295,11 +295,12 @@ export const {
   blockedShelfIds,
 }: { laneIds: readonly string[]; blockedShelfIds: readonly string[] } = shelfLanes();
 
-/** A package rule that holds as soon as the item is in: from its first option, or from the least
-    it can be (0 for hours entered, such as Custom integration, so "platform from 1" there holds
-    only once hours are entered, as in the price). */
-function fromStart(rule: { tileId: string; at: number }): boolean {
-  return rule.at <= getTile(rule.tileId).min;
+/** A package rule that holds as soon as the item is in: an option's, when it is the option the item
+    starts with; a quantity's, from the least it can be (0 for hours entered, such as Custom
+    integration, so "platform from 1" there holds only once hours are entered, as in the price). */
+function fromStart(rule: { tileId: string; at: number; exact?: boolean }): boolean {
+  const item = getTile(rule.tileId);
+  return rule.exact ? rule.at === item.initial : rule.at <= item.min;
 }
 
 /** Fixed groups for the shelf: what the item needs in itself, whatever the current package is.

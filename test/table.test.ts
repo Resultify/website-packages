@@ -787,6 +787,20 @@ describe("a draft", () => {
     });
   });
 
+  test("an item with options sits in the shelf group of the option it starts with", () => {
+    /* Search starts with Simple, which needs no package; Advanced needs Growth */
+    expect(shelfGroupOf("search")).toBe("Any package");
+    withCatalog(drafted({ "search·Advanced start": "1" }), () => {
+      expect(shelfGroupOf("search")).toBe("Needs Growth");
+      expect(quote(setTile(essential(), "search", true)).shape).toBe("growth");
+    });
+    /* HubDB starts with Dynamic pages: Simple: its package, not Module based's, places it */
+    withCatalog(drafted({ "product-catalogue·Dynamic pages: Simple package": "growth" }), () => {
+      expect(shelfGroupOf("product-catalogue")).toBe("Needs Growth");
+      expect(quote(setTile(essential(), "product-catalogue", true)).shape).toBe("growth");
+    });
+  });
+
   test("the shelf has the Product catalogue while any of its sources is live; it comes with the first", () => {
     const every = (id: string, status: string) =>
       Object.fromEntries(catalogueOptions.map((option) => [`${id}·${option} status`, status]));
