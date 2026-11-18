@@ -1718,6 +1718,9 @@ test("with more than one blog, the list and post templates and Recent blog posts
   await blogs.click();
   await blogs.click();
   for (const id of ["blog-list", "blog-post"]) await expect(counter(id)).toBeVisible();
+  /* Both count templates: a screen reader hears whose they are */
+  await expect(card.getByRole("spinbutton", { name: "templates (List template)" })).toBeVisible();
+  await expect(card.getByRole("button", { name: "More templates (Post template)" })).toBeVisible();
   await expect(card.locator(":scope > .r .tx small")).toContainText(
     "3 blogs, sharing a list and a post template",
   );

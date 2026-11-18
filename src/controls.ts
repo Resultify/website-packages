@@ -117,9 +117,12 @@ export function designFor(result: Quote, ...ids: string[]): number {
 export function stepper(tile: Tile, qty: number, locked = false): HTMLElement {
   const wrap = el("div", locked ? "stepper is-locked" : "stepper");
   const noun = tile.unit ?? tile.label;
+  /* Units repeat (Page templates, Landing templates, the blog's List and Post template counts are
+     all templates), so a screen reader hears whose they are too */
+  const whose = noun.toLowerCase() === tile.label.toLowerCase() ? "" : ` (${tile.label})`;
   const dec = btn("step-btn", "−", { action: "dec", id: tile.id, focus: `dec-${tile.id}` });
   dec.disabled = locked || qty - tile.step < tile.min;
-  dec.setAttribute("aria-label", `Fewer ${noun}`);
+  dec.setAttribute("aria-label", `Fewer ${noun}${whose}`);
   const input = el("input", "qty");
   input.id = `qty-${tile.id}`;
   input.type = "number";
@@ -132,10 +135,10 @@ export function stepper(tile: Tile, qty: number, locked = false): HTMLElement {
   input.dataset.action = "qty";
   input.dataset.id = tile.id;
   input.dataset.focus = `qty-${tile.id}`;
-  input.setAttribute("aria-label", noun);
+  input.setAttribute("aria-label", `${noun}${whose}`);
   const inc = btn("step-btn", "+", { action: "inc", id: tile.id, focus: `inc-${tile.id}` });
   inc.disabled = locked || qty + tile.step > tile.max;
-  inc.setAttribute("aria-label", `More ${noun}`);
+  inc.setAttribute("aria-label", `More ${noun}${whose}`);
   wrap.append(dec, input, inc);
   return wrap;
 }
@@ -293,9 +296,10 @@ export const {
 }: { laneIds: readonly string[]; blockedShelfIds: readonly string[] } = shelfLanes();
 
 /** A package rule that holds as soon as the item is in: from its first option, or from the least
-    it can be (0 for hours entered, such as Custom integration). */
+    it can be (0 for hours entered, such as Custom integration, so "platform from 1" there holds
+    only once hours are entered, as in the price). */
 function fromStart(rule: { tileId: string; at: number }): boolean {
-  return rule.at <= Math.max(1, getTile(rule.tileId).min);
+  return rule.at <= getTile(rule.tileId).min;
 }
 
 /** Fixed groups for the shelf: what the item needs in itself, whatever the current package is.
