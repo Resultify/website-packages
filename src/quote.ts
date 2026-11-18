@@ -161,7 +161,9 @@ export function managementHours(base: number, percent: number): number {
 }
 
 /** With no design, the hours of the client's design project management counts: `share` percent
-    of the design hours Custom would have, rounded up to a whole hour, as every share is. */
+    of the design hours Custom would have, rounded up to a whole hour, as every share is.
+    Left as is: rounded before project management's share, so its line shows whole hours; apart
+    from managementHours, though the same sum, to name what it counts. */
 export function clientDesignHours(customDesign: number, share: number): number {
   return Math.ceil((customDesign * share) / 100);
 }
@@ -623,6 +625,7 @@ function price(selection: Selection): Priced {
     .filter((line) => line.bucket !== "project")
     .reduce((sum, line) => sum + line.openHours, 0);
   const share = clientDesignPercent();
+  /* Left as is: a second pass over the items, only with no design and once a change */
   const customDesign =
     choice === "none"
       ? designParts("custom", amountOf(selection)).reduce((sum, part) => sum + part.hours, 0)
