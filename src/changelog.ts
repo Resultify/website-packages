@@ -15,12 +15,12 @@ export const appName = "Website packages";
 export const releases: readonly Release[] = [
   {
     version: "0.2",
-    date: "2026-11-17",
+    date: "2026-11-18",
     stage: "Beta",
     changes: [
       "A new layout: the total, the package and the HubSpot tier on the left, then Design and the site basics, the features in the estimate, and a shelf of everything that can be added, grouped by the package it needs.",
       "Four designs to choose from: AI generated, Nimbly, Custom and None, each with its own hours, feedback rounds and, for AI generated, variants.",
-      "Project hours apart: the kick-off, training and project management, which is 15% of the design, build and content hours.",
+      "Project hours apart: the kick-off, training and project management, which is 15% of the design, build and content hours. With no design, it also counts half the design hours Custom would have, since the client's design still has to be checked and built from.",
       "Several blogs, with a counter for the list and post templates and for Recent blog posts when blogs have designs of their own.",
       "The Product catalogue, with its complexity (Module based, Dynamic pages or Custom), Favorite products and Related products.",
       "Custom forms counted form by form; Custom integration with its build and design hours entered.",
