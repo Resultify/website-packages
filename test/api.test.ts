@@ -53,7 +53,8 @@ const newItem = (id: string): Row => ({
 describe("saving the files", () => {
   test("writes a table the app can read, in the file's own layout", async () => {
     const root = await copyOfRepo();
-    const changed = serializeTable(applyCells(rows, { "sections build-ai": "5" }));
+    const changed = serializeTable(applyCells(rows, { "sections build-ai": "6" }));
+    expect(changed).not.toBe(tableText);
     /* Written another way (CRLF line ends): saved as the file is always written */
     const saved = await saveTables(root, edited(changed.replaceAll("\n", "\r\n")));
     const tables = await readTables(root);
@@ -126,7 +127,7 @@ describe("saving the files", () => {
 
   test("a read made while a save is writing waits for it: never the new table with the old rules", async () => {
     const root = await copyOfRepo();
-    const table = serializeTable(applyCells(rows, { "sections build-ai": "5" }));
+    const table = serializeTable(applyCells(rows, { "sections build-ai": "6" }));
     const rules = rulesText.replace("ai-feedback-each,3", "ai-feedback-each,4");
     const saving = saveTables(root, edited(table, rules));
     const read = (await (await tableRoute(root).GET()).json()) as {
