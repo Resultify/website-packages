@@ -198,10 +198,13 @@ export type RuleName = (typeof ruleNames)[number];
 export type Rules = Record<RuleName, string>;
 
 /** Rules added after the file was first written, and the value that prices as before they were:
-    a file without one, such as the last commit's on the calculations page, still reads. */
-const addedRules: Partial<Rules> = { "pm-none-design-percent": "0" };
+    for an older commit's rules, such as the last commit's on the calculations page. Add a new
+    rule here too. */
+export const addedRules: Partial<Rules> = { "pm-none-design-percent": "0" };
 
-export function parseRules(text: string): Rules {
+/** The rules of a file. A rule it doesn't list is empty, which the catalog refuses, unless
+    `missing` gives it a value. */
+export function parseRules(text: string, missing: Partial<Rules> = {}): Rules {
   const rules = Object.fromEntries(ruleNames.map((name) => [name, ""])) as Rules;
   const listed = new Set<RuleName>();
   for (const { rule, value } of readTable(text, ["rule", "value"] as const, "The rules")) {
@@ -210,7 +213,7 @@ export function parseRules(text: string): Rules {
     rules[name] = value;
     listed.add(name);
   }
-  for (const [name, value] of Object.entries(addedRules) as [RuleName, string][]) {
+  for (const [name, value] of Object.entries(missing) as [RuleName, string][]) {
     if (!listed.has(name)) rules[name] = value;
   }
   return rules;

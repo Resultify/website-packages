@@ -30,6 +30,7 @@ import {
   setWebsitePages,
 } from "../src/quote.ts";
 import {
+  addedRules,
   applyCells,
   type Cells,
   columns,
@@ -456,9 +457,16 @@ describe("a draft", () => {
     expect(() => drafted({}, { "ai-feedback-each": "x" })).toThrow("Rule ai-feedback-each");
     expect(() => parseRules("rule,value\nnope,1\n")).toThrow("no rule called nope");
     /* A file from before a rule was added, such as the last commit's, reads as it priced then */
-    const before = parseRules("rule,value\npm-percent,15\n");
+    const before = parseRules("rule,value\npm-percent,15\n", addedRules);
     expect(before["pm-none-design-percent"]).toBe("0");
     expect(before["pm-percent"]).toBe("15");
+    /* but the files in use that lose a rule's row are refused, as with any missing rule */
+    const lost = liveRulesText.replace(/^pm-none-design-percent,.*\n/m, "");
+    expect(lost).not.toBe(liveRulesText);
+    expect(parseRules(lost)["pm-none-design-percent"]).toBe("");
+    expect(() =>
+      buildCatalog(parseTable(liveText), parseRules(lost), parseCodes(liveCodesText)),
+    ).toThrow("Rule pm-none-design-percent must be a whole number");
     expect(parseRules("rule,value\npm-none-design-percent,\n")["pm-none-design-percent"]).toBe("");
   });
 
