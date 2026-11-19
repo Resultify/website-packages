@@ -199,13 +199,15 @@ export type Rules = Record<RuleName, string>;
 
 /** Rules added after the file was first written, and the value that prices as before they were:
     for an older commit's rules, such as the last commit's on the calculations page. Add a new
-    rule here too. */
+    rule here too. Left as is, unchecked: the last commit lacks a rule only until the rule is
+    committed, and one left out here reads as empty there, as parseOlderRules says. */
 export const addedRules: Partial<Rules> = { "pm-none-design-percent": "0" };
 
 /** The rules of a file. Every rule must have its row, even one left empty: a lost row would read
     as empty, and an empty package rule is a valid "any package", so Custom design would quietly
     price as Essential. A rule the file doesn't list is refused, unless `missing` gives it a
-    value. */
+    value. Left as is: a row left empty is kept, since an empty package rule is the Any the
+    calculations page offers (AI generated and Nimbly have it), and the catalog judges the rest. */
 export function parseRules(text: string, missing: Partial<Rules> = {}): Rules {
   const rules = Object.fromEntries(ruleNames.map((name) => [name, ""])) as Rules;
   const listed = new Set<RuleName>();
@@ -222,6 +224,14 @@ export function parseRules(text: string, missing: Partial<Rules> = {}): Rules {
     rules[name] = value;
   }
   return rules;
+}
+
+/** The rules of an older commit's file, only to compare with, such as the last commit's on the
+    calculations page: a rule added since reads as it priced then (addedRules), or else as empty,
+    as the files in use never may. */
+export function parseOlderRules(text: string): Rules {
+  const empty = Object.fromEntries(ruleNames.map((name) => [name, ""])) as Rules;
+  return parseRules(text, { ...empty, ...addedRules });
 }
 
 export function serializeRules(rules: Rules): string {

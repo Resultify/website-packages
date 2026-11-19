@@ -42,7 +42,6 @@ import {
   setTile,
 } from "../quote.ts";
 import {
-  addedRules,
   applyCells,
   type Cells,
   type CodeEntry,
@@ -51,6 +50,7 @@ import {
   columns,
   designKinds,
   parseCodes,
+  parseOlderRules,
   parseRules,
   parseTable,
   type Row,
@@ -2185,11 +2185,15 @@ function draw(): void {
 
 /** Takes what the server says is on disk and in the last commit. */
 function take(tables: Tables): void {
+  /* Read every file before changing anything: files it can't read leave the page as it was */
+  const savedRows = parseTable(tables.saved.table);
+  const savedRules = parseRules(tables.saved.rules);
+  const codes = parseCodes(tables.saved.codes);
   state.savedTable = tables.saved.table;
   state.savedRulesText = tables.saved.rules;
-  state.savedRows = parseTable(tables.saved.table);
-  state.savedRules = parseRules(tables.saved.rules);
-  state.codes = parseCodes(tables.saved.codes);
+  state.savedRows = savedRows;
+  state.savedRules = savedRules;
+  state.codes = codes;
   state.committedRows = null;
   state.committedRules = null;
   /* With no commit of the files, or one this code cannot read, changes are counted from the saved
@@ -2197,7 +2201,7 @@ function take(tables: Tables): void {
   if (tables.committed !== null) {
     try {
       state.committedRows = parseTable(tables.committed.table);
-      state.committedRules = parseRules(tables.committed.rules, addedRules);
+      state.committedRules = parseOlderRules(tables.committed.rules);
     } catch {
       state.committedRows = null;
       state.committedRules = null;
@@ -2237,6 +2241,8 @@ async function load(): Promise<void> {
       if (Date.now() - at < 10000) window.setTimeout(() => say("save", "Saved"), 0);
     } catch {}
   } catch (problem) {
+    /* Left as is: a rules file that lacks a row stops the page too, naming the rule. Opened with
+       the rule empty, Save would write it so, and an empty package rule is a valid Any */
     const why = problem instanceof Error ? problem.message : String(problem);
     state.loadError = `The files could not be read: ${why}. The calculations page needs the dev server (bun run dev), and src/estimator.csv and src/rules.csv must be files it can read; fix them in an editor if they are not.`;
   }
@@ -2441,7 +2447,9 @@ window.addEventListener("hashchange", () => {
   draw();
 });
 
-/* The files changed outside this page (an editor, git checkout): read them again on coming back */
+/* The files changed outside this page (an editor, git checkout): read them again on coming back.
+   Left as is: files it can't read leave the page as it was (take reads them all first), Save
+   writes every rule back, and a reload says what is wrong */
 window.addEventListener("focus", () => {
   if (state.saving || state.loadError) return;
   void fetch("api/table", { cache: "no-store" })

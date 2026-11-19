@@ -30,7 +30,6 @@ import {
   setWebsitePages,
 } from "../src/quote.ts";
 import {
-  addedRules,
   applyCells,
   type Cells,
   columns,
@@ -39,6 +38,7 @@ import {
   liveText,
   parseCodes,
   parseCsv,
+  parseOlderRules,
   parseRules,
   parseTable,
   type Row,
@@ -469,16 +469,17 @@ describe("a draft", () => {
     /* A file from before a rule was added, such as the last commit's, reads as it priced then */
     const lost = liveRulesText.replace(/^pm-none-design-percent,.*\n/m, "");
     expect(lost).not.toBe(liveRulesText);
-    const before = parseRules(lost, addedRules);
+    const before = parseOlderRules(lost);
     expect(before["pm-none-design-percent"]).toBe("0");
-    expect(before["pm-percent"]).toBe("15");
+    expect(before["pm-percent"]).toBe(live.rules["pm-percent"]);
     /* but the files in use that lose a rule's row are refused, whatever the rule */
     expect(() => parseRules(lost)).toThrow("The rules have no row for pm-none-design-percent");
-    /* A package rule too: read as empty, it would let Custom design price as Essential */
+    /* A package rule too: read as empty, it would let Custom design price as Essential. An older
+       commit, only compared with, reads it as empty, as it did */
     const noPackage = liveRulesText.replace(/^custom-package,.*\n/m, "");
     expect(noPackage).not.toBe(liveRulesText);
     expect(() => parseRules(noPackage)).toThrow("The rules have no row for custom-package");
-    expect(() => parseRules(noPackage, addedRules)).toThrow("no row for custom-package");
+    expect(parseOlderRules(noPackage)["custom-package"]).toBe("");
     /* A row left empty stays as it is: the catalog judges it */
     const empty = liveRulesText.replace(/^pm-none-design-percent,.*$/m, "pm-none-design-percent,");
     expect(parseRules(empty)["pm-none-design-percent"]).toBe("");
