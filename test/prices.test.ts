@@ -23,7 +23,15 @@ import {
   withCatalog,
 } from "../src/catalog.ts";
 import { hoursSummary, hoursText, shelfLanes } from "../src/controls.ts";
-import { quote, type Selection, selectionForShape, setQuantity, setTile } from "../src/quote.ts";
+import {
+  isBlocked,
+  quote,
+  type Selection,
+  selectionForShape,
+  setQuantity,
+  setTile,
+  sourceIn,
+} from "../src/quote.ts";
 import {
   liveCodesText,
   liveRulesText,
@@ -31,6 +39,7 @@ import {
   parseCodes,
   parseRules,
   parseTable,
+  type Row,
 } from "../src/table.ts";
 
 /* Left as is, though table.test.ts reads the same files: it keeps the rows and rules apart too */
@@ -94,6 +103,24 @@ function entriesOf(item: Tile, bring: (selection: Selection) => Selection): Entr
   return [{ name: item.label, read: item.id, has: [item.id, item.initial], make: on }];
 }
 
+/** How a part's item comes into the estimate: as the shelf adds it, or, when the option it starts
+    with blocks the part (Related products and Module based, Social sign-in and SSO), with its first
+    live option that doesn't. Null when every option blocks the part: it has no price to show. */
+function bringFor(id: string, partId: string): ((selection: Selection) => Selection) | null {
+  const bring = (selection: Selection) => setTile(selection, id, true);
+  const start = bring(selectionForShape("essential"));
+  if (!isBlocked(start.tiles, partId)) return bring;
+  const ownerId = id === catalogueId ? sourceIn(start.tiles) : id;
+  if (ownerId === undefined) return null;
+  const at = (getTile(ownerId).modes ?? []).findIndex(
+    (mode, index) =>
+      !mode.disabled &&
+      !mode.customHours &&
+      !isBlocked(setQuantity(start, ownerId, index + 1).tiles, partId),
+  );
+  return at === -1 ? null : (selection) => setQuantity(bring(selection), ownerId, at + 1);
+}
+
 /** Every price in the list: the basics with a quantity or options, then what the shelf offers,
     each with its parts. A part an item can have more than one of (the Blog's templates, one for
     each blog) is priced with two of them too. */
@@ -106,16 +133,18 @@ function priceList(): Entry[] {
     }
   }
   for (const id of shelfLanes().laneIds) {
-    const bring = (selection: Selection) => setTile(selection, id, true);
     /* The Product catalogue comes with the source the shelf adds */
     const item = id === catalogueId ? shelfSource() : getTile(id);
     if (item) list.push(...entriesOf(item, (selection) => selection));
     for (const partId of partsOf[id] ?? []) {
+      const bring = bringFor(id, partId);
+      if (!bring) continue;
       const part = getTile(partId);
       list.push(...entriesOf(part, bring));
-      if (part.countedBy && !part.disabled && !part.hidden) {
-        const count = part.countedBy;
-        const owner = getTile(id);
+      const owner = getTile(id);
+      const count = part.countedBy;
+      /* Two of it only where the item can have two */
+      if (count && !part.disabled && !part.hidden && owner.max >= 2 && getTile(count).max >= 2) {
         list.push({
           name: `${part.label} · 2 ${owner.unit}, 2 ${getTile(count).unit}`,
           read: part.id,
@@ -146,6 +175,35 @@ function itemHours(selection: Selection, id: string): string {
       .reduce((total, line) => total + line.openHours, 0);
   return `${sum(true)} + ${sum(false)}`;
 }
+
+/** The files in src/ with their rows changed, as the calculations page may change them. */
+const edited = (change: (row: Row) => Row) =>
+  buildCatalog(
+    parseTable(liveText).map(change),
+    parseRules(liveRulesText),
+    parseCodes(liveCodesText),
+  );
+
+describe("the price list", () => {
+  test("is made from any table the calculations page can save", () => {
+    const every = (design: string) => {
+      const list = priceList();
+      for (const entry of list) made(entry, design);
+      return list.map((entry) => entry.name);
+    };
+    /* The catalogue starts with Module based, which Related products don't go with: they are
+       priced with an option they do go with */
+    const moduleBased = edited((row) =>
+      row.id === catalogueId ? { ...row, start: row.option === "Module based" ? "1" : "" } : row,
+    );
+    withCatalog(moduleBased, () => expect(every("custom-design")).toContain("Related products"));
+    /* One blog at most: nothing with two */
+    const oneBlog = edited((row) => (row.id === "blog-setups" ? { ...row, max: "1" } : row));
+    withCatalog(oneBlog, () =>
+      expect(every("custom-design").filter((name) => name.includes("2 blogs"))).toEqual([]),
+    );
+  });
+});
 
 describe("the prices of the files in src/", () => {
   test("the starting estimate, with each design", () => {
