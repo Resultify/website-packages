@@ -75,6 +75,8 @@ The columns of `estimator.csv`:
 | `note`                                        | The line under the name, edited in the file only. `{build}` shows the build hours for the design choice                                                                                                                                                                                       |
 
 Every number, in `estimator.csv` and in `rules.csv`, is a whole number: hours, quantities and percents.
+Every rule has its row in `rules.csv`, even one left empty (a package rule with no package): a file
+that lacks one is refused, so a lost row can't quietly price a design with no package.
 
 Every estimate has one of four designs. Each has its own build and design
 hours; its feedback rounds and the package it needs are in `rules.csv`. Every
