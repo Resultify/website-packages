@@ -794,6 +794,16 @@ describe("a draft", () => {
       expect(shelfGroupOf("search")).toBe("Needs Growth");
       expect(quote(setTile(essential(), "search", true)).shape).toBe("growth");
     });
+    /* Simple needs Growth from the start, and Advanced's Platform still shows as the next step */
+    withCatalog(
+      drafted({ "search·Simple package": "growth", "search·Advanced package": "platform" }),
+      () => {
+        expect(shelfGroupOf("search")).toBe("Needs Growth");
+        const priced = quote(setTile(essential(), "search", true));
+        expect(priced.shape).toBe("growth");
+        expect(ruleFor("search", priced)).toEqual({ text: "Advanced → Platform", on: true });
+      },
+    );
     /* HubDB starts with Dynamic pages: Simple: its package, not Module based's, places it */
     withCatalog(drafted({ "product-catalogue·Dynamic pages: Simple package": "growth" }), () => {
       expect(shelfGroupOf("product-catalogue")).toBe("Needs Growth");
