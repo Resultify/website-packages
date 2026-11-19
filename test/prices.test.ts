@@ -69,14 +69,19 @@ function entriesOf(item: Tile, bring: (selection: Selection) => Selection): Entr
   if (item.hourInput || item.designOf || item.counts || item.disabled || item.hidden) return [];
   const on = (selection: Selection) => setTile(bring(selection), item.id, true);
   if (item.modes) {
-    return item.modes
-      .filter((mode) => !mode.disabled && !mode.customHours)
-      .map((mode) => ({
-        name: `${item.label} · ${optionName(mode)}`,
-        read: item.id,
-        has: [item.id, mode.value],
-        make: (selection) => setQuantity(on(selection), item.id, mode.value),
-      }));
+    /* An estimate holds an option by its place in the list, from 1; its value is for links */
+    return item.modes.flatMap((mode, index): Entry[] =>
+      mode.disabled || mode.customHours
+        ? []
+        : [
+            {
+              name: `${item.label} · ${optionName(mode)}`,
+              read: item.id,
+              has: [item.id, index + 1],
+              make: (selection) => setQuantity(on(selection), item.id, index + 1),
+            },
+          ],
+    );
   }
   if (item.unit) {
     return [...new Set([item.initial, item.max])].map((qty) => ({
