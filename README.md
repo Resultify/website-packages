@@ -25,7 +25,7 @@ another port.
 | `bun run e2e`   | Run the browser tests in `e2e/` in Chrome; starts the server if none is running |
 | `bun check`     | Type-check                                                                      |
 | `bun fmt`       | Format the code; `bun fmt --check` only checks                                  |
-| `bun run build` | Build the static site into `docs/`                                              |
+| `bun run build` | Build the site into `docs/`, to preview it; the Release workflow publishes it   |
 
 The tests check three things apart:
 
@@ -224,8 +224,9 @@ no calculations page.
 - **Save** writes `estimator.csv` and `rules.csv`, and `link-codes.csv` when an
   item is new, once the app can read them. The estimator on the dev server uses
   them at once
-- To publish, run `bun run build` and commit `src/` with `docs/`. To throw away
-  everything since the last commit: `git checkout src/`
+- Commit `src/` when you're done; it is published with the next release (see
+  [Releasing](#releasing)). To throw away everything since the last commit:
+  `git checkout src/`
 
 Editing the files in an editor works too: the page reads them again when you
 come back to it.
@@ -257,13 +258,66 @@ it shows the hours of the new files.
 
 ## Changelog
 
-**Changelog**, under Reset in the sidebar, lists the releases in a dialog; under
-it is the app's name and version, with Beta. Both come from
-[`src/changelog.ts`](src/changelog.ts): add a release at the top of `releases`
-when one ships, in words for the people who use the estimator.
+**Changelog**, under Reset in the sidebar, lists the releases in a dialog, each
+with its sections (New, Fixed); under it is the app's name and version, with
+Beta while the version is 0.x. Both are read from
+[`CHANGELOG.md`](CHANGELOG.md) by [`src/changelog.ts`](src/changelog.ts).
+release-please writes the file from the commit messages: don't edit it on
+`main` by hand, only in a release PR (see [Releasing](#releasing)). Its lines
+are for the people who use the estimator.
 
-## Deploying
+## Releasing
 
-The site is published from the `docs/` folder with GitHub Pages. After changing
-anything in `src/`, including the `.csv` files, run `bun run build` and
-commit the updated `docs/` folder along with your change.
+A release is made from a draft PR that
+[release-please](https://github.com/googleapis/release-please) keeps open
+(`.github/workflows/release.yml`):
+
+1. Commits land on `main`.
+2. release-please updates a draft PR titled `chore: release 0.3.0`. It holds
+   the new `version` in `package.json` and a new top section in `CHANGELOG.md`:
+   **New** for `feat` commits, **Fixed** for `fix`. Other types are left out.
+   Every new commit on `main` rewrites the draft (a force-push), which loses
+   any edits in it.
+3. To release:
+   1. Optionally, edit `CHANGELOG.md` in the draft: remove a duplicate, add a
+      refactor worth mentioning, reword a line. Commit it as
+      `docs: edit the release notes`. Edit last: a later commit on `main`
+      throws the edit away.
+   2. Click **Ready for review**. The full checks run on the PR: types, unit
+      tests, browser tests and a build.
+   3. **Squash-merge** the PR.
+4. The Release workflow then tags `v0.3.0`, makes the GitHub release with the
+   `0.3.0` section of `CHANGELOG.md` as its notes, checks the code, builds it
+   and publishes it to GitHub Pages. What `CHANGELOG.md` holds at the merge is
+   what ships.
+
+Actions → Release → **Run workflow** publishes again by hand: a tag given, or
+the latest release.
+
+Versions stay 0.x: `feat` raises the minor version (0.2.0 → 0.3.0), `fix` the
+patch (0.2.0 → 0.2.1), and a breaking change (`feat!`) the minor too. To reach
+1.0.0, set `"release-as": "1.0.0"` in `release-please-config.json`, and remove
+it after that release.
+
+The release builds with `bun scripts/build.ts --frozen`, which stops on an item
+without a link code instead of giving it one: run `bun run build` and commit
+`src/link-codes.csv` with a new item.
+
+## Commit messages
+
+Commit messages and PR titles follow one rule, checked by the Checks workflow
+(`scripts/messages.ts`): `<type>[!]: <description>`, with no scope.
+
+- The types: `feat`, `fix`, `refactor`, `style`, `test`, `docs`, `build`, `ops`
+  and `chore`. `feat` and `fix` become lines of the changelog, in words for the
+  people who use the estimator
+- The description is imperative, starts with a lowercase letter and has no
+  period at the end; the whole line is at most 100 characters
+- Merge PRs with **squash** or **rebase**, never a merge commit, so a change is
+  not listed twice. With squash, extra `feat:` or `fix:` lines at the end of the
+  message add more changelog lines
+- A fix to work that hasn't been released yet is a `refactor:`, so it doesn't
+  show as a fix of something no one had
+
+Pushes to `main` are checked after they land: the run turns red, nothing is
+blocked.

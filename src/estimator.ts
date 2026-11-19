@@ -1537,7 +1537,7 @@ function side(result: Quote, state: PageState): HTMLElement {
         "p",
         { class: "ver" },
         h("span", { class: "ver-name" }, appName),
-        h("span", { class: "ver-num" }, `v${currentRelease.version}`),
+        h("span", { class: "ver-num" }, `v${currentRelease.label}`),
         currentRelease.stage ? h("span", { class: "beta" }, currentRelease.stage) : null,
       ),
     ),
@@ -1562,8 +1562,8 @@ function changelogButton(): HTMLElement {
   );
 }
 
-/** The releases, newest first, in a dialog of its own outside the page, so a redraw of the page
-    leaves it open. Escape, Close or a press outside it closes it. */
+/** The releases, newest first, each with its sections (New, Fixed), in a dialog of its own outside
+    the page, so a redraw of the page leaves it open. Escape, Close or a press outside it closes it. */
 function changelogDialog(): HTMLDialogElement {
   const found = document.querySelector<HTMLDialogElement>("dialog.changelog");
   if (found) return found;
@@ -1586,19 +1586,22 @@ function changelogDialog(): HTMLDialogElement {
       releases.map((release) =>
         h(
           "section",
-          { class: "cl-release", "aria-label": `Version ${release.version}` },
+          { class: "cl-release", "aria-label": `Version ${release.label}` },
           h(
             "h3",
             null,
-            `v${release.version}`,
+            `v${release.label}`,
             release.stage ? h("span", { class: "beta" }, release.stage) : null,
             h("time", { datetime: release.date }, releaseDay(release.date)),
           ),
-          h(
-            "ul",
-            null,
-            release.changes.map((change) => h("li", null, change)),
-          ),
+          release.sections.map((section) => [
+            h("h4", null, section.title),
+            h(
+              "ul",
+              null,
+              section.items.map((item) => h("li", null, item)),
+            ),
+          ]),
         ),
       ),
     ),

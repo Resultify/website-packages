@@ -190,6 +190,7 @@ button:disabled {
 }
 h2,
 h3,
+h4,
 p,
 ul {
   margin: 0;
@@ -1877,10 +1878,20 @@ ul {
   font-weight: 550;
   color: var(--faint);
 }
+/* A section of the release, New or Fixed: a small label, as the estimate's section titles are */
+.cl-release h4 {
+  margin-top: 12px;
+  font-size: var(--fs-caption);
+  line-height: 16px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
 .cl-release ul {
   display: grid;
   gap: 6px;
-  margin-top: 10px;
+  margin-top: 6px;
   padding-left: 18px;
   list-style: disc;
   font-size: var(--fs-sub);

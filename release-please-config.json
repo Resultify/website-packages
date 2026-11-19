@@ -1,0 +1,22 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "release-type": "node",
+  "bootstrap-sha": "1f150328c36ec5a85de4805ce0964736da19a589",
+  "include-component-in-tag": false,
+  "bump-minor-pre-major": true,
+  "draft-pull-request": true,
+  "pull-request-title-pattern": "chore: release ${version}",
+  "pull-request-header": "A draft until you mark it ready for review. To change the release notes, edit CHANGELOG.md in this PR, last: a new commit on main rewrites this PR. Then squash-merge to release.",
+  "changelog-sections": [
+    { "type": "feat", "section": "New" },
+    { "type": "fix", "section": "Fixed" },
+    { "type": "refactor", "section": "Changed", "hidden": true },
+    { "type": "style", "section": "Style", "hidden": true },
+    { "type": "test", "section": "Tests", "hidden": true },
+    { "type": "docs", "section": "Docs", "hidden": true },
+    { "type": "build", "section": "Build", "hidden": true },
+    { "type": "ops", "section": "Ops", "hidden": true },
+    { "type": "chore", "section": "Chores", "hidden": true }
+  ],
+  "packages": { ".": {} }
+}

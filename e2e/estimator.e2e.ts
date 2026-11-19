@@ -464,7 +464,7 @@ test("Changelog, under Reset, lists the releases in a dialog that Escape, Close 
 }) => {
   await open(page);
   /* Last in the sidebar: Reset, Changelog under it, then the version */
-  const label = `${appName}v${currentRelease.version}${currentRelease.stage ?? ""}`;
+  const label = `${appName}v${currentRelease.label}${currentRelease.stage ?? ""}`;
   expect(
     await page
       .locator(".side-act")
@@ -489,10 +489,19 @@ test("Changelog, under Reset, lists the releases in a dialog that Escape, Close 
   await button.click();
   await expect(dialog).toBeVisible();
   await expect(dialog.locator(".cl-release h3")).toHaveText(
-    releases.map((release) => new RegExp(`^v${release.version.replace(".", "\\.")}`)),
+    releases.map((release) => new RegExp(`^v${release.label.replaceAll(".", "\\.")}`)),
   );
-  await expect(dialog.locator(".cl-release").first().locator("li")).toHaveCount(
-    currentRelease.changes.length,
+  /* Each release's sections, New or Fixed, each a heading over its items */
+  const first = dialog.locator(".cl-release").first();
+  await expect(first.locator("h4")).toHaveText(
+    currentRelease.sections.map((section) => section.title),
+  );
+  for (const [index, section] of currentRelease.sections.entries()) {
+    const items = first.locator("h4").nth(index).locator("xpath=following-sibling::ul[1]/li");
+    await expect(items).toHaveText(section.items);
+  }
+  await expect(first.locator("li")).toHaveCount(
+    currentRelease.sections.reduce((sum, section) => sum + section.items.length, 0),
   );
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
