@@ -1,23 +1,28 @@
 /* The prices of the files in src/, the ones the estimator is built with: the starting estimate with
-   each design, the same with extra feedback rounds, variants and languages, and what every item
-   and option adds. The pricing tests use the frozen files of test/fixtures instead (see
-   fixture.ts), so they test how an estimate is priced; these test what it costs.
+   each design, the same with extra feedback rounds, variants and languages, and the price of every
+   basic with a quantity or options and of everything the shelf offers, with its parts: each
+   option, and each quantity at what it starts at and at its most. The pricing tests use the
+   frozen files of test/fixtures instead (see fixture.ts), so they test how an estimate is priced;
+   these test what it costs.
 
-   A change of hours, a rule or a limit in src/, on the calculations page too, changes these
-   snapshots: the test fails until the new prices are accepted with `bun test --update-snapshots`,
-   and the accepted prices are in the commit, for review. */
+   A change of hours, a limit, a package or tier an item needs, or a rule in src/, on the
+   calculations page too, changes these snapshots: the test fails until the new prices are accepted
+   with `bun test --update-snapshots`, and the accepted prices are in the commit, for review. */
 import { describe, expect, test } from "bun:test";
 import {
   buildCatalog,
+  catalogueId,
   designChoices,
   getTile,
   isAlwaysOn,
-  ownerOf,
+  partsOf,
+  shelfSource,
   type Tile,
+  type TileMode,
   tiles,
   withCatalog,
 } from "../src/catalog.ts";
-import { hoursText } from "../src/controls.ts";
+import { hoursSummary, hoursText, shelfLanes } from "../src/controls.ts";
 import { quote, type Selection, selectionForShape, setQuantity, setTile } from "../src/quote.ts";
 import {
   liveCodesText,
@@ -28,6 +33,7 @@ import {
   parseTable,
 } from "../src/table.ts";
 
+/* Left as is, though table.test.ts reads the same files: it keeps the rows and rules apart too */
 const live = buildCatalog(
   parseTable(liveText),
   parseRules(liveRulesText),
@@ -37,49 +43,96 @@ const live = buildCatalog(
 /** The starting estimate with a design. */
 const withDesign = (id: string): Selection => setTile(selectionForShape("essential"), id, true);
 
-/** Each design with what it prices. */
+/** Each design with what it prices. Left as is: the whole text Copy hours puts in a quote, so a
+    change of its words is worth a look too. */
 function byDesign(price: (design: string) => string): string {
   return designChoices.map((choice) => `## ${choice.label}\n${price(choice.id)}`).join("\n\n");
 }
 
-/** An item that can be added on its own: not a basic, a design or a rule, not a count or the
-    design hours of another, not hours entered by hand, and neither it nor its owner coming or
-    hidden. */
-function addable(item: Tile): boolean {
-  return (
-    !isAlwaysOn(item.id) &&
-    item.group !== "design" &&
-    item.id !== "languages" &&
-    !item.counts &&
-    !item.designOf &&
-    !item.hourInput &&
-    !item.disabled &&
-    !item.hidden &&
-    !getTile(owner(item)).disabled &&
-    !getTile(owner(item)).hidden
-  );
-}
+/** One price in the list: its name, the item whose hours it reads, and how the estimate gets it.
+    `has` is the quantity an item must have in it; one that doesn't come in fails the test, so a
+    price never reads 0 by mistake. */
+type Entry = {
+  name: string;
+  read: string;
+  has: [string, number];
+  make: (selection: Selection) => Selection;
+};
 
-/** The item a part goes with, or the item itself. */
-const owner = (item: Tile): string => ownerOf(item.id) ?? item.id;
+const optionName = (mode: TileMode) => (mode.group ? `${mode.group}: ${mode.label}` : mode.label);
 
-/** The estimate with an item in, at the quantity it starts at or with an option, its owner in
-    first. An item that doesn't come in fails the test, so a price never reads 0 by mistake. */
-function adding(selection: Selection, item: Tile, mode?: number): Selection {
-  const first = owner(item);
-  const withOwner =
-    first !== item.id && selection.tiles[first] === undefined
-      ? adding(selection, getTile(first))
-      : selection;
-  const added = setTile(withOwner, item.id, true);
-  const result = mode === undefined ? added : setQuantity(added, item.id, mode);
-  if (result.tiles[item.id] !== (mode ?? item.initial)) {
-    throw new Error(`${item.label} did not come in${mode === undefined ? "" : ` as ${mode}`}`);
+/** An item's prices, brought into the estimate as the estimator does: its owner first (the shelf's
+    item), then the item, then its option or quantity. Left as is: the steps are setTile and
+    setQuantity, what the shelf and the item's card call. An item with no option to choose, or
+    hours entered by hand, has none: its lines leave the snapshot, and the diff shows they went. */
+function entriesOf(item: Tile, bring: (selection: Selection) => Selection): Entry[] {
+  if (item.hourInput || item.designOf || item.counts || item.disabled || item.hidden) return [];
+  const on = (selection: Selection) => setTile(bring(selection), item.id, true);
+  if (item.modes) {
+    return item.modes
+      .filter((mode) => !mode.disabled && !mode.customHours)
+      .map((mode) => ({
+        name: `${item.label} · ${optionName(mode)}`,
+        read: item.id,
+        has: [item.id, mode.value],
+        make: (selection) => setQuantity(on(selection), item.id, mode.value),
+      }));
   }
-  return result;
+  if (item.unit) {
+    return [...new Set([item.initial, item.max])].map((qty) => ({
+      name: `${item.label} · ${qty} ${item.unit}`,
+      read: item.id,
+      has: [item.id, qty],
+      make: (selection) => setQuantity(on(selection), item.id, qty),
+    }));
+  }
+  return [{ name: item.label, read: item.id, has: [item.id, item.initial], make: on }];
 }
 
-/** An item's own design and build hours in an estimate. */
+/** Every price in the list: the basics with a quantity or options, then what the shelf offers,
+    each with its parts. A part an item can have more than one of (the Blog's templates, one for
+    each blog) is priced with two of them too. */
+function priceList(): Entry[] {
+  const list: Entry[] = [];
+  for (const item of tiles) {
+    const counted = item.modes !== undefined || (item.unit !== undefined && !item.hourInput);
+    if (isAlwaysOn(item.id) && item.group !== "design" && counted) {
+      list.push(...entriesOf(item, (selection) => selection));
+    }
+  }
+  for (const id of shelfLanes().laneIds) {
+    const bring = (selection: Selection) => setTile(selection, id, true);
+    /* The Product catalogue comes with the source the shelf adds */
+    const item = id === catalogueId ? shelfSource() : getTile(id);
+    if (item) list.push(...entriesOf(item, (selection) => selection));
+    for (const partId of partsOf[id] ?? []) {
+      const part = getTile(partId);
+      list.push(...entriesOf(part, bring));
+      if (part.countedBy && !part.disabled && !part.hidden) {
+        const count = part.countedBy;
+        const owner = getTile(id);
+        list.push({
+          name: `${part.label} · 2 ${owner.unit}, 2 ${getTile(count).unit}`,
+          read: part.id,
+          has: [count, 2],
+          make: (selection) =>
+            setQuantity(setTile(setQuantity(bring(selection), id, 2), part.id, true), count, 2),
+        });
+      }
+    }
+  }
+  return list;
+}
+
+/** The estimate an entry makes. */
+function made(entry: Entry, design: string): Selection {
+  const selection = entry.make(withDesign(design));
+  const [id, qty] = entry.has;
+  if (selection.tiles[id] !== qty) throw new Error(`${entry.name}: ${id} is not ${qty}`);
+  return selection;
+}
+
+/** An item's own hours in an estimate: design, then build, content or project. */
 function itemHours(selection: Selection, id: string): string {
   const lines = quote(selection).lines.filter((line) => line.item === id);
   const sum = (design: boolean) =>
@@ -111,29 +164,18 @@ describe("the prices of the files in src/", () => {
     expect(text).toMatchSnapshot();
   });
 
-  test("what each item and option adds, as design + build hours with each design", () => {
+  test("every basic, item, part and option: its hours with each design, and the package and tier", () => {
     const text = withCatalog(live, () => {
+      const starting = designChoices.find((choice) => choice.kind === "nimbly") ?? designChoices[0];
       const lines = [
-        "Item · option · quantity: " + designChoices.map((choice) => choice.label).join(", "),
+        `Item · option or quantity: design + build, content or project hours with ${designChoices
+          .map((choice) => choice.label)
+          .join(", ")}; the package and tier with ${starting?.label}`,
       ];
-      for (const item of tiles.filter(addable)) {
-        const modes = (item.modes ?? []).filter((mode) => !mode.disabled && !mode.customHours);
-        const options = item.modes
-          ? modes.map((mode) => ({
-              name: mode.group ? `${mode.group}: ${mode.label}` : mode.label,
-              value: mode.value,
-            }))
-          : [{ name: "", value: undefined }];
-        for (const option of options) {
-          const prices = designChoices.map((choice) => {
-            const selection = adding(withDesign(choice.id), item, option.value);
-            return itemHours(selection, item.id);
-          });
-          const count = item.unit && !item.modes ? ` · ${item.initial} ${item.unit}` : "";
-          lines.push(
-            `${item.label}${option.name ? ` · ${option.name}` : ""}${count}: ${prices.join(", ")}`,
-          );
-        }
+      for (const entry of priceList()) {
+        const prices = designChoices.map((choice) => itemHours(made(entry, choice.id), entry.read));
+        const needs = hoursSummary(quote(made(entry, starting?.id ?? ""))).title;
+        lines.push(`${entry.name}: ${prices.join(", ")} · ${needs}`);
       }
       return lines.join("\n");
     });

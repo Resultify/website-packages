@@ -40,9 +40,12 @@ The tests check three things apart:
   browser tests run on these files too
 - **What the files in `src/` cost.** `test/prices.test.ts` prices them: the
   starting estimate with each design, the same with extra feedback rounds,
-  variants and languages, and the design and build hours of every item and
-  option. The prices are kept in `test/__snapshots__/prices.test.ts.snap`. A
-  change of hours or rules, on the calculations page too, fails this test
+  variants and languages, and the hours of every basic with a quantity or
+  options and of everything the shelf offers, with its parts: each option,
+  each quantity at its start and at its most, with the package and tier it
+  needs. The prices are kept in `test/__snapshots__/prices.test.ts.snap`. A
+  change of hours, limits, packages or rules, on the calculations page too,
+  fails this test
   until you accept the new prices with `bun test --update-snapshots`; commit
   the snapshot with the files, so the price change shows in the review
 
