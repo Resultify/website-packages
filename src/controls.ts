@@ -194,8 +194,9 @@ export function hoursInput(id: string, label: string, value: number, max: number
 
 /** The rule that moves the package, in a few words. Laid out even when hidden, so the row never moves. */
 export function ruleFor(id: string, result: Quote): { text: string; on: boolean } | undefined {
-  const rule = packageRules.find((item) => item.tileId === id);
-  if (!rule || fromStart(rule)) return undefined;
+  /* What the item needs from the start places it on the shelf; the hint is the next rule after */
+  const rule = packageRules.find((item) => item.tileId === id && !fromStart(item));
+  if (!rule) return undefined;
   const name = packageName[rule.package];
   const mode = getTile(id).modes?.[rule.at - 1];
   /* An option coming soon cannot be chosen, so it moves nothing yet */
