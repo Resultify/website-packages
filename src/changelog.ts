@@ -16,7 +16,7 @@ export const appName = "Website packages";
 export const releases: readonly Release[] = [
   {
     version: "0.2",
-    date: "2026-11-18",
+    date: "2026-11-19",
     stage: "Beta",
     changes: [
       "A new layout: the total, the package and the HubSpot tier on the left, then Design and the site basics, the features in the estimate, and a shelf of everything that can be added, grouped by the package it needs.",
