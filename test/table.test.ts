@@ -467,17 +467,24 @@ describe("a draft", () => {
     expect(() => drafted({}, { "ai-feedback-each": "x" })).toThrow("Rule ai-feedback-each");
     expect(() => parseRules("rule,value\nnope,1\n")).toThrow("no rule called nope");
     /* A file from before a rule was added, such as the last commit's, reads as it priced then */
-    const before = parseRules("rule,value\npm-percent,15\n", addedRules);
-    expect(before["pm-none-design-percent"]).toBe("0");
-    expect(before["pm-percent"]).toBe("15");
-    /* but the files in use that lose a rule's row are refused, as with any missing rule */
     const lost = liveRulesText.replace(/^pm-none-design-percent,.*\n/m, "");
     expect(lost).not.toBe(liveRulesText);
-    expect(parseRules(lost)["pm-none-design-percent"]).toBe("");
+    const before = parseRules(lost, addedRules);
+    expect(before["pm-none-design-percent"]).toBe("0");
+    expect(before["pm-percent"]).toBe("15");
+    /* but the files in use that lose a rule's row are refused, whatever the rule */
+    expect(() => parseRules(lost)).toThrow("The rules have no row for pm-none-design-percent");
+    /* A package rule too: read as empty, it would let Custom design price as Essential */
+    const noPackage = liveRulesText.replace(/^custom-package,.*\n/m, "");
+    expect(noPackage).not.toBe(liveRulesText);
+    expect(() => parseRules(noPackage)).toThrow("The rules have no row for custom-package");
+    expect(() => parseRules(noPackage, addedRules)).toThrow("no row for custom-package");
+    /* A row left empty stays as it is: the catalog judges it */
+    const empty = liveRulesText.replace(/^pm-none-design-percent,.*$/m, "pm-none-design-percent,");
+    expect(parseRules(empty)["pm-none-design-percent"]).toBe("");
     expect(() =>
-      buildCatalog(parseTable(liveText), parseRules(lost), parseCodes(liveCodesText)),
+      buildCatalog(parseTable(liveText), parseRules(empty), parseCodes(liveCodesText)),
     ).toThrow("Rule pm-none-design-percent must be a whole number");
-    expect(parseRules("rule,value\npm-none-design-percent,\n")["pm-none-design-percent"]).toBe("");
   });
 
   test("a new row is a new item on the shelf: its hours, design hours and package work at once", () => {

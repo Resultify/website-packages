@@ -202,8 +202,10 @@ export type Rules = Record<RuleName, string>;
     rule here too. */
 export const addedRules: Partial<Rules> = { "pm-none-design-percent": "0" };
 
-/** The rules of a file. A rule it doesn't list is empty, which the catalog refuses, unless
-    `missing` gives it a value. */
+/** The rules of a file. Every rule must have its row, even one left empty: a lost row would read
+    as empty, and an empty package rule is a valid "any package", so Custom design would quietly
+    price as Essential. A rule the file doesn't list is refused, unless `missing` gives it a
+    value. */
 export function parseRules(text: string, missing: Partial<Rules> = {}): Rules {
   const rules = Object.fromEntries(ruleNames.map((name) => [name, ""])) as Rules;
   const listed = new Set<RuleName>();
@@ -213,8 +215,11 @@ export function parseRules(text: string, missing: Partial<Rules> = {}): Rules {
     rules[name] = value;
     listed.add(name);
   }
-  for (const [name, value] of Object.entries(missing) as [RuleName, string][]) {
-    if (!listed.has(name)) rules[name] = value;
+  for (const name of ruleNames) {
+    if (listed.has(name)) continue;
+    const value = missing[name];
+    if (value === undefined) throw new Error(`The rules have no row for ${name}`);
+    rules[name] = value;
   }
   return rules;
 }
