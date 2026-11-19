@@ -1,5 +1,6 @@
 /* The prices of the files in src/, the ones the estimator is built with: the starting estimate with
-   each design, the same with extra feedback rounds, variants and languages, and the price of every
+   each design, the same with extra feedback rounds, variants and languages, and with the most
+   there can be, and the price of every
    basic with a quantity or options and of everything the shelf offers, with its parts: each
    option, and each quantity, hours entered too, at what it starts at, at its most and on each side
    of where the package or tier it needs changes; and the website pages, the same way. The pricing
@@ -60,6 +61,28 @@ const withDesign = (id: string): Selection => setTile(selectionForShape("essenti
     change of its words is worth a look too. */
 function byDesign(price: (design: string) => string): string {
   return designChoices.map((choice) => `## ${choice.label}\n${price(choice.id)}`).join("\n\n");
+}
+
+/** Each design's starting estimate with its feedback rounds, AI variants and languages at a
+    quantity, given for the item that holds it. A quantity the estimate doesn't take fails the
+    test, so a lower limit never passes as the same price. */
+function withExtras(
+  feedback: (id: string) => number,
+  variants: (id: string) => number,
+  languages: number,
+): string {
+  return byDesign((design) => {
+    const choice = designChoices.find((item) => item.id === design);
+    const wanted: [string, number][] = [["languages", languages]];
+    if (choice?.feedbackId) wanted.push([choice.feedbackId, feedback(choice.feedbackId)]);
+    if (choice?.kind === "ai") wanted.push([design, variants(design)]);
+    let selection = withDesign(design);
+    for (const [id, qty] of wanted) {
+      selection = setQuantity(selection, id, qty);
+      if (selection.tiles[id] !== qty) throw new Error(`${choice?.label}: ${id} is not ${qty}`);
+    }
+    return hoursText(quote(selection));
+  });
 }
 
 /** One price in the list: its name, the item whose hours it reads (none for the website pages),
@@ -255,15 +278,18 @@ describe("the prices of the files in src/", () => {
 
   test("the starting estimate with 3 feedback rounds, 4 AI variants and 3 languages", () => {
     const text = withCatalog(live, () =>
-      byDesign((design) => {
-        const choice = designChoices.find((item) => item.id === design);
-        let selection = withDesign(design);
-        if (choice?.feedbackId) selection = setQuantity(selection, choice.feedbackId, 3);
-        if (choice?.kind === "ai") selection = setQuantity(selection, design, 4);
-        selection = setQuantity(selection, "languages", 3);
-        return hoursText(quote(selection));
-      }),
+      withExtras(
+        () => 3,
+        () => 4,
+        3,
+      ),
     );
+    expect(text).toMatchSnapshot();
+  });
+
+  test("the starting estimate with the most feedback rounds, AI variants and languages", () => {
+    const most = (id: string) => getTile(id).max;
+    const text = withCatalog(live, () => withExtras(most, most, most("languages")));
     expect(text).toMatchSnapshot();
   });
 
