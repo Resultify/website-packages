@@ -3,7 +3,7 @@
  * The package is the lowest tier that covers every selected option.
  * Design hours stay separate from build hours.
  * Website pages are not build hours. Past a number of them, the tier goes up.
- * Every number comes from the files in src/ (estimator.csv, rules.csv), through catalog.ts.
+ * Every number comes from the files in src/ (hours.csv, config.ts), through catalog.ts.
  * Build hours depend on the design choice: AI generated, Nimbly, Custom, or none.
  */
 
@@ -893,9 +893,9 @@ export function aiVariantCost(result: Quote): number {
      - the design, and its feedback rounds and AI variants
      - a number for each site basic that has one or options, in the order of linkedBasics. The
        others (header, footer, setup and launch, kick-off) are always in, once, and not in a link
-     - every other item that is in, by its code in link-codes.csv, with its number
+     - every other item that is in, by its code in config.linkCodes, with its number
    An item's number is its quantity, from the least it can be (0 for hours entered, 1 otherwise),
-   or for an option its number in link-codes.csv, so the table's rows can be reordered. Every
+   or for an option its number in config.linkCodes, so the table's rows can be reordered. Every
    number the link writes counts from 1, so the usual ones take one bit. */
 
 /** The site basics a link holds a number for, in this order. Fixed here, not by the table, so a

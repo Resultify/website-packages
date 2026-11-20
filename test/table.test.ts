@@ -1,6 +1,6 @@
-/* The files (src/estimator.csv, rules.csv, link-codes.csv), drafts of them, and the short link. No
+/* The catalog the files make (src/hours.csv, config.ts), drafts of them, and the short link. No
    browser needed. "The files" reads src/; the rest prices with the frozen copy in test/fixtures, so
-   a change made on the calculations page changes none of the numbers here. */
+   a change of the hours in src/ changes none of the numbers here. */
 import { describe, expect, test } from "bun:test";
 import {
   buildCatalog,
@@ -29,36 +29,43 @@ import {
   setTile,
   setWebsitePages,
 } from "../src/quote.ts";
+import { config } from "../src/config.ts";
 import {
-  applyCells,
-  type Cells,
   columns,
-  liveCodesText,
-  liveRulesText,
-  liveText,
-  parseCodes,
-  parseCsv,
-  parseOlderRules,
-  parseRules,
-  parseTable,
+  liveHoursText,
+  parseHours,
   type Row,
   type Rules,
-  serializeCodes,
-  serializeRules,
-  serializeTable,
+  rowsFrom,
+  rulesFrom,
   withCodes,
 } from "../src/table.ts";
 
-import { codes, rows, rules, useFixture } from "./fixture.ts";
+import { codes, fixtureConfig, rows, rules, useFixture } from "./fixture.ts";
 
 useFixture();
 
 /** The files in src/, as the app is built with them. */
 const live = {
-  rows: parseTable(liveText),
-  rules: parseRules(liveRulesText),
-  codes: parseCodes(liveCodesText),
+  rows: rowsFrom(parseHours(liveHoursText), config),
+  rules: rulesFrom(config),
+  codes: config.linkCodes,
 };
+
+/** Cells to change, by "id column", or "id·option column" on a row with an option:
+    { "sections build-ai": "6", "menu·Advanced option": "Mega" }. */
+type Cells = Record<string, string>;
+function applyCells(table: readonly Row[], cells: Cells): Row[] {
+  return table.map((item) => {
+    const key = item.option ? `${item.id}·${item.option}` : item.id;
+    const next = { ...item };
+    for (const column of columns) {
+      const value = cells[`${key} ${column}`];
+      if (value !== undefined) next[column] = value.trim();
+    }
+    return next;
+  });
+}
 const liveCatalog = () => buildCatalog(live.rows, live.rules, live.codes);
 /** The starting estimate: Nimbly design. */
 const essential = () => selectionForShape("essential");
@@ -91,19 +98,6 @@ const catalogueOptions = [
 ];
 
 describe("the files", () => {
-  test("are written exactly as they are read, so a change to one cell changes one line", () => {
-    expect(serializeTable(live.rows)).toBe(liveText);
-    expect(serializeRules(live.rules)).toBe(liveRulesText);
-    expect(serializeCodes(live.codes)).toBe(liveCodesText);
-  });
-
-  test("quoted cells keep their commas, quotes and line breaks", () => {
-    expect(parseCsv('a,"b, ""c""\nd",e\n\nf')).toEqual([["a", 'b, "c"\nd', "e"], ["f"]]);
-    const odd = rows.map((item) => ({ ...item }));
-    (odd[0] as Row).note = 'One, "two"\nthree';
-    expect(parseTable(serializeTable(odd))[0]?.note).toBe('One, "two"\nthree');
-  });
-
   test("every item has its own code, and every option its own number", () => {
     const { tiles } = liveCatalog();
     const numbers = tiles.map((tile) => tile.code);
@@ -168,8 +162,8 @@ describe("the files", () => {
 });
 
 describe("an item of the shelf, on its own", () => {
-  /* Every item and option live, those coming soon too: an item made live on the calculations page
-     must behave as the others do */
+  /* Every item and option live, those coming soon too: an item made live in config.ts must behave
+     as the others do */
   const everyLive = (table: readonly Row[]) =>
     table.map((item) => (item.status === "soon" ? { ...item, status: "" } : item));
   const catalogs = {
@@ -442,7 +436,7 @@ describe("a draft", () => {
     expect(() => drafted({}, { "languages-each": "6.5" })).toThrow(
       "Rule languages-each must be a whole number",
     );
-    /* link-codes.csv keeps an item's options apart with | */
+    /* An option's name has no | */
     expect(() => drafted({ "menu·Advanced option": "Advanced | Mega" })).toThrow(
       'an option name cannot have "|"',
     );
@@ -465,27 +459,16 @@ describe("a draft", () => {
       "Memberships: one option must be called SSO: by that name, it blocks Social sign-in",
     );
     expect(() => drafted({}, { "ai-feedback-each": "x" })).toThrow("Rule ai-feedback-each");
-    expect(() => parseRules("rule,value\nnope,1\n")).toThrow("no rule called nope");
-    /* A file from before a rule was added, such as the last commit's, reads as it priced then */
-    const lost = liveRulesText.replace(/^pm-none-design-percent,.*\n/m, "");
-    expect(lost).not.toBe(liveRulesText);
-    const before = parseOlderRules(lost);
-    expect(before["pm-none-design-percent"]).toBe("0");
-    expect(before["pm-percent"]).toBe(live.rules["pm-percent"]);
-    /* but the files in use that lose a rule's row are refused, whatever the rule */
-    expect(() => parseRules(lost)).toThrow("The rules have no row for pm-none-design-percent");
-    /* A package rule too: read as empty, it would let Custom design price as Essential. An older
-       commit, only compared with, reads it as empty, as it did */
-    const noPackage = liveRulesText.replace(/^custom-package,.*\n/m, "");
-    expect(noPackage).not.toBe(liveRulesText);
-    expect(() => parseRules(noPackage)).toThrow("The rules have no row for custom-package");
-    expect(parseOlderRules(noPackage)["custom-package"]).toBe("");
-    /* A row left empty stays as it is: the catalog judges it */
-    const empty = liveRulesText.replace(/^pm-none-design-percent,.*$/m, "pm-none-design-percent,");
-    expect(parseRules(empty)["pm-none-design-percent"]).toBe("");
-    expect(() =>
-      buildCatalog(parseTable(liveText), parseRules(empty), parseCodes(liveCodesText)),
-    ).toThrow("Rule pm-none-design-percent must be a whole number");
+    /* config.ts that loses a rule is refused, whatever the rule. A package rule too: read as empty,
+       a valid "any package", it would let Custom design price as Essential */
+    const { "custom-package": _lost, ...noPackage } = fixtureConfig.rules;
+    expect(() => rulesFrom({ rules: noPackage as typeof fixtureConfig.rules })).toThrow(
+      "config.ts has no rule custom-package",
+    );
+    /* A rule left empty is the catalog's to judge */
+    expect(() => drafted({}, { "pm-none-design-percent": "" })).toThrow(
+      "Rule pm-none-design-percent must be a whole number",
+    );
   });
 
   test("a new row is a new item on the shelf: its hours, design hours and package work at once", () => {

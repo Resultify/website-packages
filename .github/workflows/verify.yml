@@ -1,4 +1,4 @@
-# The full checks: types, unit tests, browser tests and a frozen build. Run by Checks on the release
+# The full checks: types, unit tests, browser tests and a build. Run by Checks on the release
 # PR once it is ready for review, and by Release before it publishes.
 name: Verify
 on:
@@ -31,4 +31,4 @@ jobs:
       - run: bun test
       # In the runner's own Google Chrome (channel: "chrome" in playwright.config.ts)
       - run: bun run e2e
-      - run: bun scripts/build.ts --frozen
+      - run: bun scripts/build.ts

@@ -1,0 +1,13 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`the calculations page's nine estimates 1`] = `
+"Starting estimate · AI: 66h (design 17, build 34, content 0, project 15) Essential
+Starting estimate · Nimbly: 79h (design 28, build 34, content 0, project 17) Essential
+Starting estimate · Custom: 137h (design 52, build 61, content 0, project 24) Growth
++ Blog and Search · AI: 76h (design 20, build 40, content 0, project 16) Essential
++ Blog and Search · Nimbly: 93h (design 34, build 40, content 0, project 19) Essential
++ Blog and Search · Custom: 165h (design 64, build 73, content 0, project 28) Growth
++ Products · AI: 102h (design 26, build 56, content 0, project 20) Platform
++ Products · Nimbly: 122h (design 44, build 56, content 0, project 22) Platform
++ Products · Custom: 220h (design 84, build 101, content 0, project 35) Platform"
+`;

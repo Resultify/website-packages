@@ -1,0 +1,52 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`src/ the link codes: a code that moves shows here 1`] = `
+"1 blog-setups
+2 blog-list: Simple | Advanced
+3 blog-list-count
+4 blog-post: Simple | Advanced
+5 blog-post-count
+6 blog-recent
+7 blog-recent-count
+8 custom-forms
+9 search: Simple | Advanced
+10 landing-templates
+11 content-hours
+12 migrate-posts
+13 migrate-pages
+14 system
+15 external-forms: HubDB | External API
+16 hubdb
+17 crm-section
+18 crm-custom-section
+19 cookie-banner
+20 product-catalogue: Module based | Dynamic pages: Simple | Dynamic pages: Filtered | Dynamic pages: Multi-level | Custom
+21 catalogue-custom
+22 catalogue-crm: Module based | Dynamic pages: Simple | Dynamic pages: Filtered | Dynamic pages: Multi-level | Custom
+23 catalogue-objects: Module based | Dynamic pages: Simple | Dynamic pages: Filtered | Dynamic pages: Multi-level | Custom
+24 favorite-products
+25 related-products
+26 custom-integration
+27 custom-integration-design
+28 membership: Invitation | Self-registration | SSO
+29 membership-groups
+30 membership-social
+31 membership-area
+32 membership-area-design
+33 ai-design
+34 ai-feedback
+35 nimbly-design
+36 nimbly-feedback
+37 custom-design
+38 custom-feedback
+39 no-design
+40 languages
+41 templates
+42 sections
+43 menu: Simple | Advanced
+44 header
+45 footer
+46 setup
+47 kickoff
+48 training"
+`;

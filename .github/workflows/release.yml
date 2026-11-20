@@ -95,7 +95,7 @@ jobs:
         with:
           bun-version: 1.4.5
       - run: bun install --frozen-lockfile
-      - run: bun scripts/build.ts --frozen
+      - run: bun scripts/build.ts
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:

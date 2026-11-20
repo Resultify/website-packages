@@ -1,0 +1,3 @@
+# The hours are checked in the app's layout, LF line ends included, on every system
+src/hours.csv text eol=lf
+test/fixtures/hours.csv text eol=lf
