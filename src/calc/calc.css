@@ -1,13 +1,633 @@
-/* The calculations page, while it is rebuilt: one line on the app's ground. Colours come from the
-   tokens in the :root of ../styles.css. */
+/* The calculations page: hours.csv as a sheet on the left, the estimates it makes on the right. It
+   takes its colours, type sizes and radii from the tokens in the :root of ../styles.css, so it reads
+   as the same product: cream page, white cards, ink-blue for what is chosen, orange for design. Its
+   own: an edited value is on the tick's yellow, more hours are the remove red and fewer the content
+   teal. */
 
 body.calc {
+  --soft: var(--basics-row);
+  --edited: var(--tick);
+  --more: var(--remove);
+  --fewer: var(--content);
+  --moved: color-mix(in srgb, var(--tick) 10%, var(--bg));
+  --pop: var(--ink);
+  --pop-ink: var(--basics);
   background: var(--basics);
 }
-.c-rebuilt {
-  margin: 48px auto;
-  padding: 0 16px;
-  max-width: 640px;
-  color: var(--ink);
+
+.c-page {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+}
+
+/* ---------- The head ---------- */
+
+.c-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px 20px;
+}
+.c-title h1 {
+  margin: 0 0 4px;
+  font: 400 40px / 1.05 var(--serif);
+}
+.c-title p {
+  color: var(--muted);
   font-size: var(--fs-name);
+}
+.c-title a {
+  color: var(--chosen);
+}
+.c-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+.c-btn {
+  padding: 7px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-ctl);
+  background: var(--bg);
+  font-size: var(--fs-action);
+  font-weight: 650;
+  white-space: nowrap;
+}
+.c-btn:hover:not(:disabled) {
+  border-color: var(--chosen);
+}
+.c-btn:disabled {
+  opacity: 0.45;
+}
+.c-btn.is-main {
+  border-color: transparent;
+  background: var(--chosen);
+  color: var(--on-chosen);
+}
+.c-btn.is-main:hover:not(:disabled) {
+  background: var(--chosen-hover);
+}
+
+.c-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  min-height: 24px;
+  margin: 12px 0;
+  color: var(--muted);
+  font-size: var(--fs-sub);
+}
+.c-chip {
+  margin-right: 2px;
+  padding: 1px 7px;
+  border-radius: var(--r-ctl);
+  background: var(--edited);
+  color: var(--ink);
+  font-size: var(--fs-note);
+  font-weight: 700;
+}
+.c-link {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.c-said {
+  color: var(--chosen);
+  font-weight: 650;
+}
+.c-problem {
+  color: var(--remove);
+  font-weight: 600;
+}
+
+/* Only on this machine: paste a shared link */
+.c-local {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  margin-bottom: 16px;
+  padding: 8px 12px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-page);
+  color: var(--muted);
+  font-size: var(--fs-sub);
+}
+.c-local b {
+  color: var(--ink);
+}
+.c-text {
+  flex: 1;
+  min-width: 200px;
+  padding: 6px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-ctl);
+  background: var(--bg);
+}
+
+/* ---------- The sheet and the estimates, side by side ---------- */
+
+.c-layout {
+  display: grid;
+  grid-template-columns: auto minmax(460px, 1fr);
+  align-items: start;
+  gap: 16px;
+}
+.c-card {
+  border-radius: var(--r-page);
+  background: var(--bg);
+  box-shadow: var(--shadow-card);
+}
+
+/* ---------- The sheet ---------- */
+
+.c-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: var(--fs-sub);
+}
+/* The two header rows stay in view while the window scrolls */
+.c-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+.c-table thead th {
+  padding: 8px 6px;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-align: right;
+  text-transform: uppercase;
+  vertical-align: bottom;
+}
+.c-table thead tr:first-child th {
+  padding-bottom: 3px;
+}
+.c-table thead tr:first-child th:first-child {
+  border-top-left-radius: var(--r-page);
+}
+.c-table thead tr:first-child th:last-child {
+  border-top-right-radius: var(--r-page);
+}
+.c-table thead tr:last-child th,
+.c-table thead th[rowspan] {
+  border-bottom: 1px solid var(--line-strong);
+}
+.c-table thead th.c-item {
+  padding-left: 16px;
+  text-align: left;
+}
+.c-table thead th.c-design {
+  border-bottom: 2px solid var(--ink);
+  border-left: 1px solid var(--line);
+  text-align: center;
+}
+.c-table thead th.c-pack {
+  padding-left: 12px;
+  text-align: left;
+}
+.c-table th.is-design,
+.c-table td.is-design,
+.c-table .c-pack,
+.c-table .c-entered {
+  border-left: 1px solid var(--line);
+}
+.c-table thead th.is-design {
+  color: var(--design);
+}
+
+.c-table tbody th,
+.c-table tbody td {
+  border-bottom: 1px solid var(--line);
+}
+.c-table tbody tr.is-head > *,
+.c-table tbody tr.is-group > * {
+  border-bottom: 0;
+}
+.c-sec th {
+  padding: 7px 16px;
+  background: var(--soft);
+  color: var(--chosen);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+/* The item column is narrow: the estimates take the rest of the width */
+.c-table tbody th.c-item {
+  width: 150px;
+  min-width: 150px;
+  max-width: 150px;
+  padding: 6px 6px 6px 16px;
+  font-weight: 650;
+  line-height: 1.25;
+  text-align: left;
+  vertical-align: middle;
+}
+.c-table tbody th.c-opt {
+  padding-left: 30px;
+  font-weight: 500;
+}
+.c-table tbody tr.in-group th.c-opt {
+  padding-left: 42px;
+}
+.c-table tbody tr.is-group th {
+  padding-top: 4px;
+  padding-bottom: 0;
+  color: var(--muted);
+  font-size: var(--fs-caption);
+  font-weight: 600;
+}
+.c-item small {
+  display: block;
+  color: var(--faint);
+  font-size: var(--fs-caption);
+  font-weight: 600;
+}
+.c-help {
+  text-decoration: underline dotted var(--faint);
+  text-underline-offset: 3px;
+  cursor: help;
+}
+.c-help:focus-visible {
+  border-radius: var(--r-inner);
+}
+
+.c-h {
+  padding: 5px 6px;
+  text-align: right;
+}
+.c-cell {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.c-in {
+  width: var(--hw);
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-ctl);
+  background: var(--soft);
+  font-size: var(--fs-sub);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.c-in.is-design {
+  color: var(--design);
+}
+.c-in:focus {
+  background: var(--bg);
+}
+.c-in.is-edited {
+  border-color: var(--edited);
+  background: var(--edited);
+  color: var(--ink);
+  font-weight: 700;
+}
+/* Edited on other hours than hours.csv has now */
+.is-other {
+  outline: 2px dashed var(--remove);
+  outline-offset: 1px;
+}
+.c-in.is-wrong {
+  border-color: var(--remove);
+  background: var(--bg);
+  box-shadow: 0 0 0 1px var(--remove);
+}
+.c-none {
+  display: inline-block;
+  width: var(--hw);
+  color: var(--control-off);
+  text-align: center;
+}
+.c-entered {
+  color: var(--faint);
+  font-size: var(--fs-note);
+  font-style: italic;
+  text-align: center;
+}
+
+/* ↺ on an edited value: the file's value, struck through */
+.c-undo {
+  position: absolute;
+  top: -9px;
+  right: -10px;
+  z-index: 1;
+  padding: 3px 5px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--bg);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--ink) 14%, transparent);
+  color: var(--ink);
+  font: 600 10.5px / 1 var(--font);
+  white-space: nowrap;
+}
+.c-undo s {
+  color: var(--muted);
+}
+.c-undo:hover {
+  border-color: var(--chosen);
+}
+/* The package's sits over the start of its pill, clear of "from" */
+.c-pack .c-undo {
+  top: -13px;
+  right: auto;
+  left: 2px;
+}
+
+td.c-pack {
+  padding: 5px 16px 5px 12px;
+  white-space: nowrap;
+}
+.c-pick {
+  height: 26px;
+  padding: 0 22px 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  appearance: none;
+  background-color: var(--bg);
+  /* A small caret, drawn with two halves of a square */
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--faint) 50%),
+    linear-gradient(135deg, var(--faint) 50%, transparent 50%);
+  background-position:
+    right 12px center,
+    right 8px center;
+  background-size: 4px 4px;
+  background-repeat: no-repeat;
+  color: var(--faint);
+  font: 600 var(--fs-note) / 1 var(--font);
+  cursor: pointer;
+}
+.c-pick.is-growth {
+  border-color: transparent;
+  background-color: var(--package-card);
+  color: var(--chosen);
+}
+.c-pick.is-platform {
+  border-color: transparent;
+  background-color: color-mix(in srgb, var(--rule) 12%, var(--bg));
+  color: var(--rule);
+}
+.c-pick.is-edited {
+  border-color: var(--edited);
+  background-color: var(--edited);
+  color: var(--ink);
+}
+.c-from {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  color: var(--muted);
+  font-size: var(--fs-caption);
+}
+.c-from-in {
+  width: 38px;
+  height: 24px;
+  font-size: var(--fs-note);
+}
+
+/* ---------- The estimates: Old over New for each ---------- */
+
+.c-estimates {
+  position: sticky;
+  top: 16px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  padding: 16px 16px 18px;
+}
+.c-estimates h2 {
+  color: var(--muted);
+  font-size: var(--fs-note);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.c-key {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  margin: 4px 0 10px;
+  color: var(--muted);
+  font-size: var(--fs-note);
+}
+.c-key .k-old {
+  color: var(--faint);
+}
+.c-key .k-new {
+  color: var(--ink);
+}
+.c-key .k-chg {
+  padding: 0 5px;
+  border-radius: var(--r-inner);
+  background: var(--edited);
+  color: var(--ink);
+  font-weight: 700;
+}
+.is-up {
+  color: var(--more);
+}
+.is-down {
+  color: var(--fewer);
+}
+
+.c-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px 8px;
+}
+.c-est-col {
+  padding-left: 4px;
+  color: var(--muted);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+}
+.c-est-row {
+  grid-column: 1 / -1;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: var(--fs-tag);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.c-est {
+  min-width: 0;
+  padding: 8px 8px 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-page);
+}
+.c-est.is-moved {
+  background: var(--moved);
+}
+.c-est-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2px 6px;
+  min-height: 20px;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: var(--fs-shelf-small);
+}
+.c-est-name {
+  display: none;
+}
+.c-sum {
+  font-size: var(--fs-tot);
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.c-sum small {
+  font-size: var(--fs-shelf-small);
+  font-weight: 700;
+}
+.c-sum.is-same {
+  color: var(--faint);
+  font-size: var(--fs-note);
+  font-weight: 600;
+}
+.c-pk {
+  white-space: nowrap;
+}
+.c-pk s {
+  color: var(--faint);
+}
+.c-chg {
+  padding: 0 5px;
+  border-radius: var(--r-inner);
+  background: var(--edited);
+  color: var(--ink);
+}
+
+.c-vs {
+  width: calc(100% + 6px);
+  margin: 0 -3px;
+  border-collapse: separate;
+  border-spacing: 3px 2px;
+  font-variant-numeric: tabular-nums;
+}
+.c-vs th {
+  padding: 1px 0;
+  color: var(--faint);
+  font-size: var(--fs-tag);
+  font-weight: 700;
+  text-align: left;
+}
+.c-vs thead th {
+  padding: 0 3px 2px;
+  font-weight: 600;
+  text-align: right;
+}
+.c-vs td {
+  padding: 2px 3px;
+  font-size: var(--fs-sub);
+  text-align: right;
+}
+.c-vs .is-old td {
+  color: var(--faint);
+}
+.c-vs .is-old td.k-total {
+  font-size: var(--fs-hours);
+}
+.c-vs .is-new th {
+  color: var(--ink);
+}
+.c-vs .is-new td {
+  font-weight: 750;
+}
+.c-vs .is-new td.k-total {
+  font-size: var(--fs-package);
+}
+.c-vs td.is-chg {
+  border-radius: var(--r-inner);
+  background: var(--edited);
+  color: var(--ink);
+}
+.c-vs .is-dif td {
+  padding-top: 1px;
+  font-size: var(--fs-caption);
+  font-weight: 700;
+}
+
+/* ---------- Help: a popup by a name or a cell ---------- */
+
+.c-tip {
+  position: fixed;
+  z-index: 20;
+  max-width: 320px;
+  padding: 10px 12px;
+  border-radius: var(--r-page);
+  background: var(--pop);
+  box-shadow: var(--shadow-pop);
+  color: var(--pop-ink);
+  font-size: var(--fs-control);
+  line-height: 1.4;
+}
+.c-tip code {
+  padding: 0 3px;
+  border-radius: var(--r-inner);
+  background: color-mix(in srgb, var(--pop-ink) 18%, var(--pop));
+  font:
+    11px ui-monospace,
+    "SF Mono",
+    Menlo,
+    monospace;
+}
+.c-tip-more {
+  margin-top: 6px;
+  font-size: var(--fs-shelf-small);
+  opacity: 0.8;
+}
+
+/* ---------- Narrower windows ---------- */
+
+/* The estimates go under the sheet */
+@media (max-width: 1100px) {
+  .c-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .c-sheet {
+    justify-self: start;
+    max-width: 100%;
+  }
+  .c-estimates {
+    position: static;
+    max-height: none;
+  }
+}
+
+/* The sheet scrolls sideways in its card, and the estimates take one column */
+@media (max-width: 720px) {
+  .c-sheet {
+    justify-self: stretch;
+    overflow-x: auto;
+  }
+  .c-table thead {
+    position: static;
+  }
+  .c-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .c-est-col {
+    display: none;
+  }
+  .c-est-name {
+    display: inline;
+    color: var(--ink);
+    font-weight: 700;
+  }
 }
