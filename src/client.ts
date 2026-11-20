@@ -1,7 +1,7 @@
 /* The client: draws the page on every change, moves items between the columns, and runs the page's own
    actions: Copy hours, Share link, and Reset with ten seconds to undo. */
-/* First: a preview puts the calculations page's files in use before anything reads them */
-import "./preview.ts";
+/* First: the browser tests' files (/?files) are put in use before anything reads them */
+import "./test-files.ts";
 import { getTile, isPart } from "./catalog.ts";
 import { bindActions, commit, hoursText, setRedraw, store, syncOrder } from "./controls.ts";
 import { fitHeads, type PageState, render } from "./estimator.ts";
@@ -158,7 +158,7 @@ const state: PageState = {
   },
   copyHours,
   hoursReady,
-  /* The estimate, without ?preview: a link holds the estimate, not the files it is priced with */
+  /* The estimate, without ?files: a link holds the estimate, not the files it is priced with */
   shareLink: () =>
     copyAction("share", `${location.origin}${location.pathname}${location.hash}`, "Link copied"),
   reset,

@@ -1,14 +1,10 @@
-/* Builds the estimator into docs/. With --frozen, as the Release workflow runs it, it builds only
-   what is committed: an item without a link code stops it instead of being given one. */
+/* Builds the estimator into docs/, once src/hours.csv and src/config.ts are files the app can read
+   and every item has its link code in config.ts. */
 import { rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseArgs } from "node:util";
-import { checkFiles } from "../src/calc/api.ts";
-import { parseCodes } from "../src/table.ts";
+import { config } from "../src/config.ts";
 import csvText from "./csv-text.ts";
-
-const { values: flags } = parseArgs({ options: { frozen: { type: "boolean", default: false } } });
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const outdir = join(root, "docs");
@@ -30,37 +26,37 @@ try {
   process.exit(1);
 }
 
-/* The files must be ones the app can read. An item added since the last build gets its link code,
-   written into src/link-codes.csv so it is committed with the build and never given to another */
-const codes = await read("src/link-codes.csv");
-const checked = checkFiles(
-  { table: await read("src/estimator.csv"), rules: await read("src/rules.csv") },
-  codes,
-);
-if ("error" in checked) {
-  console.error(`src/: ${checked.error}`);
-  process.exit(1);
-}
-if (checked.codes !== codes) {
-  const known = new Set(parseCodes(codes).map((entry) => entry.id));
-  const given = parseCodes(checked.codes)
-    .filter((entry) => !known.has(entry.id))
-    .map((entry) => `${entry.id} ${entry.code}`);
-  if (flags.frozen) {
-    console.error(`src/link-codes.csv has no code for: ${given.join(", ")}`);
-    console.error("Run bun run build and commit src/link-codes.csv.");
-    process.exit(1);
+/* The files must be ones the app can read, and config.linkCodes must hold every code the catalog
+   gives: one it had to make up would be given again to the next new item, and a link sent before
+   would open that one. The catalog also gives codes to lines it makes (<id>-design, blog-*-count),
+   so this finds those too */
+try {
+  /* catalog.ts builds its catalog from src/hours.csv as it loads, and throws there when the app
+     cannot read it: imported here, so the build can say so */
+  const { buildCatalogFrom } = await import("../src/catalog.ts");
+  const catalog = buildCatalogFrom(await read("src/hours.csv"), config);
+  if (!Bun.deepEquals(catalog.codes, config.linkCodes)) {
+    const known = new Map(config.linkCodes.map((entry) => [entry.id, entry.options]));
+    const missing = catalog.codes.flatMap((entry) => {
+      const options = known.get(entry.id);
+      if (!options) return [entry.id];
+      return entry.options
+        .filter((option) => !options.includes(option))
+        .map((option) => `${entry.id} · ${option}`);
+    });
+    throw new Error(
+      `config.linkCodes has no code for ${missing.join(", ")}: give a new item the next code after the highest, and a new option the end of its item's list`,
+    );
   }
-  await Bun.write(join(root, "src/link-codes.csv"), checked.codes);
-  console.log(
-    `Gave link codes in src/link-codes.csv${given.length ? `: ${given.join(", ")}` : ""}`,
-  );
+} catch (error) {
+  console.error(`src/: ${error instanceof Error ? error.message : error}`);
+  process.exit(1);
 }
 
 await rm(outdir, { recursive: true, force: true });
 
 const result = await Bun.build({
-  /* The estimator only: the calculations page is for the dev server (src/server.ts) */
+  /* The estimator only, for now: the calculations page is being rebuilt */
   entrypoints: [join(root, "src/index.html")],
   outdir,
   target: "browser",

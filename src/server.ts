@@ -1,13 +1,9 @@
-/* The dev server: the estimator, and the calculations page, which edits src/estimator.csv on this
-   machine. The built site (bun run build) has the estimator only. */
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { tableRoute } from "./calc/api.ts";
+/* The dev server: the estimator and the calculations page. The built site (bun run build) has the
+   estimator only until the new calculations page is built with it. */
 import calc from "./calc/index.html";
 import homepage from "./index.html";
 
 const port = Number(Bun.env.PORT ?? 4173);
-const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 Bun.serve({
   port,
@@ -15,7 +11,6 @@ Bun.serve({
     "/": homepage,
     "/calc/": calc,
     "/calc": Response.redirect("/calc/"),
-    "/calc/api/table": tableRoute(root),
   },
   development: true,
 });

@@ -1,10 +1,11 @@
 /**
  * The catalog: what the estimator offers, read from the files in src/ (see table.ts):
- * estimator.csv for the items, rules.csv for design rounds, languages and pages, and
- * link-codes.csv for each item's number in a link.
+ * hours.csv for each item's hours and the package it needs, and config.ts for the rest: where
+ * items are shown, the rules for design rounds, languages and pages, and each item's number in a
+ * link (config.linkCodes).
  *
- * Change the files, or use the calculations page (/calc/) on the dev server. What is here is how
- * they are read, and the words and lists that are not calculations.
+ * Change the files; the calculations page (/calc/) tries hours.csv's hours out. What is here is
+ * how they are read, and the words and lists that are not calculations.
  *
  * Essential, Growth, and Platform are project packages. The active package is
  * the lowest tier that covers every selected option. It is not a choice.
@@ -15,22 +16,22 @@
  * separate from build hours. Build hours depend on the design choice.
  */
 
+import { config } from "./config.ts";
 import {
   buildKind,
+  type Config,
   type Choice,
   type CodeEntry,
   type Column,
   type DesignKind,
   designKinds,
-  liveCodesText,
-  liveRulesText,
-  liveText,
-  parseCodes,
-  parseRules,
-  parseTable,
+  liveHoursText,
+  parseHours,
   type Row,
   type RuleName,
   type Rules,
+  rowsFrom,
+  rulesFrom,
   withCodes,
 } from "./table.ts";
 
@@ -525,7 +526,8 @@ export type Catalog = {
   /** With no design, project management also counts this share of the design hours Custom would
       have, in percent: the client's design is still checked, handed over and built from. */
   clientDesignPercent: number;
-  /** The link codes with every item of the table in them: what Save and the build write. */
+  /** The link codes with every item of the table in them: the build and the tests check that
+      config.linkCodes holds them all. */
   codes: readonly CodeEntry[];
 };
 
@@ -1045,9 +1047,7 @@ function modeTile(rows: readonly Row[], entry: CodeEntry, rules: PackageRule[]):
   for (const row of rows) {
     if (!row.option) fail(row, "every row of an item with options needs an option");
     if (names.has(row.option)) fail(row, "two rows of the item have this option");
-    if (row.option.includes("|")) {
-      fail(row, 'an option name cannot have "|": link-codes.csv keeps the options apart with it');
-    }
+    if (row.option.includes("|")) fail(row, 'an option name cannot have "|"');
     names.add(row.option);
     if (!["", "soon", "hidden"].includes(row.status)) {
       fail(row, `status must be empty (live), soon or hidden. It is "${row.status}"`);
@@ -1456,14 +1456,16 @@ export function buildCatalog(
   };
 }
 
-/* The catalog in use. The page is built from the files it was shipped with; the calculations page
-   also reads drafts of them, and puts one in use for as long as it takes to price an estimate. */
+/** The catalog of hours.csv's text and a config. */
+export function buildCatalogFrom(hoursText: string, from: Config): Catalog {
+  return buildCatalog(rowsFrom(parseHours(hoursText), from), rulesFrom(from), from.linkCodes);
+}
 
-let active: Catalog = buildCatalog(
-  parseTable(liveText),
-  parseRules(liveRulesText),
-  parseCodes(liveCodesText),
-);
+/* The catalog in use. The page is built from the files it was shipped with; the calculations page
+   also prices its edits of hours.csv, and puts them in use for as long as it takes to price an
+   estimate. */
+
+let active: Catalog = buildCatalogFrom(liveHoursText, config);
 
 export let tiles: readonly Tile[] = active.tiles;
 export let packageRules: readonly PackageRule[] = active.packageRules;

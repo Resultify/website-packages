@@ -8,7 +8,7 @@
  *   3. two bits: the design, by its place in the app's list of designs
  *   4. the fixed numbers, as many as the design and the site basics take, in the app's order: the
  *      design's feedback rounds and variants, then each basic that has a number or options
- *   5. which items are in, by their code in link-codes.csv, in the shorter of two layouts, and one
+ *   5. which items are in, by their code in config.linkCodes, in the shorter of two layouts, and one
  *      bit that says which:
  *        0  how many codes the next bits cover, then a bit for each code from 1: on when it is in.
  *           Short while the codes in the estimate are low

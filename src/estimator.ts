@@ -53,7 +53,6 @@ import {
 import { appName, currentRelease, releaseDay, releases } from "./changelog.ts";
 import { h, type Kid } from "./dom.ts";
 import { type IconName, icon, logo, sprocket } from "./icons.ts";
-import { inPreview } from "./preview.ts";
 import {
   aiDesignHours,
   aiVariantCost,
@@ -1515,8 +1514,7 @@ function side(result: Quote, state: PageState): HTMLElement {
           state.hoursReady("open the breakdown"),
         ),
       ),
-      /* A preview's prices are not saved anywhere: nothing to share */
-      actButton(state, "share", "share", "Share link", "Share", "", state.shareLink, inPreview),
+      actButton(state, "share", "share", "Share link", "Share", "", state.shareLink),
       popAction(
         "included",
         "Always included",

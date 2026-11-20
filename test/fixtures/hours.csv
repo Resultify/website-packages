@@ -1,0 +1,55 @@
+id,item,option,help,ai-design,ai-build,nimbly-design,nimbly-build,custom-design,custom-build,package
+templates,Page templates,,{build}h each to build,1,2,2,2,2,2,growth from 5
+sections,Sections,,"Hero, cards, quote, FAQ and more. {build}h each",1,5,3,4,3,4,growth from 11
+menu,Menu,Simple,"One level, touch-friendly on mobile",1,3,2,3,2,3,
+menu,Menu,Advanced,"Multi-level mega menu, touch-friendly on mobile",1,12,8,12,8,12,growth
+header,Global header,,"Logo, navigation and buttons",1,3,2,3,2,3,
+footer,Global footer,,"Links, contact and legal",1,4,3,4,3,4,
+setup,Setup and launch,,"Deploy, go-live checks, handover, DNS",4,12,4,12,4,12,
+kickoff,Kick-off meeting,,"Starts the project with the client: goals, scope and plan",,3,,3,,3,
+training,Training,,"Training for the client's editors, {build}h a session",,2,,2,,2,
+landing-templates,Landing templates,,{build}h each to build,1,3,2,3,2,3,growth from 3
+search,Search,Simple,Search field and results page,1,4,3,4,3,4,
+search,Search,Advanced,"Dialog with favorites, suggestions, results page",1,10,6,10,6,10,growth
+custom-forms,Custom forms,,"HubSpot form with custom styling, faster loading",1,5,4,5,4,5,growth
+cookie-banner,Custom cookie banner,,"A cookie banner built to the site's design, instead of HubSpot's",4,6,4,6,4,6,
+system,Custom system templates,,Custom error and subscription pages,1,6,5,6,5,6,
+hubdb,HubDB section,,"Library, directory, filterable list",1,10,3,10,3,10,growth
+custom-integration,Custom integration,,"A connection to another system, with its build and design hours entered",,,,,,,
+external-forms,Forms with external data,HubDB,"A custom form filled from HubDB, or from an external API through a serverless function.",0,12,0,12,0,12,
+external-forms,Forms with external data,External API,,0,18,0,18,0,18,
+crm-section,CRM Object section,,,0,0,0,0,0,0,
+crm-custom-section,Custom Object section,,,0,0,0,0,0,0,
+content-hours,Content,,Estimate for content work,,,,,,,
+migrate-pages,Page migration,,Moving the old site's pages,,,,,,,
+migrate-posts,Blog import,,Importing the old blog's posts,,,,,,,
+blog-setups,Blogs,,With list and post templates,0,0,0,0,0,0,growth from 2
+blog-list,List template,Simple,List with pagination,2,4,4,4,4,4,
+blog-list,List template,Advanced,"Grid, favorites, filters, paging",2,8,6,8,6,8,growth
+blog-post,Post template,Simple,Standard post template,2,4,4,4,4,4,
+blog-post,Post template,Advanced,"Related posts, advanced features",2,8,6,8,6,8,growth
+blog-recent,Recent blog posts,,Lists the latest posts,1,4,3,4,3,4,
+product-catalogue,HubDB,Module based,"One product with sub-levels, no listing page",6,22,16,22,16,22,platform
+product-catalogue,HubDB,Dynamic pages: Simple,"Listing page, pagination, product detail pages",4,18,10,18,10,18,platform
+product-catalogue,HubDB,Dynamic pages: Filtered,"Simple, plus filters and sorting",6,28,18,28,18,28,platform
+product-catalogue,HubDB,Dynamic pages: Multi-level,"Filtered, plus SEO category pages, breadcrumbs",10,40,28,40,28,40,platform
+product-catalogue,HubDB,Custom,Hours entered by hand,,,,,,,platform
+catalogue-custom,Custom catalogue,,,,,,,,,
+catalogue-crm,CRM Object,Module based,"One product with sub-levels, no listing page",6,22,16,22,16,22,platform
+catalogue-crm,CRM Object,Dynamic pages: Simple,"Listing page, pagination, product detail pages",4,18,10,18,10,18,platform
+catalogue-crm,CRM Object,Dynamic pages: Filtered,"Simple, plus filters and sorting",6,28,18,28,18,28,platform
+catalogue-crm,CRM Object,Dynamic pages: Multi-level,"Filtered, plus SEO category pages, breadcrumbs",10,40,28,40,28,40,platform
+catalogue-crm,CRM Object,Custom,Hours entered by hand,,,,,,,platform
+catalogue-objects,Custom Object,Module based,"One product with sub-levels, no listing page",6,22,16,22,16,22,platform
+catalogue-objects,Custom Object,Dynamic pages: Simple,"Listing page, pagination, product detail pages",4,18,10,18,10,18,platform
+catalogue-objects,Custom Object,Dynamic pages: Filtered,"Simple, plus filters and sorting",6,28,18,28,18,28,platform
+catalogue-objects,Custom Object,Dynamic pages: Multi-level,"Filtered, plus SEO category pages, breadcrumbs",10,40,28,40,28,40,platform
+catalogue-objects,Custom Object,Custom,Hours entered by hand,,,,,,,platform
+favorite-products,Favorite products,,Section on a static page,1,6,3,6,3,6,platform
+related-products,Related products,,On the product detail page,1,6,3,6,3,6,platform
+membership,Memberships,Invitation,"Members are invited by email and set a password. The theme's sign-in, password and access pages, and the emails in the site's style",1,8,2,8,2,8,
+membership,Memberships,Self-registration,"Visitors sign up themselves and confirm their email. Invitation's pages, plus sign-up, verification and consent",1,12,3,12,3,12,
+membership,Memberships,SSO,"Members sign in with the client's identity provider (SAML or OpenID Connect), set up with their IT. It runs the sign-in pages and emails",0,16,0,16,0,16,
+membership-groups,Access groups,,"Who sees what: a list or filter, the content it opens, a test as a member. {build}h each",0,2,0,2,0,2,
+membership-social,Social sign-in,,Google or Microsoft on the sign-in page. The client gives the app keys,1,4,1,4,1,4,
+membership-area,Member area,,"Pages with the member's own CRM data, such as their company, deals or tickets",,,,,,,

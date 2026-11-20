@@ -13,6 +13,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   buildCatalog,
+  buildCatalogFrom,
   catalogueId,
   designChoices,
   getTile,
@@ -37,22 +38,12 @@ import {
   setWebsitePages,
   sourceIn,
 } from "../src/quote.ts";
-import {
-  liveCodesText,
-  liveRulesText,
-  liveText,
-  parseCodes,
-  parseRules,
-  parseTable,
-  type Row,
-} from "../src/table.ts";
+import { config } from "../src/config.ts";
+import { liveHoursText, parseHours, type Row, rowsFrom, rulesFrom } from "../src/table.ts";
 
 /* Left as is, though table.test.ts reads the same files: it keeps the rows and rules apart too */
-const live = buildCatalog(
-  parseTable(liveText),
-  parseRules(liveRulesText),
-  parseCodes(liveCodesText),
-);
+const live = buildCatalogFrom(liveHoursText, config);
+const liveRows = rowsFrom(parseHours(liveHoursText), config);
 
 /** The starting estimate with a design. */
 const withDesign = (id: string): Selection => setTile(selectionForShape("essential"), id, true);
@@ -241,11 +232,7 @@ function itemHours(selection: Selection, id: string): string {
 
 /** The files in src/ with their rows changed, as the calculations page may change them. */
 const edited = (change: (row: Row) => Row) =>
-  buildCatalog(
-    parseTable(liveText).map(change),
-    parseRules(liveRulesText),
-    parseCodes(liveCodesText),
-  );
+  buildCatalog(liveRows.map(change), rulesFrom(config), config.linkCodes);
 
 describe("the price list", () => {
   test("is made from any table the calculations page can save", () => {

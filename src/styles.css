@@ -2033,42 +2033,6 @@ ul {
   font-weight: 720;
 }
 
-/* ---------- Preview of the calculations page's unsaved files ---------- */
-
-/* The bar takes the top of the window, and the page the rest */
-body.is-preview {
-  display: flex;
-  flex-direction: column;
-}
-body.is-preview #app {
-  flex: 1;
-  min-height: 0;
-  height: auto;
-}
-.preview-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: 4px 16px;
-  padding: 7px 16px;
-  background: var(--tick);
-  color: var(--ink);
-  font-size: var(--fs-action);
-}
-.preview-bar b {
-  margin-right: 6px;
-}
-.preview-bar a {
-  color: inherit;
-  font-weight: 650;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-.preview-bar.is-off {
-  background: var(--control);
-}
-
 /* ---------- Undo for Reset ---------- */
 
 .toast {

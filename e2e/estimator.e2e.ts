@@ -3,7 +3,7 @@
 import { expect, type Page, test } from "@playwright/test";
 import { appName, currentRelease, releases } from "../src/changelog.ts";
 import {
-  buildCatalog,
+  buildCatalogFrom,
   clientDesignPercent,
   designChoices,
   getTile,
@@ -33,8 +33,8 @@ import {
   sourceIn,
   stepHours,
 } from "../src/quote.ts";
-import { parseTable, serializeTable } from "../src/table.ts";
-import { codes, fixtureCatalog, fixtureText, rows, rules } from "../test/fixture.ts";
+import type { Config, RowConfig } from "../src/table.ts";
+import { fixtureCatalog, fixtureConfig, fixtureHoursText } from "../test/fixture.ts";
 
 /* The example: Search, Custom forms and Blog in, AI design, Growth on Content Hub Starter */
 const EXAMPLE = "#SFMRoK0fw";
@@ -58,14 +58,19 @@ async function addFromShelf(page: Page, id: string) {
   await expect(page.locator(`.feat[data-key="${id}"]`)).toBeVisible();
   await settle(page);
 }
-/** The page with the frozen files of test/fixtures, in a preview: for what the files in src/ may
-    not have at the moment, such as items coming soon. */
-async function openFrozen(page: Page) {
+/** Opens the page priced with the frozen files of test/fixtures (src/test-files.ts), or with their
+    hours and another config. */
+async function gotoFrozen(page: Page, config: Config = fixtureConfig) {
   await page.addInitScript(([key, value]) => localStorage.setItem(key, value), [
-    "website-packages.preview",
-    JSON.stringify({ ...fixtureText, code: "" }),
+    "website-packages.files",
+    JSON.stringify({ hours: fixtureHoursText, config }),
   ] as const);
-  await page.goto("/?preview", { waitUntil: "domcontentloaded" });
+  await page.goto("/?files", { waitUntil: "domcontentloaded" });
+}
+/** The page with the frozen files of test/fixtures: for what the files in src/ may not have at the
+    moment, such as items coming soon. */
+async function openFrozen(page: Page) {
+  await gotoFrozen(page);
   await expect(page.locator(".shelf .s-row").first()).toBeVisible({ timeout: 15000 });
 }
 /** Something worked out with the frozen files. */
@@ -1254,17 +1259,31 @@ test("Custom integration takes build hours and design hours, each in its field, 
 test("a tier badge follows the option or quantity in use: Forms with external data is Pro with HubDB and Ent with External API, and so on for every card", async ({
   page,
 }) => {
-  /* The frozen files with everything coming soon made live, in a preview, so every item is here
-     whatever src/ has live */
-  const table = serializeTable(
-    rows.map((row) => (row.status === "soon" ? { ...row, status: "" } : row)),
-  );
-  const catalog = buildCatalog(parseTable(table), rules, codes);
-  await page.addInitScript(([key, value]) => localStorage.setItem(key, value), [
-    "website-packages.preview",
-    JSON.stringify({ ...fixtureText, table, code: "" }),
-  ] as const);
-  await page.goto("/?preview", { waitUntil: "domcontentloaded" });
+  /* The frozen files with everything coming soon made live, so every item is here whatever src/
+     has live. A hidden item or option stays hidden */
+  const live = <Values extends RowConfig>(values: Values): Values => {
+    if (values.status !== "soon") return values;
+    const { status: _soon, ...rest } = values;
+    return rest as Values;
+  };
+  const config: Config = {
+    ...fixtureConfig,
+    items: Object.fromEntries(
+      Object.entries(fixtureConfig.items).map(([id, item]) => [
+        id,
+        item.options
+          ? {
+              ...live(item),
+              options: Object.fromEntries(
+                Object.entries(item.options).map(([option, own]) => [option, live(own)]),
+              ),
+            }
+          : live(item),
+      ]),
+    ),
+  };
+  const catalog = buildCatalogFrom(fixtureHoursText, config);
+  await gotoFrozen(page, config);
   await expect(page.locator('.shelf .pill[data-id="external-forms"]')).toBeVisible({
     timeout: 15000,
   });
@@ -1331,13 +1350,9 @@ test("a tier badge follows the option or quantity in use: Forms with external da
 test("Memberships: a way to sign in, access groups (Enterprise from 3), Social sign-in that does not go with SSO, and a Member area whose hours are entered", async ({
   page,
 }) => {
-  /* Memberships may be coming soon in src/: the frozen files of test/fixtures have it live. The
-     estimator prices with them in a preview, as the calculations page opens it */
-  await page.addInitScript(([key, value]) => localStorage.setItem(key, value), [
-    "website-packages.preview",
-    JSON.stringify({ ...fixtureText, code: "" }),
-  ] as const);
-  await page.goto("/?preview", { waitUntil: "domcontentloaded" });
+  /* Memberships may be coming soon in src/: the frozen files of test/fixtures have it live, and
+     the estimator prices with the frozen files */
+  await gotoFrozen(page);
   await expect(page.locator('.shelf .pill[data-id="membership"]')).toBeVisible({ timeout: 15000 });
   await addFromShelf(page, "membership");
   const card = page.locator('.feat[data-key="membership"]');

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import { defineConfig } from "@playwright/test";
 
-/* The tests run the app’s own logic in Node, and the app reads its table from src/estimator.csv and
+/* The tests run the app’s own logic in Node, and the app reads its hours from src/hours.csv and
    its releases from CHANGELOG.md. Bun imports a .csv or .md as text; Node needs to be told how. */
 registerHooks({
   load(url, context, nextLoad) {

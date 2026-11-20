@@ -1,17 +1,18 @@
 /**
- * The files the estimator is built from, all in src/:
+ * The files the estimator is built from, both in src/:
  *
- *   estimator.csv   one row for each item, or each option of an item (Menu: Simple, Advanced)
- *   rules.csv       the few prices that are not hours per item: design rounds, languages, pages
- *   link-codes.csv  the number each item and option has in a link. Kept by the app: Save on the
- *                   calculations page and the build add new items to it. Never edited by hand
+ *   hours.csv   one row for each item, or each option of an item (Menu: Simple, Advanced): its
+ *               name, help text, hours for each design and the package it needs. It opens in a
+ *               spreadsheet as it is
+ *   config.ts   the rest: where each item is shown and what it counts, the rules (design rounds,
+ *               project management, languages, pages), and each item's number in a link
  *
- * This file only reads and writes them. What the cells mean is in catalog.ts.
+ * This file only reads and writes them, and puts them together in the rows the catalog reads.
+ * What the cells mean is in catalog.ts.
  */
-import codesSource from "./link-codes.csv" with { type: "text" };
-import source from "./estimator.csv" with { type: "text" };
-import rulesSource from "./rules.csv" with { type: "text" };
+import hoursSource from "./hours.csv" with { type: "text" };
 
+/** The columns of a row as the catalog reads it: hours.csv's cells and config.ts's values. */
 export const columns = [
   "id",
   "item",
@@ -49,10 +50,8 @@ export function buildKind(choice: Choice): DesignKind {
   return choice === "none" ? "custom" : choice;
 }
 
-/** The files as they were built into the page. */
-export const liveText: string = source;
-export const liveRulesText: string = rulesSource;
-export const liveCodesText: string = codesSource;
+/** hours.csv as it was built into the page. */
+export const liveHoursText: string = hoursSource;
 
 /** Cells of CSV text. Quoted fields may hold commas, quotes (doubled) and line breaks. */
 export function parseCsv(text: string): string[][] {
@@ -71,7 +70,9 @@ export function parseCsv(text: string): string[][] {
     if (row.some((cell) => cell !== "")) rows.push(row);
     row = [];
   };
-  for (let index = 0; index < text.length; index += 1) {
+  /* A file saved by a spreadsheet may start with a byte-order mark */
+  const start = text.startsWith("﻿") ? 1 : 0;
+  for (let index = start; index < text.length; index += 1) {
     const char = text[index];
     if (quoted) {
       if (char !== '"') field += char;
@@ -124,46 +125,9 @@ function writeTable<Name extends string>(
   return `${lines.join("\n")}\n`;
 }
 
-/* ---------- The items ---------- */
-
-export function parseTable(text: string): Row[] {
-  return readTable(text, columns, "The table");
-}
-
-/** The table as text, always written the same way, so a change to one cell is a change to one line. */
-export function serializeTable(rows: readonly Row[]): string {
-  return writeTable(columns, rows);
-}
-
-/** What names a row while it is edited: its item, and its option when it has one. A row keeps the
-    name it was read with when its option is renamed, so its other changed cells stay with it. */
-const keys = new WeakMap<Row, string>();
-export function rowKey(row: Row): string {
-  return keys.get(row) ?? (row.option ? `${row.id}·${row.option}` : row.id);
-}
-
-/** Cells that differ from the table, by "row-key column". */
-export type Cells = Record<string, string>;
-
-export function cellKey(row: Row, column: Column): string {
-  return `${rowKey(row)} ${column}`;
-}
-
-export function applyCells(rows: readonly Row[], cells: Cells): Row[] {
-  return rows.map((row) => {
-    const next = { ...row };
-    keys.set(next, rowKey(row));
-    for (const column of columns) {
-      const value = cells[cellKey(row, column)];
-      if (value !== undefined) next[column] = value.trim();
-    }
-    return next;
-  });
-}
-
 /* ---------- The rules ---------- */
 
-/** Every rule, in the order the file lists them. */
+/** Every rule, in the order config.ts lists them. */
 export const ruleNames = [
   "ai-variants-included",
   "ai-variants-max",
@@ -197,77 +161,10 @@ export const ruleNames = [
 export type RuleName = (typeof ruleNames)[number];
 export type Rules = Record<RuleName, string>;
 
-/** Rules added after the file was first written, and the value that prices as before they were:
-    for an older commit's rules, such as the last commit's on the calculations page. Add a new
-    rule here too. Left as is, unchecked: the last commit lacks a rule only until the rule is
-    committed, and one left out here reads as empty there, as parseOlderRules says. */
-export const addedRules: Partial<Rules> = { "pm-none-design-percent": "0" };
-
-/** The rules of a file. Every rule must have its row, even one left empty: a lost row would read
-    as empty, and an empty package rule is a valid "any package", so Custom design would quietly
-    price as Essential. A rule the file doesn't list is refused, unless `missing` gives it a
-    value. Left as is: a row left empty is kept, since an empty package rule is the Any the
-    calculations page offers (AI generated and Nimbly have it), and the catalog judges the rest. */
-export function parseRules(text: string, missing: Partial<Rules> = {}): Rules {
-  const rules = Object.fromEntries(ruleNames.map((name) => [name, ""])) as Rules;
-  const listed = new Set<RuleName>();
-  for (const { rule, value } of readTable(text, ["rule", "value"] as const, "The rules")) {
-    const name = ruleNames.find((item) => item === rule);
-    if (!name) throw new Error(`The rules have no rule called ${rule}`);
-    rules[name] = value;
-    listed.add(name);
-  }
-  for (const name of ruleNames) {
-    if (listed.has(name)) continue;
-    const value = missing[name];
-    if (value === undefined) throw new Error(`The rules have no row for ${name}`);
-    rules[name] = value;
-  }
-  return rules;
-}
-
-/** The rules of an older commit's file, only to compare with, such as the last commit's on the
-    calculations page: a rule added since reads as it priced then (addedRules), or else as empty,
-    as the files in use never may. */
-export function parseOlderRules(text: string): Rules {
-  const empty = Object.fromEntries(ruleNames.map((name) => [name, ""])) as Rules;
-  return parseRules(text, { ...empty, ...addedRules });
-}
-
-export function serializeRules(rules: Rules): string {
-  return writeTable(
-    ["rule", "value"] as const,
-    ruleNames.map((name) => ({ rule: name, value: rules[name] })),
-  );
-}
-
 /* ---------- Link codes ---------- */
 
 /** An item's number in a link, and its options' names: an option's number is its place, from 1. */
 export type CodeEntry = { id: string; code: number; options: string[] };
-
-export function parseCodes(text: string): CodeEntry[] {
-  return readTable(text, ["id", "code", "options"] as const, "The link codes").map((entry) => {
-    const code = Number(entry.code);
-    if (!Number.isInteger(code) || code < 1) {
-      throw new Error(`The link codes: ${entry.id} has code "${entry.code}"`);
-    }
-    return { id: entry.id, code, options: entry.options ? entry.options.split("|") : [] };
-  });
-}
-
-export function serializeCodes(entries: readonly CodeEntry[]): string {
-  return writeTable(
-    ["id", "code", "options"] as const,
-    [...entries]
-      .sort((a, b) => a.code - b.code)
-      .map((entry) => ({
-        id: entry.id,
-        code: String(entry.code),
-        options: entry.options.join("|"),
-      })),
-  );
-}
 
 /** The link codes with every item and option of these rows in them: an item that has none gets the
     next after the highest ever given, an option the next place in its item's list. Nothing is ever
@@ -292,12 +189,100 @@ export function withCodes(
   return out;
 }
 
-/** A short name for one version of the table, to tell whether a draft was made from this one. */
-export function tableId(text: string): string {
-  let hash = 0x811c9dc5;
-  for (let index = 0; index < text.length; index += 1) {
-    hash ^= text.charCodeAt(index);
-    hash = Math.imul(hash, 0x01000193);
+/* ---------- hours.csv and config.ts ---------- */
+
+/** hours.csv's columns, in order: each row's hours for each design, and the package it needs. */
+export const hoursColumns = [
+  "id",
+  "item",
+  "option",
+  "help",
+  "ai-design",
+  "ai-build",
+  "nimbly-design",
+  "nimbly-build",
+  "custom-design",
+  "custom-build",
+  "package",
+] as const;
+
+export type HoursColumn = (typeof hoursColumns)[number];
+export type HoursRow = Record<HoursColumn, string>;
+
+/** Where an item is shown: the `places` of catalog.ts, whose own `Place` also has "design". */
+export type ItemPlace = "basics" | "shelf" | "blog" | "catalogue" | "membership";
+/** What a row needs besides its hours: the old columns, left out when empty. */
+export type RowConfig = {
+  status?: "soon" | "hidden";
+  unit?: string;
+  start?: number;
+  max?: number;
+  /** "professional", "enterprise", or "enterprise from 3" */
+  tier?: string;
+};
+export type ItemConfig = RowConfig & {
+  place: ItemPlace;
+  type?: "content" | "project";
+  /** An option's own values, where its item's rows differ. */
+  options?: Record<string, RowConfig>;
+};
+export type Config = {
+  items: Record<string, ItemConfig>;
+  rules: Record<RuleName, number | string>;
+  linkCodes: CodeEntry[];
+  calcEstimates: { name: string; title: string; adds: string[] }[];
+};
+
+/** The rows of hours.csv. Read the same from the app's file and from a Google Sheets download. */
+export function parseHours(text: string): HoursRow[] {
+  return readTable(text, hoursColumns, "hours.csv");
+}
+
+/** hours.csv as text, always written the same way, so a change to one cell is a change to one line. */
+export function serializeHours(rows: readonly HoursRow[]): string {
+  return writeTable(hoursColumns, rows);
+}
+
+/** The rows the catalog reads: the hours of hours.csv with what config.ts says of each item. A value
+    an option has in the config is its own; otherwise it is the item's, or empty. */
+export function rowsFrom(rows: readonly HoursRow[], config: Config): Row[] {
+  return rows.map((row) => {
+    const item = config.items[row.id];
+    if (!item) throw new Error(`config.ts has no item ${row.id}: every row of hours.csv needs one`);
+    const own = row.option ? item.options?.[row.option] : undefined;
+    const value = (field: keyof RowConfig) => String(own?.[field] ?? item[field] ?? "");
+    return {
+      id: row.id,
+      item: row.item,
+      option: row.option,
+      place: item.place,
+      type: item.type ?? "",
+      status: value("status"),
+      unit: value("unit"),
+      start: value("start"),
+      max: value("max"),
+      "build-ai": row["ai-build"],
+      "build-nimbly": row["nimbly-build"],
+      "build-custom": row["custom-build"],
+      "design-ai": row["ai-design"],
+      "design-nimbly": row["nimbly-design"],
+      "design-custom": row["custom-design"],
+      package: row.package,
+      tier: value("tier"),
+      note: row.help,
+    };
+  });
+}
+
+/** The rules of config.ts, as the catalog reads them. Every rule must be there: read as empty, a
+    lost package rule would be a valid "any package", and Custom design would quietly price as
+    Essential. The dev server and the build run without the type check, so this checks it too. */
+export function rulesFrom(config: Pick<Config, "rules">): Rules {
+  const rules = {} as Rules;
+  for (const name of ruleNames) {
+    const value = (config.rules as Partial<Record<RuleName, number | string>>)[name];
+    if (value === undefined) throw new Error(`config.ts has no rule ${name}`);
+    rules[name] = String(value);
   }
-  return (hash >>> 0).toString(16).padStart(8, "0");
+  return rules;
 }
