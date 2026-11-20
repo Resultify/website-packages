@@ -1,4 +1,4 @@
-/* Builds the estimator into docs/, once src/hours.csv and src/config.ts are files the app can read
+/* Builds the estimator and the calculations page into docs/, once src/hours.csv and src/config.ts are files the app can read
    and every item has its link code in config.ts. */
 import { rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -56,8 +56,8 @@ try {
 await rm(outdir, { recursive: true, force: true });
 
 const result = await Bun.build({
-  /* The estimator only, for now: the calculations page is being rebuilt */
-  entrypoints: [join(root, "src/index.html")],
+  /* The estimator, and the calculations page in calc/: published, it saves nothing (no server) */
+  entrypoints: [join(root, "src/index.html"), join(root, "src/calc/index.html")],
   outdir,
   target: "browser",
   minify: true,
@@ -70,4 +70,10 @@ if (!result.success) {
 }
 
 await Bun.write(join(outdir, ".nojekyll"), "");
-console.log("Wrote docs/index.html");
+for (const page of ["index.html", "calc/index.html"]) {
+  if (!(await Bun.file(join(outdir, page)).exists())) {
+    console.error(`The build wrote no docs/${page}`);
+    process.exit(1);
+  }
+}
+console.log("Wrote docs/index.html and docs/calc/index.html");
