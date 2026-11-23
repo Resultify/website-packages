@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.3.0](https://github.com/Resultify/website-packages/compare/v0.2.0...v0.3.0) (2026-11-23)
+
+
+### New
+
+* add design Read more, AI discount by package, and calc presets, tones and locked dev rows ([c69fd59](https://github.com/Resultify/website-packages/commit/c69fd59a1c598946e298431d26681231c0a65566))
+* add the calculations page with share-link edits, an estimates panel and save to src/hours.csv ([fc732b5](https://github.com/Resultify/website-packages/commit/fc732b59c0aa577c9a06bbc9bc91b0732261607a))
+* replace the three csv files with src/hours.csv and src/config.ts, and retire the calc page ([657ed79](https://github.com/Resultify/website-packages/commit/657ed796f10f45c3b850746daece3c10bec9996e))
+
 ## 0.2.0 (2026-11-19)
 
 ### New
