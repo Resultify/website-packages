@@ -66,6 +66,8 @@ export const mostHours = 9999;
 export function cellValue(column: EditColumn, text: string): string | null {
   const value = text.trim();
   if (column !== "package") {
+    /* Left as is: an editable hours cell is never empty in hours.csv (test/hours-file.test.ts), so
+       an edit's `was` is always a number here and reads back from the link */
     if (!/^\d{1,4}$/.test(value)) return null;
     return String(Number(value));
   }

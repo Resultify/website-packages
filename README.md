@@ -139,15 +139,15 @@ hours; its feedback rounds and the package it needs are in the `rules` of
   Growth, 30% with Platform (the rules `ai-discount-essential-percent`,
   `ai-discount-growth-percent` and `ai-discount-platform-percent`), rounded
   down to whole hours, so the total rounds up as every share does: 20% of 51h
-  is 41h. Design, Build, Content and Project keep their hours, and only the
-  total is less. Its button has a sticker with the most a package gets ("up
-  to −30%"; just "−20%" when every package gets the same). The Total panel
-  shows the total after it large, with the one before it struck through
-  beside it and a sticker with this estimate's share ("−25%"). Under them, in
-  the wide sidebar only, each package's share, drawn as the package card's
-  three dashes, this estimate's in yellow. Copy hours and the Hours breakdown
-  list "AI design discount · 25%: −25h" over the total, and the calculations
-  page's AI totals are after it
+  is 10.2h, so 10h off and 41h. Design, Build, Content and Project keep their
+  hours, and only the total is less. Its button has a sticker with the most a
+  package gets ("up to −30%"; just "−20%" when every package gets the same).
+  The Total panel shows the total after it large, with the one before it
+  struck through beside it and a sticker with this estimate's share
+  ("−25%"). Under them, in the wide sidebar only, each package's share, drawn
+  as the package card's three dashes, this estimate's in yellow. Copy hours and
+  the Hours breakdown list "AI design discount · 25%: −25h" over the total,
+  and the calculations page's AI totals are after it
 - **Nimbly**, the one a new estimate starts with: a designer adapts Nimbly's
   default templates to the client's brief. Then 3h a feedback round
 - **Custom**: a designer creates a fully custom design from the client's brief.
