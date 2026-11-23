@@ -79,6 +79,11 @@ export const config: Config = {
     "ai-variants-included": 2,
     "ai-variants-max": 10,
     "ai-variant-percent": 50,
+    // No AI discount, as before there was one: the pricing tests keep their totals, and a test
+    // that wants one sets it in a draft
+    "ai-discount-essential-percent": 0,
+    "ai-discount-growth-percent": 0,
+    "ai-discount-platform-percent": 0,
     // Feedback rounds of each design: included, hours each, the most
     "ai-feedback-included": 1,
     "ai-feedback-each": 3,
@@ -191,12 +196,10 @@ export const config: Config = {
     { id: "training", code: 48, options: [] },
   ],
   calcEstimates: [
-    { name: "Starting estimate", title: "Starting estimate", adds: [] },
-    { name: "Blog and Search", title: "+ Blog and Search", adds: ["blog-setups", "search"] },
-    {
-      name: "Blog, Search and Products",
-      title: "+ Products",
-      adds: ["blog-setups", "search", "product-catalogue"],
-    },
+    { title: "Starting estimate", link: "oLZ9I" },
+    { title: "Blog", link: "qLIK0Pr4" },
+    { title: "Blog, Forms and Search", link: "brYrQVq_w" },
+    { title: "Advanced Blog, Search and Menu", link: "WrIEFQVq6VI" },
+    { title: "Products", link: "2rKElUVpKLJpWng" },
   ],
 };

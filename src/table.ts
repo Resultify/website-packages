@@ -132,6 +132,9 @@ export const ruleNames = [
   "ai-variants-included",
   "ai-variants-max",
   "ai-variant-percent",
+  "ai-discount-essential-percent",
+  "ai-discount-growth-percent",
+  "ai-discount-platform-percent",
   "ai-feedback-included",
   "ai-feedback-each",
   "ai-feedback-max",
@@ -230,7 +233,9 @@ export type Config = {
   items: Record<string, ItemConfig>;
   rules: Record<RuleName, number | string>;
   linkCodes: CodeEntry[];
-  calcEstimates: { name: string; title: string; adds: string[] }[];
+  /** The calculations page's presets: an estimator link's code (after the #), priced with each
+      design. */
+  calcEstimates: { title: string; link: string }[];
 };
 
 /** The rows of hours.csv. Read the same from the app's file and from a Google Sheets download. */

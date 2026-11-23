@@ -2,7 +2,8 @@
    takes its colours, type sizes and radii from the tokens in the :root of ../styles.css, so it reads
    as the same product: cream page, white cards, ink-blue for what is chosen, orange for design. Its
    own: an edited value is on the tick's yellow, more hours are the remove red and fewer the content
-   teal. */
+   teal. Each design has a tone, the shelf's muted colours, in the sheet's columns and on the
+   estimates' cards: AI lavender, Nimbly sage, Custom tan. */
 
 body.calc {
   --soft: var(--basics-row);
@@ -12,7 +13,34 @@ body.calc {
   --moved: color-mix(in srgb, var(--tick) 10%, var(--bg));
   --pop: var(--ink);
   --pop-ink: var(--basics);
+  --ai: var(--shelf-rule);
+  --nimbly: var(--shelf-content);
+  --custom: var(--shelf-design);
+  /* Every other item of the sheet, on a cream deep enough to follow a row across */
+  --stripe: color-mix(in srgb, var(--shelf) 42%, var(--bg));
+  /* The row under the pointer, or with the cursor in it: a deeper sand, a bar on its name */
+  --pointed: color-mix(in srgb, var(--shelf) 85%, var(--bg));
+  --pointed-bar: var(--shelf-text);
+  /* The white gap before each design's columns */
+  --gutter: 6px solid var(--bg);
+  /* The estimates' bands, one for each preset */
+  --band: color-mix(in srgb, var(--basics) 75%, var(--bg));
   background: var(--basics);
+}
+.d-ai {
+  --d: var(--ai);
+}
+.d-nimbly {
+  --d: var(--nimbly);
+}
+.d-custom {
+  --d: var(--custom);
+}
+/* A design's name in its tone, deep enough to read */
+.d-ai,
+.d-nimbly,
+.d-custom {
+  --d-text: color-mix(in srgb, var(--d) 60%, var(--ink));
 }
 
 .c-page {
@@ -184,19 +212,99 @@ body.calc {
   text-align: left;
 }
 .c-table thead th.c-design {
-  border-bottom: 2px solid var(--ink);
-  border-left: 1px solid var(--line);
+  border-bottom: 2px solid var(--d);
+  background: color-mix(in srgb, var(--d) 9%, var(--bg));
+  color: var(--d-text);
   text-align: center;
+}
+/* Each design's columns in its tone, all the way down, Design a shade deeper than Build; the tone
+   shows through on the striped rows */
+.c-table thead th.c-h {
+  background: color-mix(in srgb, var(--d) 10%, var(--bg));
+}
+.c-table thead th.c-h.is-design {
+  background: color-mix(in srgb, var(--d) 20%, var(--bg));
+}
+.c-table tbody td.c-h {
+  background: color-mix(in srgb, var(--d) 10%, transparent);
+}
+.c-table tbody td.c-h.is-design {
+  background: color-mix(in srgb, var(--d) 20%, transparent);
+}
+.c-table tbody tr.is-alt {
+  background: var(--stripe);
+}
+.c-table tbody tr.c-row:hover,
+.c-table tbody tr.c-row:focus-within {
+  background: var(--pointed);
+}
+.c-table tbody tr.c-row:hover > th.c-item,
+.c-table tbody tr.c-row:focus-within > th.c-item {
+  box-shadow: inset 3px 0 0 var(--pointed-bar);
+}
+/* In development, as the estimator shows it: striped over its tones, its hours shown faint and not
+   edited, the lock and "In development" on the section, item or option that is all of it */
+.c-table tbody tr.c-row.is-dev > * {
+  background-image: var(--stripes);
+}
+.c-table tbody tr.is-dev .c-help,
+.c-table tbody tr.is-dev .c-plain {
+  color: var(--muted);
+}
+.c-in:disabled {
+  border-color: transparent;
+  background: transparent;
+  color: var(--faint);
+  cursor: not-allowed;
+}
+.c-in.is-design:disabled {
+  color: color-mix(in srgb, var(--design) 50%, var(--bg));
+}
+.c-pick:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.c-dev {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  width: fit-content;
+  margin-top: 3px;
+  padding: 1px 7px 1px 5px;
+  border-radius: 999px;
+  background: var(--bg);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  color: var(--muted);
+  font-size: var(--fs-tag);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 15px;
+  text-transform: none;
+  white-space: nowrap;
+}
+.c-dev .ic {
+  width: 11px;
+  height: 11px;
+  stroke-width: 2.2;
+}
+.c-item .c-dev {
+  display: flex;
+}
+.c-sec .c-dev {
+  margin: 0 0 0 10px;
+  vertical-align: 1px;
 }
 .c-table thead th.c-pack {
   padding-left: 12px;
   text-align: left;
 }
+/* A white gap before each design, and before the package: three bands of two columns */
+.c-table thead th.c-design,
 .c-table th.is-design,
 .c-table td.is-design,
 .c-table .c-pack,
 .c-table .c-entered {
-  border-left: 1px solid var(--line);
+  border-left: var(--gutter);
 }
 .c-table thead th.is-design {
   color: var(--design);
@@ -442,31 +550,69 @@ td.c-pack {
   color: var(--fewer);
 }
 
+/* A row of column heads, then each preset as a band of three cards */
 .c-grid {
+  display: grid;
+  gap: 8px;
+  container-type: inline-size;
+}
+.c-heads,
+.c-set {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px 8px;
 }
+.c-heads {
+  padding: 0 8px;
+}
+.c-set {
+  padding: 8px;
+  border-radius: var(--r-page);
+  background: var(--band);
+}
 .c-est-col {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   padding-left: 4px;
-  color: var(--muted);
+  color: var(--d-text);
   font-size: var(--fs-caption);
   font-weight: 700;
 }
+.c-est-col::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--d);
+}
 .c-est-row {
   grid-column: 1 / -1;
-  margin-top: 8px;
   color: var(--muted);
   font-size: var(--fs-tag);
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
+/* The preset's link in the estimator */
+.c-est-row a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+}
+.c-est-row a:hover {
+  color: var(--ink);
+  text-decoration-color: currentColor;
+}
+/* White on the band, its design's tone along the top */
 .c-est {
   min-width: 0;
-  padding: 8px 8px 6px;
+  padding: 7px 6px 6px;
   border: 1px solid var(--line-strong);
+  border-top: 3px solid var(--d);
   border-radius: var(--r-page);
+  background: var(--bg);
 }
 .c-est.is-moved {
   background: var(--moved);
@@ -514,10 +660,10 @@ td.c-pack {
 }
 
 .c-vs {
-  width: calc(100% + 6px);
-  margin: 0 -3px;
+  width: calc(100% + 4px);
+  margin: 0 -2px;
   border-collapse: separate;
-  border-spacing: 3px 2px;
+  border-spacing: 2px;
   font-variant-numeric: tabular-nums;
 }
 .c-vs th {
@@ -528,12 +674,12 @@ td.c-pack {
   text-align: left;
 }
 .c-vs thead th {
-  padding: 0 3px 2px;
+  padding: 0 2px 2px;
   font-weight: 600;
   text-align: right;
 }
 .c-vs td {
-  padding: 2px 3px;
+  padding: 2px;
   font-size: var(--fs-sub);
   text-align: right;
 }
@@ -577,22 +723,6 @@ td.c-pack {
   font-size: var(--fs-control);
   line-height: 1.4;
 }
-.c-tip code {
-  padding: 0 3px;
-  border-radius: var(--r-inner);
-  background: color-mix(in srgb, var(--pop-ink) 18%, var(--pop));
-  font:
-    11px ui-monospace,
-    "SF Mono",
-    Menlo,
-    monospace;
-}
-.c-tip-more {
-  margin-top: 6px;
-  font-size: var(--fs-shelf-small);
-  opacity: 0.8;
-}
-
 /* ---------- Narrower windows ---------- */
 
 /* The estimates go under the sheet */
@@ -619,15 +749,20 @@ td.c-pack {
   .c-table thead {
     position: static;
   }
-  .c-grid {
+}
+
+/* Too narrow for three cards side by side (the window from 1100px to about 1430px, where the sheet
+   takes most of it, and a phone): each preset's cards stack in its band, each named */
+@container (max-width: 639px) {
+  .c-set {
     grid-template-columns: minmax(0, 1fr);
   }
-  .c-est-col {
+  .c-heads {
     display: none;
   }
   .c-est-name {
     display: inline;
-    color: var(--ink);
+    color: var(--d-text);
     font-weight: 700;
   }
 }

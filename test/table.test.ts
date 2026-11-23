@@ -3,6 +3,7 @@
    a change of the hours in src/ changes none of the numbers here. */
 import { describe, expect, test } from "bun:test";
 import {
+  aiDiscountShares,
   buildCatalog,
   catalogueSources,
   designChoices,
@@ -14,11 +15,12 @@ import {
   tiles,
   withCatalog,
 } from "../src/catalog.ts";
-import { lineName, ruleFor, shelfGroupOf, shelfLanes } from "../src/controls.ts";
+import { hoursText, lineName, ruleFor, shelfGroupOf, shelfLanes } from "../src/controls.ts";
 import { packLink, unpackLink } from "../src/link.ts";
 import {
   aiVariantCost,
   decodeSelection,
+  discountHours,
   encodeSelection,
   type HourLine,
   quote,
@@ -332,6 +334,82 @@ describe("a draft", () => {
     expect(() => drafted({}, { "pm-none-design-percent": "" })).toThrow(
       "Rule pm-none-design-percent must be a whole number",
     );
+  });
+
+  test("AI design's discount comes off the total only, rounded down: every group, line, package and tier stay", () => {
+    const off = drafted({}, { "ai-discount-essential-percent": "20" });
+    const before = quote(ai());
+    expect(before.discount).toBeNull();
+    expect(before.totalHours).toBe(before.hours);
+    const after = withCatalog(off, () => quote(ai()));
+    for (const key of [
+      "hours",
+      "designHours",
+      "implementationHours",
+      "contentHours",
+      "projectHours",
+      "lines",
+      "label",
+      "edition",
+    ] as const) {
+      expect(after[key]).toEqual(before[key]);
+    }
+    /* 20% of 51h is 10.2: 10h off, so the total rounds up, as every share of the estimate does;
+       20% of 54h is 10.8, still 10h */
+    expect(discountHours(51, 20)).toBe(10);
+    expect(discountHours(54, 20)).toBe(10);
+    expect(discountHours(55, 20)).toBe(11);
+    const hours = discountHours(before.hours, 20);
+    expect(after.discount).toEqual({ percent: 20, hours, packageId: "essential" });
+    expect(after.totalHours).toBe(before.hours - hours);
+    /* Copy hours says it over the total */
+    expect(
+      withCatalog(off, () => hoursText(quote(ai())))
+        .split("\n")
+        .slice(-2),
+    ).toEqual([`- AI design discount · 20%: −${hours}h`, `- Total: ${before.hours - hours}h`]);
+    /* Only with AI design */
+    for (const choice of designChoices.filter((item) => item.kind !== "ai")) {
+      const other = withCatalog(off, () => quote(setTile(essential(), choice.id, true)));
+      expect(other.discount).toBeNull();
+      expect(other.totalHours).toBe(other.hours);
+    }
+    expect(() => drafted({}, { "ai-discount-platform-percent": "101" })).toThrow(
+      "Rule ai-discount-platform-percent must be 0 to 100",
+    );
+  });
+
+  test("AI design's discount is its package's: 20% with Essential, 25% with Growth, 30% with Platform", () => {
+    const off = drafted(
+      {},
+      {
+        "ai-discount-essential-percent": "20",
+        "ai-discount-growth-percent": "25",
+        "ai-discount-platform-percent": "30",
+      },
+    );
+    withCatalog(off, () => {
+      const essentialAi = ai();
+      /* Page templates past what Essential takes need Growth; the Product catalogue, Platform */
+      const growthAi = setQuantity(essentialAi, "templates", 5);
+      const platformAi = setTile(growthAi, "product-catalogue", true);
+      for (const [selection, packageId, percent] of [
+        [essentialAi, "essential", 20],
+        [growthAi, "growth", 25],
+        [platformAi, "platform", 30],
+      ] as const) {
+        const q = quote(selection);
+        expect(q.shape).toBe(packageId);
+        expect(q.discount).toEqual({ percent, hours: discountHours(q.hours, percent), packageId });
+        expect(q.totalHours).toBe(q.hours - discountHours(q.hours, percent));
+      }
+      /* The shares under the total, Essential's first */
+      expect(aiDiscountShares()).toEqual([
+        ["essential", 20],
+        ["growth", 25],
+        ["platform", 30],
+      ]);
+    });
   });
 
   test("the package a design needs comes from the rules: Custom and None need Growth", () => {

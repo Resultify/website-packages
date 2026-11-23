@@ -10,21 +10,22 @@ Essential package · Content Hub Starter
   - Global header: 1h
   - Global footer: 1h
   - Setup and launch: 4h
-  - Variants · 2 designs: included
-  - Feedback · 1 round: included
-- Build: 34h
-  - Page templates · 3 templates: 6h
-  - Sections · 7 sections: 14h
-  - Menu · Simple: 2h
-  - Global header: 2h
-  - Global footer: 2h
+  - Variants · 5 designs: included
+  - Feedback · 3 rounds: included
+- Build: 21h
+  - Page templates · 3 templates: 3h
+  - Sections · 7 sections: 7h
+  - Menu · Simple: 1h
+  - Global header: 1h
+  - Global footer: 1h
   - Setup and launch: 8h
   - Languages · 1 language: included
-- Project: 15h
+- Project: 13h
   - Kick-off meeting: 3h
   - Training · 2 sessions: 4h
-  - Project management · 15% of 51h: 8h
-- Total: 66h
+  - Project management · 15% of 38h: 6h
+- AI design discount · 20%: −10h
+- Total: 41h
 
 ## Nimbly
 Essential package · Content Hub Starter
@@ -35,7 +36,7 @@ Essential package · Content Hub Starter
   - Global header: 1h
   - Global footer: 2h
   - Setup and launch: 4h
-  - Feedback · 1 round: included
+  - Feedback · 3 rounds: included
 - Build: 34h
   - Page templates · 3 templates: 6h
   - Sections · 7 sections: 14h
@@ -59,7 +60,7 @@ Growth package · Content Hub Starter
   - Global header: 2h
   - Global footer: 3h
   - Setup and launch: 4h
-  - Feedback · 1 round: included
+  - Feedback · 3 rounds: included
 - Build: 61h
   - Page templates · 3 templates: 12h
   - Sections · 7 sections: 28h
@@ -93,7 +94,7 @@ Growth package · Content Hub Starter
 - Total: 82h"
 `;
 
-exports[`the prices of the files in src/ the starting estimate with 3 feedback rounds, 4 AI variants and 3 languages 1`] = `
+exports[`the prices of the files in src/ the starting estimate with 2 extra feedback rounds, 2 extra AI variants and 3 languages 1`] = `
 "## AI generated
 Growth package · Content Hub Starter
 - Design (AI generated): 41h
@@ -103,21 +104,22 @@ Growth package · Content Hub Starter
   - Global header: 1h
   - Global footer: 1h
   - Setup and launch: 4h
-  - Variants · 4 designs (2 included, 2 extra): 18h
-  - Feedback · 3 rounds (1 included, 2 extra): 6h
-- Build: 54h
-  - Page templates · 3 templates: 6h
-  - Sections · 7 sections: 14h
-  - Menu · Simple: 2h
-  - Global header: 2h
-  - Global footer: 2h
+  - Variants · 7 designs (5 included, 2 extra): 18h
+  - Feedback · 5 rounds (3 included, 2 extra): 6h
+- Build: 41h
+  - Page templates · 3 templates: 3h
+  - Sections · 7 sections: 7h
+  - Menu · Simple: 1h
+  - Global header: 1h
+  - Global footer: 1h
   - Setup and launch: 8h
   - Languages · 3 languages (1 included, 2 extra): 20h
-- Project: 22h
+- Project: 20h
   - Kick-off meeting: 3h
   - Training · 2 sessions: 4h
-  - Project management · 15% of 95h: 15h
-- Total: 117h
+  - Project management · 15% of 82h: 13h
+- AI design discount · 25%: −25h
+- Total: 77h
 
 ## Nimbly
 Growth package · Content Hub Starter
@@ -128,7 +130,7 @@ Growth package · Content Hub Starter
   - Global header: 1h
   - Global footer: 2h
   - Setup and launch: 4h
-  - Feedback · 3 rounds (1 included, 2 extra): 6h
+  - Feedback · 5 rounds (3 included, 2 extra): 6h
 - Build: 54h
   - Page templates · 3 templates: 6h
   - Sections · 7 sections: 14h
@@ -152,7 +154,7 @@ Growth package · Content Hub Starter
   - Global header: 2h
   - Global footer: 3h
   - Setup and launch: 4h
-  - Feedback · 3 rounds (1 included, 2 extra): 10h
+  - Feedback · 5 rounds (3 included, 2 extra): 10h
 - Build: 81h
   - Page templates · 3 templates: 12h
   - Sections · 7 sections: 28h
@@ -186,106 +188,43 @@ Growth package · Content Hub Starter
 - Total: 105h"
 `;
 
-exports[`the prices of the files in src/ every basic, item, part and option: its hours with each design, and the package and tier 1`] = `
-"Item · option or quantity: design + build, content or project hours with AI generated, Nimbly, Custom, None; the package and tier with Nimbly
-Website pages · 25 pages, what Starter takes: Essential package · Content Hub Starter
-Website pages · 31 pages, more than Starter takes: Essential package · Content Hub Professional
-Languages · 1 languages: 0 + 0, 0 + 0, 0 + 0, 0 + 0 · Essential package · Content Hub Starter
-Languages · 2 languages: 0 + 14, 0 + 14, 0 + 14, 0 + 14 · Growth package · Content Hub Starter
-Languages · 50 languages: 0 + 302, 0 + 302, 0 + 302, 0 + 302 · Growth package · Content Hub Starter
-Languages · 51 languages: 0 + 308, 0 + 308, 0 + 308, 0 + 308 · Growth package · Content Hub Professional
-Languages · 60 languages: 0 + 362, 0 + 362, 0 + 362, 0 + 362 · Growth package · Content Hub Professional
-Page templates · 3 templates: 3 + 6, 6 + 6, 12 + 12, 0 + 12 · Essential package · Content Hub Starter
-Page templates · 4 templates: 4 + 8, 8 + 8, 16 + 16, 0 + 16 · Essential package · Content Hub Starter
-Page templates · 5 templates: 5 + 10, 10 + 10, 20 + 20, 0 + 20 · Growth package · Content Hub Starter
-Page templates · 50 templates: 50 + 100, 100 + 100, 200 + 200, 0 + 200 · Growth package · Content Hub Starter
-Sections · 7 sections: 7 + 14, 14 + 14, 28 + 28, 0 + 28 · Essential package · Content Hub Starter
-Sections · 10 sections: 10 + 20, 20 + 20, 40 + 40, 0 + 40 · Essential package · Content Hub Starter
-Sections · 11 sections: 11 + 22, 22 + 22, 44 + 44, 0 + 44 · Growth package · Content Hub Starter
-Sections · 100 sections: 100 + 200, 200 + 200, 400 + 400, 0 + 400 · Growth package · Content Hub Starter
-Menu · Simple: 1 + 2, 1 + 2, 3 + 3, 0 + 3 · Essential package · Content Hub Starter
-Menu · Advanced: 3 + 7, 4 + 7, 8 + 16, 0 + 16 · Growth package · Content Hub Starter
-Training · 2 sessions: 0 + 4, 0 + 4, 0 + 4, 0 + 4 · Essential package · Content Hub Starter
-Training · 40 sessions: 0 + 80, 0 + 80, 0 + 80, 0 + 80 · Essential package · Content Hub Starter
-Blogs · 1 blogs: 0 + 0, 0 + 0, 0 + 0, 0 + 0 · Essential package · Content Hub Starter
-Blogs · 2 blogs: 0 + 0, 0 + 0, 0 + 0, 0 + 0 · Growth package · Content Hub Professional
-Blogs · 100 blogs: 0 + 0, 0 + 0, 0 + 0, 0 + 0 · Growth package · Content Hub Professional
-List template · Simple: 1 + 2, 2 + 2, 4 + 4, 0 + 4 · Essential package · Content Hub Starter
-List template · Advanced: 2 + 4, 4 + 4, 8 + 8, 0 + 8 · Growth package · Content Hub Starter
-List template · 2 blogs, 2 templates: 2 + 4, 4 + 4, 8 + 8, 0 + 8 · Growth package · Content Hub Professional
-Post template · Simple: 1 + 2, 2 + 2, 4 + 4, 0 + 4 · Essential package · Content Hub Starter
-Post template · Advanced: 2 + 4, 4 + 4, 8 + 8, 0 + 8 · Growth package · Content Hub Starter
-Post template · 2 blogs, 2 templates: 2 + 4, 4 + 4, 8 + 8, 0 + 8 · Growth package · Content Hub Professional
-Recent blog posts: 1 + 2, 2 + 2, 4 + 4, 0 + 4 · Essential package · Content Hub Starter
-Recent blog posts · 2 blogs, 2 versions: 2 + 4, 4 + 4, 8 + 8, 0 + 8 · Growth package · Content Hub Professional
-Custom forms · 1 forms: 1 + 3, 2 + 3, 4 + 5, 0 + 5 · Essential package · Content Hub Starter
-Custom forms · 20 forms: 20 + 60, 40 + 60, 80 + 100, 0 + 100 · Essential package · Content Hub Starter
-Search · Simple: 1 + 2, 2 + 2, 4 + 4, 0 + 4 · Essential package · Content Hub Starter
-Search · Advanced: 2 + 4, 3 + 4, 6 + 10, 0 + 10 · Growth package · Content Hub Starter
-Landing templates · 1 templates: 2 + 3, 3 + 3, 5 + 5, 0 + 5 · Essential package · Content Hub Starter
-Landing templates · 2 templates: 4 + 6, 6 + 6, 10 + 10, 0 + 10 · Essential package · Content Hub Starter
-Landing templates · 3 templates: 6 + 9, 9 + 9, 15 + 15, 0 + 15 · Growth package · Content Hub Starter
-Landing templates · 50 templates: 100 + 150, 150 + 150, 250 + 250, 0 + 250 · Growth package · Content Hub Starter
-Content · 0 hours: 0 + 0, 0 + 0, 0 + 0, 0 + 0 · Essential package · Content Hub Starter
-Content · 900 hours: 0 + 900, 0 + 900, 0 + 900, 0 + 900 · Essential package · Content Hub Starter
-Blog import · 0 hours: 0 + 0, 0 + 0, 0 + 0, 0 + 0 · Essential package · Content Hub Starter
-Blog import · 900 hours: 0 + 900, 0 + 900, 0 + 900, 0 + 900 · Essential package · Content Hub Starter
-Page migration · 0 hours: 0 + 0, 0 + 0, 0 + 0, 0 + 0 · Essential package · Content Hub Starter
-Page migration · 900 hours: 0 + 900, 0 + 900, 0 + 900, 0 + 900 · Essential package · Content Hub Starter
-Custom system templates: 1 + 2, 2 + 2, 4 + 4, 0 + 4 · Growth package · Content Hub Starter
-HubDB section · 1 modules: 2 + 4, 4 + 4, 8 + 8, 0 + 8 · Growth package · Content Hub Professional
-HubDB section · 50 modules: 100 + 200, 200 + 200, 400 + 400, 0 + 400 · Growth package · Content Hub Professional
-Custom cookie banner: 2 + 5, 3 + 5, 5 + 6, 0 + 6 · Growth package · Content Hub Starter
-Product catalogue (HubDB) · Module based: 8 + 18, 14 + 18, 28 + 30, 0 + 30 · Platform package · Content Hub Professional
-Product catalogue (HubDB) · Dynamic pages: Simple: 6 + 16, 10 + 16, 20 + 28, 0 + 28 · Platform package · Content Hub Professional
-Product catalogue (HubDB) · Dynamic pages: Filtered: 8 + 20, 14 + 20, 28 + 34, 0 + 34 · Platform package · Content Hub Professional
-Product catalogue (HubDB) · Dynamic pages: Multi-level: 12 + 30, 20 + 30, 36 + 44, 0 + 44 · Platform package · Content Hub Professional
-Product catalogue (HubDB) · Custom: 0 + 0, 0 + 0, 0 + 0, 0 + 0 · Platform package · Content Hub Professional
-Custom catalogue · 0 hours: 0 + 0, 0 + 0, 0 + 0, 0 + 0 · Platform package · Content Hub Professional
-Custom catalogue · 900 hours: 0 + 900, 0 + 900, 0 + 900, 0 + 900 · Platform package · Content Hub Professional
-Favorite products · 1 sections: 2 + 5, 3 + 5, 6 + 8, 0 + 8 · Platform package · Content Hub Professional
-Favorite products · 50 sections: 100 + 250, 150 + 250, 300 + 400, 0 + 400 · Platform package · Content Hub Professional
-Related products: 2 + 4, 3 + 4, 6 + 8, 0 + 8 · Platform package · Content Hub Professional
-Custom integration · 0 hours: 0 + 0, 0 + 0, 0 + 0, 0 + 0 · Platform package · Content Hub Professional
-Custom integration · 900 hours: 0 + 900, 0 + 900, 0 + 900, 0 + 900 · Platform package · Content Hub Professional"
-`;
-
 exports[`the prices of the files in src/ the starting estimate with the most feedback rounds, AI variants and languages 1`] = `
 "## AI generated
 Growth package · Content Hub Professional
-- Design (AI generated): 236h
+- Design (AI generated): 203h
   - Page templates · 3 templates: 3h
   - Sections · 7 sections: 7h
   - Menu · Simple: 1h
   - Global header: 1h
   - Global footer: 1h
   - Setup and launch: 4h
-  - Variants · 20 designs (2 included, 18 extra): 162h
-  - Feedback · 20 rounds (1 included, 19 extra): 57h
-- Build: 396h
-  - Page templates · 3 templates: 6h
-  - Sections · 7 sections: 14h
-  - Menu · Simple: 2h
-  - Global header: 2h
-  - Global footer: 2h
+  - Variants · 20 designs (5 included, 15 extra): 135h
+  - Feedback · 20 rounds (3 included, 17 extra): 51h
+- Build: 383h
+  - Page templates · 3 templates: 3h
+  - Sections · 7 sections: 7h
+  - Menu · Simple: 1h
+  - Global header: 1h
+  - Global footer: 1h
   - Setup and launch: 8h
   - Languages · 60 languages (1 included, 59 extra): 362h
-- Project: 102h
+- Project: 95h
   - Kick-off meeting: 3h
   - Training · 2 sessions: 4h
-  - Project management · 15% of 632h: 95h
-- Total: 734h
+  - Project management · 15% of 586h: 88h
+- AI design discount · 25%: −170h
+- Total: 511h
 
 ## Nimbly
 Growth package · Content Hub Professional
-- Design (Nimbly): 85h
+- Design (Nimbly): 79h
   - Page templates · 3 templates: 6h
   - Sections · 7 sections: 14h
   - Menu · Simple: 1h
   - Global header: 1h
   - Global footer: 2h
   - Setup and launch: 4h
-  - Feedback · 20 rounds (1 included, 19 extra): 57h
+  - Feedback · 20 rounds (3 included, 17 extra): 51h
 - Build: 396h
   - Page templates · 3 templates: 6h
   - Sections · 7 sections: 14h
@@ -294,22 +233,22 @@ Growth package · Content Hub Professional
   - Global footer: 2h
   - Setup and launch: 8h
   - Languages · 60 languages (1 included, 59 extra): 362h
-- Project: 80h
+- Project: 79h
   - Kick-off meeting: 3h
   - Training · 2 sessions: 4h
-  - Project management · 15% of 481h: 73h
-- Total: 561h
+  - Project management · 15% of 475h: 72h
+- Total: 554h
 
 ## Custom
 Growth package · Content Hub Professional
-- Design (Custom): 147h
+- Design (Custom): 137h
   - Page templates · 3 templates: 12h
   - Sections · 7 sections: 28h
   - Menu · Simple: 3h
   - Global header: 2h
   - Global footer: 3h
   - Setup and launch: 4h
-  - Feedback · 20 rounds (1 included, 19 extra): 95h
+  - Feedback · 20 rounds (3 included, 17 extra): 85h
 - Build: 423h
   - Page templates · 3 templates: 12h
   - Sections · 7 sections: 28h
@@ -318,11 +257,11 @@ Growth package · Content Hub Professional
   - Global footer: 3h
   - Setup and launch: 12h
   - Languages · 60 languages (1 included, 59 extra): 362h
-- Project: 93h
+- Project: 91h
   - Kick-off meeting: 3h
   - Training · 2 sessions: 4h
-  - Project management · 15% of 570h: 86h
-- Total: 663h
+  - Project management · 15% of 560h: 84h
+- Total: 651h
 
 ## None
 Growth package · Content Hub Professional
@@ -341,4 +280,68 @@ Growth package · Content Hub Professional
   - Training · 2 sessions: 4h
   - Project management · 15% of 449h (423h + 50% of 52h client design): 68h
 - Total: 498h"
+`;
+
+exports[`the prices of the files in src/ every basic, item, part and option: its hours with each design, and the package and tier 1`] = `
+"Item · option or quantity: design + build, content or project hours with AI generated, Nimbly, Custom, None; the package and tier with Nimbly
+Website pages · 25 pages, what Starter takes: Essential package · Content Hub Starter
+Website pages · 31 pages, more than Starter takes: Essential package · Content Hub Professional
+Languages · 1 languages: 0 + 0, 0 + 0, 0 + 0, 0 + 0 · Essential package · Content Hub Starter
+Languages · 2 languages: 0 + 14, 0 + 14, 0 + 14, 0 + 14 · Growth package · Content Hub Starter
+Languages · 50 languages: 0 + 302, 0 + 302, 0 + 302, 0 + 302 · Growth package · Content Hub Starter
+Languages · 51 languages: 0 + 308, 0 + 308, 0 + 308, 0 + 308 · Growth package · Content Hub Professional
+Languages · 60 languages: 0 + 362, 0 + 362, 0 + 362, 0 + 362 · Growth package · Content Hub Professional
+Page templates · 3 templates: 3 + 3, 6 + 6, 12 + 12, 0 + 12 · Essential package · Content Hub Starter
+Page templates · 4 templates: 4 + 4, 8 + 8, 16 + 16, 0 + 16 · Essential package · Content Hub Starter
+Page templates · 5 templates: 5 + 5, 10 + 10, 20 + 20, 0 + 20 · Growth package · Content Hub Starter
+Page templates · 50 templates: 50 + 50, 100 + 100, 200 + 200, 0 + 200 · Growth package · Content Hub Starter
+Sections · 7 sections: 7 + 7, 14 + 14, 28 + 28, 0 + 28 · Essential package · Content Hub Starter
+Sections · 10 sections: 10 + 10, 20 + 20, 40 + 40, 0 + 40 · Essential package · Content Hub Starter
+Sections · 11 sections: 11 + 11, 22 + 22, 44 + 44, 0 + 44 · Growth package · Content Hub Starter
+Sections · 100 sections: 100 + 100, 200 + 200, 400 + 400, 0 + 400 · Growth package · Content Hub Starter
+Menu · Simple: 1 + 1, 1 + 2, 3 + 3, 0 + 3 · Essential package · Content Hub Starter
+Menu · Advanced: 2 + 3, 4 + 7, 8 + 16, 0 + 16 · Growth package · Content Hub Starter
+Training · 2 sessions: 0 + 4, 0 + 4, 0 + 4, 0 + 4 · Essential package · Content Hub Starter
+Training · 40 sessions: 0 + 80, 0 + 80, 0 + 80, 0 + 80 · Essential package · Content Hub Starter
+Blogs · 1 blogs: 0 + 0, 0 + 0, 0 + 0, 0 + 0 · Essential package · Content Hub Starter
+Blogs · 2 blogs: 0 + 0, 0 + 0, 0 + 0, 0 + 0 · Growth package · Content Hub Professional
+Blogs · 100 blogs: 0 + 0, 0 + 0, 0 + 0, 0 + 0 · Growth package · Content Hub Professional
+List template · Simple: 1 + 1, 2 + 2, 4 + 4, 0 + 4 · Essential package · Content Hub Starter
+List template · Advanced: 2 + 2, 4 + 4, 8 + 8, 0 + 8 · Growth package · Content Hub Starter
+List template · 2 blogs, 2 templates: 2 + 2, 4 + 4, 8 + 8, 0 + 8 · Growth package · Content Hub Professional
+Post template · Simple: 1 + 1, 2 + 2, 4 + 4, 0 + 4 · Essential package · Content Hub Starter
+Post template · Advanced: 2 + 2, 4 + 4, 8 + 8, 0 + 8 · Growth package · Content Hub Starter
+Post template · 2 blogs, 2 templates: 2 + 2, 4 + 4, 8 + 8, 0 + 8 · Growth package · Content Hub Professional
+Recent blog posts: 1 + 1, 2 + 2, 4 + 4, 0 + 4 · Essential package · Content Hub Starter
+Recent blog posts · 2 blogs, 2 versions: 2 + 2, 4 + 4, 8 + 8, 0 + 8 · Growth package · Content Hub Professional
+Custom forms · 1 forms: 1 + 2, 2 + 3, 4 + 5, 0 + 5 · Essential package · Content Hub Starter
+Custom forms · 20 forms: 20 + 40, 40 + 60, 80 + 100, 0 + 100 · Essential package · Content Hub Starter
+Search · Simple: 1 + 1, 2 + 2, 4 + 4, 0 + 4 · Essential package · Content Hub Starter
+Search · Advanced: 2 + 2, 3 + 4, 6 + 10, 0 + 10 · Growth package · Content Hub Starter
+Landing templates · 1 templates: 1 + 1, 3 + 3, 5 + 5, 0 + 5 · Essential package · Content Hub Starter
+Landing templates · 2 templates: 2 + 2, 6 + 6, 10 + 10, 0 + 10 · Essential package · Content Hub Starter
+Landing templates · 3 templates: 3 + 3, 9 + 9, 15 + 15, 0 + 15 · Growth package · Content Hub Starter
+Landing templates · 50 templates: 50 + 50, 150 + 150, 250 + 250, 0 + 250 · Growth package · Content Hub Starter
+Content · 0 hours: 0 + 0, 0 + 0, 0 + 0, 0 + 0 · Essential package · Content Hub Starter
+Content · 900 hours: 0 + 900, 0 + 900, 0 + 900, 0 + 900 · Essential package · Content Hub Starter
+Blog import · 0 hours: 0 + 0, 0 + 0, 0 + 0, 0 + 0 · Essential package · Content Hub Starter
+Blog import · 900 hours: 0 + 900, 0 + 900, 0 + 900, 0 + 900 · Essential package · Content Hub Starter
+Page migration · 0 hours: 0 + 0, 0 + 0, 0 + 0, 0 + 0 · Essential package · Content Hub Starter
+Page migration · 900 hours: 0 + 900, 0 + 900, 0 + 900, 0 + 900 · Essential package · Content Hub Starter
+Custom system templates: 1 + 2, 2 + 2, 4 + 4, 0 + 4 · Growth package · Content Hub Starter
+HubDB section · 1 modules: 3 + 3, 4 + 4, 8 + 8, 0 + 8 · Growth package · Content Hub Professional
+HubDB section · 50 modules: 150 + 150, 200 + 200, 400 + 400, 0 + 400 · Growth package · Content Hub Professional
+Custom cookie banner: 2 + 5, 3 + 5, 5 + 6, 0 + 6 · Growth package · Content Hub Starter
+Product catalogue (HubDB) · Module based: 8 + 18, 14 + 18, 28 + 30, 0 + 30 · Platform package · Content Hub Professional
+Product catalogue (HubDB) · Dynamic pages: Simple: 6 + 16, 10 + 16, 20 + 28, 0 + 28 · Platform package · Content Hub Professional
+Product catalogue (HubDB) · Dynamic pages: Filtered: 8 + 20, 14 + 20, 28 + 34, 0 + 34 · Platform package · Content Hub Professional
+Product catalogue (HubDB) · Dynamic pages: Multi-level: 12 + 30, 20 + 30, 36 + 44, 0 + 44 · Platform package · Content Hub Professional
+Product catalogue (HubDB) · Custom: 0 + 0, 0 + 0, 0 + 0, 0 + 0 · Platform package · Content Hub Professional
+Custom catalogue · 0 hours: 0 + 0, 0 + 0, 0 + 0, 0 + 0 · Platform package · Content Hub Professional
+Custom catalogue · 900 hours: 0 + 900, 0 + 900, 0 + 900, 0 + 900 · Platform package · Content Hub Professional
+Favorite products · 1 sections: 2 + 5, 3 + 5, 6 + 8, 0 + 8 · Platform package · Content Hub Professional
+Favorite products · 50 sections: 100 + 250, 150 + 250, 300 + 400, 0 + 400 · Platform package · Content Hub Professional
+Related products: 2 + 4, 3 + 4, 6 + 8, 0 + 8 · Platform package · Content Hub Professional
+Custom integration · 0 hours: 0 + 0, 0 + 0, 0 + 0, 0 + 0 · Platform package · Content Hub Professional
+Custom integration · 900 hours: 0 + 900, 0 + 900, 0 + 900, 0 + 900 · Platform package · Content Hub Professional"
 `;

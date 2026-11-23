@@ -520,6 +520,8 @@ export type Catalog = {
   pages: PageRule;
   /** Extra AI variants: this share of the AI design hours each, in percent. */
   variantPercent: number;
+  /** With AI design, this share comes off the estimate's total, in percent, by its package. */
+  aiDiscountPercent: Readonly<Record<PackageId, number>>;
   /** Project management: this share of the estimate's design, build and content hours, in percent, whatever the
       design. */
   managementPercent: number;
@@ -581,7 +583,7 @@ export const designChoices: readonly DesignChoice[] = [
     feedbackName: "AI feedback",
     label: "AI generated",
     name: "AI generated design",
-    note: "AI generates variants from Nimbly's default templates and the client's brief. The client picks one.",
+    note: "AI generates whole designs from the client's brief. The client picks one.",
   },
   {
     kind: "nimbly",
@@ -770,6 +772,22 @@ function checkNote(row: Row): string {
 /** The note with its build hours in it. */
 export function fillNote(text: string, build: BuildRate, choice: Choice): string {
   return text.replaceAll("{build}", String(build[buildKind(choice)]));
+}
+
+/** What the estimator says under an item: its note, with the design's build hours where it says
+    {build}. */
+export function tileNote(tile: Tile, choice: Choice): string {
+  return fillNote(tile.summary, tile.build, choice);
+}
+
+/** What the estimator says under each option of an item, in order: the option's own note, or the
+    item's. An item with no options: its note alone. The calculations page shows the same. */
+export function optionNotes(tile: Tile, choice: Choice): string[] {
+  return (
+    tile.modes?.map((mode) =>
+      mode.detail ? fillNote(mode.detail, mode.build, choice) : tileNote(tile, choice),
+    ) ?? [tileNote(tile, choice)]
+  );
 }
 
 const noBuild: BuildRate = { ai: 0, nimbly: 0, custom: 0 };
@@ -1157,6 +1175,20 @@ function rule(rules: Rules, name: RuleName): number {
   return value;
 }
 
+/** The AI discount of each package: a share of the total, so 0 to 100. */
+function discountRules(rules: Rules): Record<PackageId, number> {
+  const percent = (name: RuleName) => {
+    const value = rule(rules, name);
+    if (value > 100) throw new Error(`Rule ${name} must be 0 to 100. It is ${value}`);
+    return value;
+  };
+  return {
+    essential: percent("ai-discount-essential-percent"),
+    growth: percent("ai-discount-growth-percent"),
+    platform: percent("ai-discount-platform-percent"),
+  };
+}
+
 /** A quantity of rounds or variants: so many included, each one past them costs `each`. */
 function roundsTile(
   id: string,
@@ -1450,6 +1482,7 @@ export function buildCatalog(
     packageRules,
     pages: pageRule(rules),
     variantPercent: rule(rules, "ai-variant-percent"),
+    aiDiscountPercent: discountRules(rules),
     managementPercent: rule(rules, "pm-percent"),
     clientDesignPercent: rule(rules, "pm-none-design-percent"),
     codes: merged,
@@ -1629,6 +1662,17 @@ export function managementPercent(): number {
     counts, in percent. */
 export function clientDesignPercent(): number {
   return active.clientDesignPercent;
+}
+
+/** With AI design: the share that comes off the total of an estimate of this package, in percent.
+    0 is none. */
+export function aiDiscountPercent(packageId: PackageId): number {
+  return active.aiDiscountPercent[packageId];
+}
+
+/** With AI design: each package's share of the total, in percent, Essential's first. */
+export function aiDiscountShares(): [PackageId, number][] {
+  return (Object.keys(packageName) as PackageId[]).map((id) => [id, aiDiscountPercent(id)]);
 }
 
 /** One variant beyond the included ones: a share of the base design, rounded up to a whole hour. */

@@ -9,6 +9,7 @@
 
 import {
   type Amount,
+  aiDiscountPercent,
   aiVariantHours,
   alwaysOnTileIds,
   basicsTileIds,
@@ -136,6 +137,7 @@ export type Quote = {
   extraCount: number;
   foundationHours: number;
   openHours: number;
+  /** Every hour of the estimate: its Design, Build, Content and Project hours together. */
   hours: number;
   savedHours: number;
   designHours: number;
@@ -146,6 +148,10 @@ export type Quote = {
   contentHours: number;
   /** The kick-off, training and project management: the work around the site. */
   projectHours: number;
+  /** With AI design, a share off the total; null with another design, or none to take off. */
+  discount: Discount | null;
+  /** What the estimate costs: its hours less the discount. */
+  totalHours: number;
   packageReasons: string[];
   edition: Edition;
   editionReasons: string[];
@@ -155,6 +161,26 @@ export type Quote = {
   restore: RestoreHint | null;
   pageSpeed: PageSpeed;
 };
+
+/** The AI discount: `percent` of the estimate's hours, off its total only. The percent is the
+    package's. */
+export type Discount = { percent: number; hours: number; packageId: PackageId };
+
+/** The hours a discount takes off: `percent` of `total`, rounded down to a whole hour, so the total
+    after it rounds up, as every share of the estimate does: 20% of 51h is 10.2, so 10h off, and
+    41h. */
+export function discountHours(total: number, percent: number): number {
+  return Math.floor((total * percent) / 100);
+}
+
+/** With AI design and a discount to give: its package's share, and the hours it takes off. */
+function discountOf(selection: Selection, hours: number): Discount | null {
+  if (choiceOf(selection) !== "ai") return null;
+  const packageId = packageFor(selection);
+  const percent = aiDiscountPercent(packageId);
+  const off = discountHours(hours, percent);
+  return off > 0 ? { percent, hours: off, packageId } : null;
+}
 
 /** Project management's hours: `percent` of `base`, rounded up to a whole hour. Hours and
     percents are whole numbers, so the share is exact: 15% of 101h is 15.15, so 16h. */
@@ -418,6 +444,12 @@ export function setTile(selection: Selection, tileId: string, on: boolean): Sele
   delete next[tileId];
   for (const id of partsOf[tileId] ?? []) delete next[id];
   return normalize({ ...selection, tiles: next });
+}
+
+/** The estimate with another design in place of its own, that design's feedback rounds and variants
+    at what they start with. With its own design: the estimate as it is. */
+export function withDesign(selection: Selection, designId: string): Selection {
+  return designOf(selection).id === designId ? selection : setTile(selection, designId, true);
 }
 
 export function setQuantity(selection: Selection, tileId: string, qty: number): Selection {
@@ -822,6 +854,8 @@ export function quote(input: Selection): Quote {
 
   const restore = null;
   const packageReasons = packageReasonsFor(selection);
+  /* Off the total only: every group's hours, the package and the tier stay as they are */
+  const discount = discountOf(selection, priced.hours);
 
   return {
     selection,
@@ -842,6 +876,8 @@ export function quote(input: Selection): Quote {
     packageHours: priced.packageHours,
     contentHours: priced.contentHours,
     projectHours: priced.projectHours,
+    discount,
+    totalHours: roundHours(priced.hours - (discount?.hours ?? 0)),
     packageReasons,
     edition,
     editionReasons: reasons,

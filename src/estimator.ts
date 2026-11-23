@@ -5,6 +5,7 @@
    and fields drawn here carry data-action, data-id and data-focus, so bindActions handles them. Copy
    hours, Share link and Reset with Undo are the client's (PageState). */
 import {
+  aiDiscountShares,
   catalogueId,
   catalogueSources,
   clientDesignPercent,
@@ -13,8 +14,10 @@ import {
   designChoices,
   managementPercent,
   editionLabel,
-  fillNote,
   getTile,
+  optionNotes,
+  packageName,
+  packageRules,
   partsOf,
   ownerOf,
   placeName,
@@ -24,6 +27,7 @@ import {
   type Tile,
   tierMark,
   tileMode,
+  tileNote,
 } from "./catalog.ts";
 import {
   stepper as appStepper,
@@ -116,14 +120,8 @@ const tiers = ["starter", "professional", "enterprise"] as const;
 const plus = (hours: number) => `+${hoursLabel(hours)}`;
 const laneName = (id: string) => laneNames[id] ?? getTile(id).label;
 /** A note, with its build hours for the estimate's design choice where it says {build}. */
-const noteOf = (tile: Tile, result: Quote) =>
-  fillNote(tile.summary, tile.build, choiceOf(result.selection));
-const modeNotes = (tile: Tile, result: Quote) =>
-  tile.modes?.map((mode) =>
-    mode.detail
-      ? fillNote(mode.detail, mode.build, choiceOf(result.selection))
-      : noteOf(tile, result),
-  ) ?? [noteOf(tile, result)];
+const noteOf = (tile: Tile, result: Quote) => tileNote(tile, choiceOf(result.selection));
+const modeNotes = (tile: Tile, result: Quote) => optionNotes(tile, choiceOf(result.selection));
 const rankOf = (shape: string) => shapeChoices.findIndex((item) => item.id === shape);
 
 /* ---------- Small parts ---------- */
@@ -311,8 +309,8 @@ function row(options: RowOptions): HTMLElement {
 }
 
 /** The app's stepper (number field and buttons, data-action dec/qty/inc) with drawn signs. */
-function stepper(tile: Tile, qty: number, locked = false): HTMLElement {
-  const node = appStepper(tile, qty, locked);
+function stepper(tile: Tile, qty: number, locked = false, extra = false): HTMLElement {
+  const node = appStepper(tile, qty, locked, extra);
   for (const button of node.querySelectorAll<HTMLButtonElement>(".step-btn")) {
     button.replaceChildren(icon(button.dataset.action === "inc" ? "plus" : "minus"));
   }
@@ -450,7 +448,7 @@ function variantsInfo(result: Quote): Kid {
     h(
       "span",
       { class: "info-p" },
-      "Whole designs the AI generates from the templates and the brief, for the client to choose one.",
+      "Whole designs the AI generates from the brief and the agreed prototype, for the client to choose one.",
     ),
     h(
       "span",
@@ -483,18 +481,24 @@ function designPart(result: Quote): HTMLElement[] {
         { class: "choices", role: "radiogroup", "aria-label": "Design" },
         designChoices.map((choice) => designChoice(result, choice.id, choice.label)),
       ),
-      h("small", null, getTile(chosen.id).summary),
+      h(
+        "small",
+        null,
+        getTile(chosen.id).summary,
+        designDetails[chosen.kind] ? [" ", readMore(chosen)] : null,
+      ),
     ),
   ];
+  /* Extra feedback and Extra variants count from 0: the included ones are in the note */
   if (feedbackId) {
     const feedback = getTile(feedbackId);
     out.push(
       row({
         lead: icon("feedback"),
-        name: "Feedback",
+        name: "Extra feedback",
         info: { id: "feedback", content: feedbackInfo(chosen) },
         note: noteOf(feedback, result),
-        control: stepper(feedback, tiles[feedbackId] ?? feedback.initial),
+        control: stepper(feedback, tiles[feedbackId] ?? feedback.initial, false, true),
         hours: hrs(null, lineHours(result, feedbackId)),
       }),
     );
@@ -504,15 +508,183 @@ function designPart(result: Quote): HTMLElement[] {
     out.push(
       row({
         lead: icon("variants"),
-        name: "Variants",
+        name: "Extra variants",
         info: { id: "variants", content: variantsInfo(result) },
         note: `${variants.includedInBase} included, then ${hoursLabel(aiVariantCost(result))} each`,
-        control: stepper(variants, tiles["ai-design"] ?? variants.initial),
+        control: stepper(variants, tiles["ai-design"] ?? variants.initial, false, true),
         hours: hrs(null, lineHours(result, "ai-variants")),
       }),
     );
   }
   return out;
+}
+
+/* ---------- Design: Read more ---------- */
+
+/** What a design includes, step by step, for its Read more. The counts the rules set come in, so
+    the words follow config.ts; the prototype's rounds are part of the AI design hours, not a rule. */
+type DesignDetails = {
+  intro: string;
+  steps: (included: { rounds: number; variants: number }) => [title: string, text: string][];
+};
+
+const roundsOf = (choice: DesignChoice) =>
+  choice.feedbackId ? getTile(choice.feedbackId) : undefined;
+const roundsText = (count: number) => `${count} feedback ${count === 1 ? "round" : "rounds"}`;
+
+const designDetails: Partial<Record<DesignChoice["kind"], DesignDetails>> = {
+  ai: {
+    intro:
+      "A design generated in full by AI from what we learn about the client, made for the site alone. The client chooses from several whole designs, and every step has room for feedback.",
+    steps: ({ rounds, variants }) => [
+      [
+        "Brief",
+        "We collect what the design starts from: the brand (logo, colours and fonts), examples of sites the client likes, inspiration and the site's goals.",
+      ],
+      [
+        "Prototype",
+        "We present a prototype to agree on the content structure and the wireframe of each page template: what goes where, with no design yet. Refined with the client over up to 3 feedback rounds.",
+      ],
+      [
+        `${variants} design variants`,
+        `AI generates ${variants} whole designs on the agreed prototype, and the client picks the one to go on with.`,
+      ],
+      [
+        "Final design",
+        `The chosen variant is finished into the final design, with ${roundsText(rounds)}.`,
+      ],
+    ],
+  },
+  nimbly: {
+    intro:
+      "A designer adapts Nimbly's default templates to the client's brand. The layouts are proven and already built, so the site looks like the client's at a lower cost than a design of its own.",
+    steps: ({ rounds }) => [
+      [
+        "Brief",
+        "We collect the brand (logo, colours and fonts) and examples of sites the client likes.",
+      ],
+      [
+        "Styling in Figma",
+        "In Figma, the designer sets the templates in the brand: colours, fonts, buttons, spacing and images, for every page template and section in the estimate.",
+      ],
+      [
+        "Final design",
+        `The client reviews it in Figma, and it is refined over ${roundsText(rounds)}. The Figma file is what the site is built from.`,
+      ],
+    ],
+  },
+  custom: {
+    intro:
+      "A designer creates a design of the client's own, from a blank page rather than Nimbly's templates: for a brand that needs to stand apart.",
+    steps: ({ rounds }) => [
+      [
+        "Discovery",
+        "The brand, the site's goals and audience, competitors, and examples and inspiration the client likes.",
+      ],
+      [
+        "Concept in Figma",
+        "A design direction on the key pages, drawn in Figma and agreed with the client before the rest is designed.",
+      ],
+      [
+        "Every template and section",
+        "Each page template and section in the estimate, designed in full in Figma to the concept, with its styles and components.",
+      ],
+      [
+        "Final design",
+        `The client reviews it in Figma, and it is refined over ${roundsText(rounds)}. The Figma file is what the site is built from.`,
+      ],
+    ],
+  },
+};
+
+/** The design's Read more: a link-like button after its note that opens its details. */
+function readMore(choice: DesignChoice): HTMLElement {
+  return h(
+    "button",
+    {
+      type: "button",
+      class: "more-link",
+      "aria-haspopup": "dialog",
+      "aria-label": `Read more about ${choice.name}`,
+      data: { focus: `more-${choice.id}` },
+      on: { click: () => designDialog(choice).showModal() },
+    },
+    "Read more",
+  );
+}
+
+/** What is included with each design, and what more costs, in a dialog outside the page as the
+    Changelog's is, so a redraw leaves it open. Made again on each opening: it follows the rules. */
+function designDialog(choice: DesignChoice): HTMLDialogElement {
+  document.querySelector("dialog.design-more")?.remove();
+  const details = designDetails[choice.kind];
+  const rounds = roundsOf(choice);
+  const needs = packageRules.find((rule) => rule.tileId === choice.id)?.package;
+  const result = quote(store.selection);
+  const extras: string[] = [
+    ...(rounds ? [`Extra feedback rounds: ${hoursLabel(rounds.build.custom)} each`] : []),
+    ...(choice.kind === "ai"
+      ? [
+          `Extra variants: ${formatHours(currentCatalog().variantPercent)}% of the AI design hours each, ${hoursLabel(aiVariantCost(result))} in this estimate`,
+        ]
+      : []),
+  ];
+  const included = {
+    rounds: rounds?.includedInBase ?? 0,
+    variants: getTile("ai-design").includedInBase,
+  };
+  const dialog = h(
+    "dialog",
+    { class: "design-more", "aria-labelledby": "design-more-title" },
+    h(
+      "div",
+      { class: "cl-head" },
+      h("h2", { id: "design-more-title" }, choice.name),
+      h(
+        "button",
+        { type: "button", class: "cl-close", "aria-label": "Close", data: { close: "" } },
+        icon("cross"),
+      ),
+    ),
+    h(
+      "div",
+      { class: "cl-body", tabindex: "-1", autofocus: true },
+      details ? h("p", { class: "dm-intro" }, details.intro) : null,
+      h(
+        "ol",
+        { class: "dm-steps" },
+        (details?.steps(included) ?? []).map(([title, text]) =>
+          h("li", null, h("b", null, title), h("span", null, text)),
+        ),
+      ),
+      h(
+        "p",
+        { class: "dm-included" },
+        icon("tick"),
+        needs ? `All included. Needs ${packageName[needs]}.` : "All included.",
+      ),
+      extras.length
+        ? [
+            h("h4", null, "More, if the client wants it"),
+            h(
+              "ul",
+              { class: "dm-extras" },
+              extras.map((text) => h("li", null, text)),
+            ),
+          ]
+        : null,
+    ),
+  );
+  dialog.addEventListener("click", (event) => {
+    const target = event.target;
+    /* The backdrop is the dialog itself: its content fills it */
+    if (target === dialog || (target instanceof Element && target.closest("[data-close]"))) {
+      dialog.close();
+    }
+  });
+  dialog.addEventListener("close", () => dialog.remove());
+  document.body.append(dialog);
+  return dialog;
 }
 
 function basicRow(result: Quote, id: string, lead: IconName): HTMLElement {
@@ -1399,8 +1571,46 @@ function dots(result: Quote): { unit: number; blocks: HTMLElement[] } {
   return { unit, blocks };
 }
 
+/** With AI design's discount, a price tag: the total before it, struck through, and the button's
+    sticker, beside the total after it. */
+function wasTotal(result: Quote): HTMLElement | null {
+  const discount = result.discount;
+  if (!discount) return null;
+  const percent = formatHours(discount.percent);
+  return h(
+    "span",
+    { class: "was" },
+    h("span", { class: "vh" }, `, after the ${percent}% AI discount of`),
+    h("s", null, hoursLabel(result.hours)),
+    h("span", { class: "deal", "aria-hidden": "true" }, `−${percent}%`),
+  );
+}
+
+/** With AI design's discount, each package's share under the total, drawn as the package card's
+    three dashes, this estimate's in yellow: a bigger site gets a bigger share. */
+function discountShares(result: Quote): HTMLElement | null {
+  const discount = result.discount;
+  if (!discount) return null;
+  return h(
+    "ul",
+    { class: "shares", "aria-label": "AI discount by package" },
+    aiDiscountShares().map(([id, percent]) => {
+      const now = id === discount.packageId;
+      return h(
+        "li",
+        { class: now ? "is-now" : null, "aria-current": now ? "true" : null },
+        h("i", { "aria-hidden": "true" }),
+        h("b", null, percent > 0 ? `−${formatHours(percent)}%` : "0%"),
+        " ",
+        h("small", null, packageName[id]),
+      );
+    }),
+  );
+}
+
 function total(result: Quote): HTMLElement {
   const grid = dots(result);
+  const was = wasTotal(result);
   return h(
     "div",
     { class: "total" },
@@ -1410,10 +1620,17 @@ function total(result: Quote): HTMLElement {
       h("span", { class: "tlabel" }, "Total"),
       h(
         "p",
-        { class: result.hours >= 1000 ? "big is-long" : "big", "aria-live": "polite" },
-        formatHours(result.hours),
-        h("small", null, "h"),
+        {
+          class: ["big", result.totalHours >= 1000 ? "is-long" : null, was ? "has-was" : null]
+            .filter(Boolean)
+            .join(" "),
+          "aria-live": "polite",
+        },
+        /* What the estimate costs; its parts below are its hours, before any discount */
+        h("span", { class: "now" }, formatHours(result.totalHours), h("small", null, "h")),
+        was,
       ),
+      discountShares(result),
       h(
         "ul",
         { class: "lg" },
