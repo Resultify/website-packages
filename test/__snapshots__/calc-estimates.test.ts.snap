@@ -1,19 +1,19 @@
 // Bun Snapshot v1, https://bun.sh/docs/test/snapshots
 
 exports[`the calculations page's fifteen estimates 1`] = `
-"Starting estimate · AI: 41h (design 17, build 21, content 0, project 13, 51h less 20%) Essential
-Starting estimate · Nimbly: 79h (design 28, build 34, content 0, project 17) Essential
-Starting estimate · Custom: 137h (design 52, build 61, content 0, project 24) Growth
-Blog · AI: 54h (design 24, build 28, content 0, project 15, 67h less 20%) Essential
-Blog · Nimbly: 111h (design 42, build 48, content 0, project 21) Essential
-Blog · Custom: 202h (design 80, build 89, content 0, project 33) Growth
-Blog, Forms and Search · AI: 57h (design 25, build 30, content 0, project 16, 71h less 20%) Essential
-Blog, Forms and Search · Nimbly: 117h (design 44, build 51, content 0, project 22) Essential
-Blog, Forms and Search · Custom: 212h (design 84, build 94, content 0, project 34) Growth
-Advanced Blog, Search and Menu · AI: 76h (design 37, build 44, content 0, project 20, 101h less 25%) Growth
-Advanced Blog, Search and Menu · Nimbly: 177h (design 68, build 79, content 0, project 30) Growth
-Advanced Blog, Search and Menu · Custom: 335h (design 131, build 154, content 0, project 50) Growth
-Products · AI: 111h (design 53, build 78, content 0, project 27, 158h less 30%) Platform
-Products · Nimbly: 252h (design 96, build 117, content 0, project 39) Platform
-Products · Custom: 477h (design 187, build 221, content 0, project 69) Platform"
+"Starting estimate · AI: 40h (design 15, build 21, content 0, project 13, 49h less 20%) Essential
+Starting estimate · Nimbly: 75h (design 27, build 32, content 0, project 16) Essential
+Starting estimate · Custom: 125h (design 52, build 50, content 0, project 23) Growth
+Blog · AI: 52h (design 22, build 28, content 0, project 15, 65h less 20%) Essential
+Blog · Nimbly: 104h (design 41, build 43, content 0, project 20) Essential
+Blog · Custom: 179h (design 79, build 70, content 0, project 30) Growth
+Blog, Forms and Search · AI: 55h (design 23, build 30, content 0, project 15, 68h less 20%) Essential
+Blog, Forms and Search · Nimbly: 109h (design 43, build 45, content 0, project 21) Essential
+Blog, Forms and Search · Custom: 188h (design 83, build 74, content 0, project 31) Growth
+Advanced Blog, Search and Menu · AI: 74h (design 35, build 44, content 0, project 19, 98h less 25%) Growth
+Advanced Blog, Search and Menu · Nimbly: 163h (design 64, build 71, content 0, project 28) Growth
+Advanced Blog, Search and Menu · Custom: 282h (design 126, build 113, content 0, project 43) Growth
+Products · AI: 90h (design 48, build 57, content 0, project 23, 128h less 30%) Platform
+Products · Nimbly: 228h (design 92, build 100, content 0, project 36) Platform
+Products · Custom: 419h (design 182, build 176, content 0, project 61) Platform"
 `;
