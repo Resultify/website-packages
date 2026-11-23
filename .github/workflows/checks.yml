@@ -32,9 +32,11 @@ jobs:
         env:
           RANGE: ${{ github.event.before }}..${{ github.event.after }}
         run: bun scripts/check-messages.ts --range "$RANGE"
+  # With one package, release-please adds its name to the branch:
+  # release-please--branches--main--components--<package.json name>
   release-pr:
     if: >-
       github.event_name == 'pull_request' &&
-      github.head_ref == 'release-please--branches--main' &&
+      startsWith(github.head_ref, 'release-please--branches--main') &&
       !github.event.pull_request.draft
     uses: ./.github/workflows/verify.yml
