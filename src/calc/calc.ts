@@ -92,6 +92,8 @@ type Typing = { focus: string; value: string; problem: string };
 const state = {
   /** local: the dev server answered, and Save writes src/hours.csv */
   mode: "public" as "public" | "local",
+  /* Left as is: a hours.csv the app can't read stops this bundle as it loads, as it stops the
+     estimator's; Save never writes one (api.ts reads the result first) */
   old: readHours(liveHoursText, true),
   edits: [] as Edit[],
   /** Edits of the last link that could not be used */
