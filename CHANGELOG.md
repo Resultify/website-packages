@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.0 (2026-11-23)
+
+### New
+
+- AI generated design takes a share off the total, by package: 20% with Essential, 25% with Growth and 30% with Platform. The total shows the hours before it struck through, and Copy hours and the Hours breakdown list it on a line of its own.
+- Read more, in the note of AI generated, Nimbly and Custom: what the design includes, step by step, the feedback rounds and variants that come with it, what more of them cost, and the package it needs.
+- A calculations page for the team that sets the hours: change an item's hours or package and see what it does to fifteen example estimates, before and after, with AI generated, Nimbly and Custom design. Share the changes as a link, or download them as a file that opens in Google Sheets. What is still in development is shown locked.
+
+### Changed
+
+- Every design includes 3 feedback rounds, and AI generated 5 variants. Extra feedback and Extra variants count only the ones added on top, from 0.
+- New hours for most items: less build time, most of all with AI generated design and in the Product catalogue, and 2h of design for Setup and launch with AI generated and Nimbly. The starting estimate is now 40h with AI generated (was 66h), 75h with Nimbly (was 79h) and 125h with Custom (was 137h).
+
 ## 0.2.0 (2026-11-19)
 
 ### New
