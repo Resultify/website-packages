@@ -249,6 +249,71 @@ test("rows in development, as the estimator shows them locked, are striped and n
   await expect(field(page, "CRM Object section, AI build hours")).toHaveValue("0");
 });
 
+test("tones: each design's columns and cards in its shelf colour, a white gap before each design, every other item striped, the pointed row on sand with a bar", async ({
+  page,
+}) => {
+  await openLocal(page);
+  /** A property of the first element the selector finds, and the same property of a probe put in
+      it with `value`: the expected colour comes from the page's own tokens. */
+  const styleOf = (selector: string, property: string, value: string) =>
+    page.evaluate(
+      ({ selector, property, value }) => {
+        const element = document.querySelector(selector);
+        if (!element) throw new Error(`Nothing is ${selector}`);
+        const probe = document.createElement("i");
+        probe.style.setProperty(property, value);
+        element.append(probe);
+        const read = (node: Element) => getComputedStyle(node).getPropertyValue(property);
+        const both = { shown: read(element), wanted: read(probe) };
+        probe.remove();
+        return both;
+      },
+      { selector, property, value },
+    );
+  const same = async (selector: string, property: string, value: string) => {
+    const { shown, wanted } = await styleOf(selector, property, value);
+    expect(shown, `${selector} ${property}`).toBe(wanted);
+    return shown;
+  };
+  const plain = 'tr[data-row="Page templates"]';
+  const alt = 'tr[data-row="Sections"]';
+  await expect(page.locator(plain)).not.toHaveClass(/is-alt|is-dev/);
+  await expect(page.locator(alt)).toHaveClass(/is-alt/);
+
+  /* AI lavender, Nimbly sage, Custom tan: Design a shade deeper than Build, the gap white */
+  const shelf = { ai: "--shelf-rule", nimbly: "--shelf-content", custom: "--shelf-design" };
+  const tones = new Set<string>();
+  for (const [design, token] of Object.entries(shelf)) {
+    const cell = `${plain} td.d-${design}`;
+    tones.add(
+      await same(
+        `${cell}.is-design`,
+        "background-color",
+        `color-mix(in srgb, var(${token}) 20%, transparent)`,
+      ),
+    );
+    tones.add(
+      await same(
+        `${cell}:not(.is-design)`,
+        "background-color",
+        `color-mix(in srgb, var(${token}) 10%, transparent)`,
+      ),
+    );
+    await same(`${cell}.is-design`, "border-left-color", "var(--bg)");
+    expect((await styleOf(`${cell}.is-design`, "border-left-width", "0")).shown).toBe("6px");
+    await same(`.c-est.d-${design}`, "border-top-color", `var(${token})`);
+  }
+  expect(tones.size).toBe(6);
+
+  /* Every other item on a cream stripe; the row under the pointer on sand, a bar on its name */
+  expect((await styleOf(plain, "background-color", "transparent")).shown).toBe("rgba(0, 0, 0, 0)");
+  await same(alt, "background-color", "color-mix(in srgb, var(--shelf) 42%, var(--bg))");
+  await page.mouse.move(0, 0);
+  await page.locator(`${plain} th.c-item`).hover();
+  await same(plain, "background-color", "color-mix(in srgb, var(--shelf) 85%, var(--bg))");
+  await same(`${plain} > th.c-item`, "box-shadow", "inset 3px 0 0 var(--shelf-text)");
+});
+
 test("typing: a value the cell cannot take is not kept, Escape puts the value back, Enter goes down a row", async ({
   page,
 }) => {

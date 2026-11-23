@@ -1732,6 +1732,13 @@ test("Read more tells what each design includes, with the numbers of the rules, 
       const variants = getTile("ai-design").includedInBase;
       await expect(dialog.locator(".dm-steps")).toContainText(`${variants} design variants`);
       await expect(dialog.locator(".dm-steps")).toContainText("up to 3 feedback rounds");
+      /* Generated in full: no Nimbly in it, and the prototype is structure, not design */
+      await expect(dialog).not.toContainText("Nimbly");
+      await expect(dialog.locator(".dm-steps")).toContainText(
+        /prototype to agree on the content structure and the wireframe .*no design yet/,
+      );
+    } else {
+      await expect(dialog.locator(".dm-steps")).toContainText("Figma");
     }
     await page.keyboard.press("Escape");
     await expect(dialog).toHaveCount(0);
