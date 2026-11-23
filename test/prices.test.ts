@@ -263,14 +263,10 @@ describe("the prices of the files in src/", () => {
     expect(text).toMatchSnapshot();
   });
 
-  test("the starting estimate with 3 feedback rounds, 4 AI variants and 3 languages", () => {
-    const text = withCatalog(live, () =>
-      withExtras(
-        () => 3,
-        () => 4,
-        3,
-      ),
-    );
+  test("the starting estimate with 2 extra feedback rounds, 2 extra AI variants and 3 languages", () => {
+    /* Past the ones included, as the estimator's Extra feedback and Extra variants count */
+    const extra = (id: string) => getTile(id).includedInBase + 2;
+    const text = withCatalog(live, () => withExtras(extra, extra, 3));
     expect(text).toMatchSnapshot();
   });
 

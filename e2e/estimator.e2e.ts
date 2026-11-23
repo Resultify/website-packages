@@ -3,12 +3,16 @@
 import { expect, type Page, test } from "@playwright/test";
 import { appName, currentRelease, releases } from "../src/changelog.ts";
 import {
+  aiDiscountPercent,
+  aiDiscountShares,
   buildCatalogFrom,
   clientDesignPercent,
   designChoices,
   getTile,
   getTile as getTileLive,
   managementPercent,
+  packageName,
+  packageRules,
   tierMark,
   withCatalog,
 } from "../src/catalog.ts";
@@ -30,14 +34,17 @@ import {
   quote,
   selectionForShape,
   setQuantity,
+  setTile,
   sourceIn,
   stepHours,
 } from "../src/quote.ts";
 import type { Config, RowConfig } from "../src/table.ts";
 import { fixtureCatalog, fixtureConfig, fixtureHoursText } from "../test/fixture.ts";
 
-/* The example: Search, Custom forms and Blog in, AI design, Growth on Content Hub Starter */
-const EXAMPLE = "#SFMRoK0fw";
+/* The example: Search, Custom forms and Blog in, AI design, Growth on Content Hub Starter. As the
+   app writes it with the feedback rounds and variants included now: it was #SFMRoK0fw when one
+   round and two variants were, a link that still opens the same estimate */
+const EXAMPLE = "#eDKxGgrR_";
 const LAPTOP = { width: 1280, height: 800 };
 
 async function open(page: Page, hash = EXAMPLE) {
@@ -84,7 +91,7 @@ function quoteOf(hash: string): Quote {
 const shown = (page: Page) =>
   page.evaluate(() => ({
     hash: location.hash,
-    total: document.querySelector(".big")?.firstChild?.textContent,
+    total: document.querySelector(".big .now")?.firstChild?.textContent,
     legend: [...document.querySelectorAll(".lg b")].map((b) => b.textContent),
     head: [...document.querySelectorAll(".est .sh .hrs.sum > span")].map(
       (s) => s.lastChild?.textContent,
@@ -104,13 +111,97 @@ test("the total, its parts and the estimate's figures come from the app's own qu
     await step();
     const s = await shown(page);
     const q = quoteOf(s.hash);
-    expect(s.total).toBe(formatHours(q.hours));
+    expect(s.total).toBe(formatHours(q.totalHours));
     expect(s.legend).toEqual(
       [q.designHours, q.implementationHours, q.contentHours, q.projectHours].map(hoursLabel),
     );
     /* Content first, Build last */
     expect(s.head[0]).toBe(hoursLabel(stepHours(q, "content")));
     expect(s.head.at(-1)).toBe(hoursLabel(stepHours(q, "addons", "implementation")));
+  }
+});
+
+test("with AI design the total is after its discount, a price tag with the total before it struck through; its parts keep their hours", async ({
+  page,
+}) => {
+  /* The example has AI design; wide, the narrow sidebar, and the top bar */
+  for (const size of [{ width: 1440, height: 900 }, LAPTOP, { width: 390, height: 844 }]) {
+    await page.setViewportSize(size);
+    await open(page);
+    const q = quoteOf(await page.evaluate(() => location.hash));
+    /* Its package's share */
+    expect(q.discount?.packageId).toBe(q.shape);
+    const percent = q.discount?.percent ?? 0;
+    expect(percent).toBe(aiDiscountPercent(q.discount?.packageId ?? "essential"));
+    expect(percent).toBeGreaterThan(0);
+    expect(q.totalHours).toBe(q.hours - (q.discount?.hours ?? 0));
+    const big = page.locator(".big");
+    await expect(big.locator(".now")).toHaveText(hoursLabel(q.totalHours));
+    await expect(big.locator(".was s")).toHaveText(hoursLabel(q.hours));
+    await expect(big.locator(".was .deal")).toHaveText(`−${percent}%`);
+    await expect(big.locator(".was .deal")).toBeVisible();
+    await expect(page.locator(".lg b")).toHaveText(
+      [q.designHours, q.implementationHours, q.contentHours, q.projectHours].map(hoursLabel),
+    );
+    /* Each package's share under it, this one's marked; only where the sidebar is wide */
+    const shares = page.locator(".shares");
+    if (size.width > 1340) {
+      await expect(shares.locator("li")).toHaveText(
+        aiDiscountShares().map(([id, share]) => `−${share}% ${packageName[id]}`),
+      );
+      await expect(shares.locator('li[aria-current="true"]')).toHaveText(
+        `−${percent}% ${packageName[q.discount?.packageId ?? "essential"]}`,
+      );
+    } else await expect(shares).toBeHidden();
+    /* All of it inside the sidebar or the top bar */
+    const inside = await page.evaluate(() => {
+      const side = document.querySelector(".side")!.getBoundingClientRect();
+      return [".big .was", ".shares"].every((selector) => {
+        const box = document.querySelector(selector)!.getBoundingClientRect();
+        return box.width === 0 || (box.left >= side.left && box.right <= side.right);
+      });
+    });
+    expect(inside, `at ${size.width}px`).toBe(true);
+  }
+  /* Another design: no discount, and no price tag */
+  await page.locator("#design-nimbly-design").check();
+  const nimbly = quoteOf(await page.evaluate(() => location.hash));
+  expect(nimbly.discount).toBeNull();
+  await expect(page.locator(".big .now")).toHaveText(hoursLabel(nimbly.hours));
+  await expect(page.locator(".big .was")).toHaveCount(0);
+  await expect(page.locator(".shares")).toHaveCount(0);
+});
+
+test("AI design's discount follows the package: the price tag and the shares under it say Essential's, Growth's or Platform's; the button, the most", async ({
+  page,
+}) => {
+  const most = Math.max(...aiDiscountShares().map(([, share]) => share));
+  const essentialAi = setTile(selectionForShape("essential"), "ai-design", true);
+  /* Page templates past what Essential takes need Growth; the Product catalogue, Platform */
+  const growthAi = setQuantity(essentialAi, "templates", 5);
+  const platformAi = setTile(growthAi, "product-catalogue", true);
+  for (const [selection, packageId] of [
+    [essentialAi, "essential"],
+    [growthAi, "growth"],
+    [platformAi, "platform"],
+  ] as const) {
+    const q = quote(selection);
+    expect(q.shape).toBe(packageId);
+    const percent = aiDiscountPercent(packageId);
+    await page.goto(`/#${encodeSelection(selection)}`);
+    await expect(page.locator(".big .now")).toHaveText(hoursLabel(q.totalHours), {
+      timeout: 15000,
+    });
+    await expect(page.locator(".big .was .deal")).toHaveText(`−${percent}%`);
+    await expect(page.locator('.shares li[aria-current="true"]')).toHaveText(
+      `−${percent}% ${packageName[packageId]}`,
+    );
+    await expect(page.locator(".shares li.is-now")).toHaveCount(1);
+    /* The button's sticker is the same whatever the package: the most a package gets */
+    await expect(page.locator(".dsel .choice .deal")).toHaveText(`up to −${most}%`);
+    await expect(
+      page.getByRole("radio", { name: `AI generated (up to ${most}% discount)` }),
+    ).toBeChecked();
   }
 });
 
@@ -121,17 +212,33 @@ test("Design offers AI generated, Nimbly, Custom and None, Nimbly first, each wi
   await page.goto(`/#${encodeSelection(selectionForShape("essential"))}`);
   await expect(page.locator(".big")).toBeVisible({ timeout: 15000 });
   const choices = page.locator(".dsel .choice");
-  await expect(choices).toHaveText(["AI generated", "Nimbly", "Custom", "None"]);
+  await expect(choices.locator(".choice-name")).toHaveText([
+    "AI generated",
+    "Nimbly",
+    "Custom",
+    "None",
+  ]);
+  /* AI design's discount, on its corner only, and said with its name: the most a package gets,
+     since the packages' shares differ */
+  const shares = aiDiscountShares().map(([, share]) => share);
+  const most = Math.max(...shares);
+  expect(new Set(shares).size).toBeGreaterThan(1);
+  await expect(choices.locator(".deal")).toHaveText([`up to −${most}%`]);
+  await expect(choices.first().locator(".deal")).toBeVisible();
+  await expect(
+    page.getByRole("radio", { name: `AI generated (up to ${most}% discount)` }),
+  ).toHaveCount(1);
   await expect(choices.filter({ hasText: "Nimbly" })).toHaveClass(/is-on/);
   const note = page.locator(".dsel small");
   const feedback = page.locator('[data-action="inc"][data-id$="-feedback"]');
   for (const choice of designChoices) {
     await page.locator(`#design-${choice.id}`).check();
     await expect(choices.filter({ hasText: choice.label })).toHaveClass(/is-on/);
-    await expect(note).toHaveText(choice.note);
+    /* Every design with design hours has its Read more after the note */
+    await expect(note).toHaveText(choice.feedbackId ? `${choice.note} Read more` : choice.note);
     const s = await shown(page);
     const q = quoteOf(s.hash);
-    expect(s.total).toBe(formatHours(q.hours));
+    expect(s.total).toBe(formatHours(q.totalHours));
     /* Its design hours, from its own column of the table */
     expect(s.legend[0]).toBe(hoursLabel(q.designHours));
     /* The package the app gives the estimate with this design */
@@ -141,13 +248,13 @@ test("Design offers AI generated, Nimbly, Custom and None, Nimbly first, each wi
       expect(q.designHours).toBe(0);
       continue;
     }
-    /* Only this design's feedback rounds, starting at the ones included */
+    /* Only this design's feedback rounds: Extra feedback from 0, the included ones in its note, and
+       the estimate holding them all */
     await expect(feedback).toHaveCount(1);
     await expect(feedback).toHaveAttribute("data-id", choice.feedbackId);
     const rounds = getTile(choice.feedbackId);
-    await expect(page.locator(`#qty-${choice.feedbackId}`)).toHaveValue(
-      String(rounds.includedInBase),
-    );
+    await expect(page.locator(`#qty-${choice.feedbackId}`)).toHaveValue("0");
+    expect(q.selection.tiles[choice.feedbackId]).toBe(rounds.includedInBase);
     await expect(page.locator(".basics")).toContainText(rounds.summary);
   }
 });
@@ -934,8 +1041,8 @@ for (const size of SIZES) {
     const steps: [string, () => Promise<unknown>][] = [
       ["Search Advanced", click(page, '[data-action="mode"][data-id="search"][data-qty="2"]')],
       ["Search Simple", click(page, '[data-action="mode"][data-id="search"][data-qty="1"]')],
-      ["Feedback 3", click(page, '[data-action="inc"][data-id="ai-feedback"]')],
-      ["Feedback 2", click(page, '[data-action="dec"][data-id="ai-feedback"]')],
+      ["Extra feedback 1", click(page, '[data-action="inc"][data-id="ai-feedback"]')],
+      ["Extra feedback 0", click(page, '[data-action="dec"][data-id="ai-feedback"]')],
       ["2 blogs", click(page, '[data-action="inc"][data-id="blog-setups"]')],
       ["1 blog", click(page, '[data-action="dec"][data-id="blog-setups"]')],
       [
@@ -1218,14 +1325,20 @@ test("the hours breakdown says what Copy hours copies, the included rounds and v
       line.hours === null ? "" : line.hours === "included" ? "included" : hoursLabel(line.hours),
     ]),
   ]);
+  /* AI design: its discount over the total, which is after it */
+  expect(summary.discount).not.toBeNull();
+  if (summary.discount)
+    want.push([summary.discount.name, `−${hoursLabel(summary.discount.hours)}`]);
   const shown = await panel
     .locator(".line-head, .line:not(.is-total)")
     .evaluateAll((items) =>
       items.map((item) => [...item.children].map((part) => part.textContent ?? "")),
     );
   expect(shown).toEqual(want);
-  expect(shown.flat()).toContain("Variants · 2 designs");
-  expect(shown.flat()).toContain("Feedback · 2 rounds (1 included, 1 extra)");
+  const variants = getTile("ai-design").includedInBase;
+  const rounds = getTile("ai-feedback").includedInBase;
+  expect(shown.flat()).toContain(`Variants · ${variants} designs`);
+  expect(shown.flat()).toContain(`Feedback · ${rounds + 1} rounds (${rounds} included, 1 extra)`);
   await expect(panel.locator(".line.is-total")).toContainText(hoursLabel(summary.total));
 });
 
@@ -1397,7 +1510,7 @@ test("Memberships: a way to sign in, access groups (Enterprise from 3), Social s
     "membership-area-design": 6,
   });
   expect(q.selection.tiles).not.toHaveProperty("membership-social");
-  await expect(page.locator(".big")).toContainText(formatHours(q.hours));
+  await expect(page.locator(".big .now")).toHaveText(hoursLabel(q.totalHours));
   expect(text).toContain("  - Memberships · SSO: ");
   expect(text).toContain("  - Access groups · 3 access groups: ");
   expect(text).toContain("  - Member area: 20h");
@@ -1511,13 +1624,13 @@ test("the site basics always have the kick-off, training and project management 
   );
 });
 
-test("Feedback and Variants say more about themselves while the pointer or the focus is on their name", async ({
+test("Extra feedback and Extra variants say more about themselves while the pointer or the focus is on their name", async ({
   page,
 }) => {
   await open(page);
   for (const [name, says] of [
-    ["Feedback", "One round: the client reviews the design"],
-    ["Variants", "of the AI design hours of this estimate, rounded up"],
+    ["Extra feedback", "One round: the client reviews the design"],
+    ["Extra variants", "of the AI design hours of this estimate, rounded up"],
   ] as const) {
     const trigger = page.locator(".has-info", { hasText: name });
     const card = trigger.locator(".info-pop");
@@ -1532,7 +1645,7 @@ test("Feedback and Variants say more about themselves while the pointer or the f
     await trigger.blur();
   }
   /* The rounds of each design, the chosen one first in weight */
-  const feedback = page.locator(".has-info", { hasText: "Feedback" }).locator(".info-pop");
+  const feedback = page.locator(".has-info", { hasText: "Extra feedback" }).locator(".info-pop");
   await expect(feedback.locator(".info-list > span")).toHaveText(
     designChoices.flatMap((choice) => {
       if (!choice.feedbackId) return [];
@@ -1543,6 +1656,87 @@ test("Feedback and Variants say more about themselves while the pointer or the f
     }),
   );
   await expect(feedback.locator(".is-on")).toContainText("AI generated");
+});
+
+test("Extra feedback and Extra variants count from 0, past the included ones, and the estimate and its link keep them all", async ({
+  page,
+}) => {
+  const rounds = getTile("ai-feedback");
+  const variants = getTile("ai-design");
+  /* A link from when fewer were included: it opens with the ones included now */
+  const ai = setTile(selectionForShape("essential"), "ai-design", true);
+  const older = encodeSelection({
+    ...ai,
+    tiles: { ...ai.tiles, "ai-feedback": 1, "ai-design": 2 },
+  });
+  /* Nothing on it but the basics: no feature to wait for */
+  await page.goto(`/#${older}`);
+  await expect(page.locator(".big")).toBeVisible({ timeout: 15000 });
+  const extraRounds = page.locator("#qty-ai-feedback");
+  const extraVariants = page.locator("#qty-ai-design");
+  await expect(extraRounds).toHaveValue("0");
+  await expect(extraRounds).toHaveAttribute("min", "0");
+  await expect(extraRounds).toHaveAttribute("max", String(rounds.max - rounds.includedInBase));
+  await expect(extraVariants).toHaveValue("0");
+  await expect(page.locator('[data-action="dec"][data-id="ai-feedback"]')).toBeDisabled();
+  let q = quoteOf(await page.evaluate(() => location.hash));
+  expect(q.selection.tiles["ai-feedback"]).toBe(rounds.includedInBase);
+  expect(q.selection.tiles["ai-design"]).toBe(variants.includedInBase);
+  /* Typed or stepped, the field says how many extra; the estimate has the whole number */
+  await extraVariants.fill("2");
+  await page.keyboard.press("Enter");
+  await page.locator('[data-action="inc"][data-id="ai-feedback"]').click();
+  await expect(extraRounds).toHaveValue("1");
+  await expect(extraVariants).toHaveValue("2");
+  q = quoteOf(await page.evaluate(() => location.hash));
+  expect(q.selection.tiles["ai-feedback"]).toBe(rounds.includedInBase + 1);
+  expect(q.selection.tiles["ai-design"]).toBe(variants.includedInBase + 2);
+  const row = (name: string) =>
+    page.locator(".r", { has: page.locator(".tx > b", { hasText: name }) });
+  await expect(row("Extra feedback").locator(".hrs")).toHaveText(
+    hoursLabel(q.lines.find((line) => line.id === "ai-feedback")?.openHours ?? 0),
+  );
+  await expect(row("Extra variants").locator(".hrs")).toHaveText(
+    hoursLabel(q.lines.find((line) => line.id === "ai-variants")?.openHours ?? 0),
+  );
+});
+
+test("Read more tells what each design includes, with the numbers of the rules, in a dialog that Escape closes", async ({
+  page,
+}) => {
+  await page.goto(`/#${encodeSelection(selectionForShape("essential"))}`);
+  await expect(page.locator(".big")).toBeVisible({ timeout: 15000 });
+  const more = page.locator(".dsel .more-link");
+  const dialog = page.locator("dialog.design-more");
+  for (const choice of designChoices) {
+    await page.locator(`#design-${choice.id}`).check();
+    if (!choice.feedbackId) {
+      await expect(more).toHaveCount(0);
+      continue;
+    }
+    await more.click();
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator("h2")).toHaveText(choice.name);
+    const rounds = getTile(choice.feedbackId);
+    await expect(dialog.locator(".dm-steps")).toContainText(
+      `${rounds.includedInBase} feedback rounds`,
+    );
+    await expect(dialog.locator(".dm-extras")).toContainText(
+      `Extra feedback rounds: ${hoursLabel(rounds.build.custom)} each`,
+    );
+    const needs = packageRules.find((rule) => rule.tileId === choice.id)?.package;
+    await expect(dialog.locator(".dm-included")).toHaveText(
+      needs ? `All included. Needs ${packageName[needs]}.` : "All included.",
+    );
+    if (choice.kind === "ai") {
+      const variants = getTile("ai-design").includedInBase;
+      await expect(dialog.locator(".dm-steps")).toContainText(`${variants} design variants`);
+      await expect(dialog.locator(".dm-steps")).toContainText("up to 3 feedback rounds");
+    }
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    await expect(more).toBeFocused();
+  }
 });
 
 test("hover sits on what you press: rows, cards and the shelf callout stay still, stepper signs and options light up", async ({

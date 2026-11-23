@@ -7,7 +7,8 @@
  *   rules          design variants and feedback rounds, the package each design needs, project
  *                  management, languages and website pages
  *   linkCodes      each item's number in a share link, and the order of its options
- *   calcEstimates  the estimates the calculations page compares
+ *   calcEstimates  the calculations page's presets: links from the estimator, each priced with
+ *                  every design
  *
  * Adding an item takes a row in hours.csv (one for each option), an entry in items, and a code in
  * linkCodes: the next after the highest ever given. A code is never reused or changed, and an
@@ -119,17 +120,23 @@ export const config: Config = {
   },
   rules: {
     // AI design variants: how many are included, the most, and each one's share
-    "ai-variants-included": 2,
+    "ai-variants-included": 5,
     "ai-variants-max": 20,
     "ai-variant-percent": 50,
+    // With AI design, this share comes off the estimate's total only, by the package it needs,
+    // rounded down to whole hours; its Design, Build, Content and Project hours stay as they are.
+    // 0 is no discount
+    "ai-discount-essential-percent": 20,
+    "ai-discount-growth-percent": 25,
+    "ai-discount-platform-percent": 30,
     // Feedback rounds of each design: included, hours each, the most
-    "ai-feedback-included": 1,
+    "ai-feedback-included": 3,
     "ai-feedback-each": 3,
     "ai-feedback-max": 20,
-    "nimbly-feedback-included": 1,
+    "nimbly-feedback-included": 3,
     "nimbly-feedback-each": 3,
     "nimbly-feedback-max": 20,
-    "custom-feedback-included": 1,
+    "custom-feedback-included": 3,
     "custom-feedback-each": 5,
     "custom-feedback-max": 20,
     // The package each design needs: empty is any package
@@ -233,13 +240,20 @@ export const config: Config = {
     { id: "kickoff", code: 47, options: [] },
     { id: "training", code: 48, options: [] },
   ],
+  /* Each a link's code from the estimator, made with Nimbly design. The page prices it with every
+     design: AI and Custom take Nimbly's place, with their own feedback rounds and variants */
   calcEstimates: [
-    { name: "Starting estimate", title: "Starting estimate", adds: [] },
-    { name: "Blog and Search", title: "+ Blog and Search", adds: ["blog-setups", "search"] },
-    {
-      name: "Blog, Search and Products",
-      title: "+ Products",
-      adds: ["blog-setups", "search", "product-catalogue"],
-    },
+    /* 3 templates, 7 sections: the estimate the estimator starts with */
+    { title: "Starting estimate", link: "oLZ9I" },
+    /* 4 templates, 10 sections, the Blog */
+    { title: "Blog", link: "qLIK0Pr4" },
+    /* 3 templates, 10 sections, the Blog, 1 custom form, Search, over 30 pages */
+    { title: "Blog, Forms and Search", link: "brYrQVq_w" },
+    /* 4 templates, 16 sections, the Blog, 2 custom forms, Search, over 30 pages, Advanced menu,
+       Blog list, Blog post and Search: Growth */
+    { title: "Advanced Blog, Search and Menu", link: "WrIEFQVq6VI" },
+    /* 5 templates, 18 sections, as above with 3 custom forms, and the Product catalogue (HubDB,
+       Filtered) with Favorite and Related products: Platform */
+    { title: "Products", link: "2rKElUVpKLJpWng" },
   ],
 };

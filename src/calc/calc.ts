@@ -1,5 +1,6 @@
 /* The calculations page: every hour of hours.csv as a sheet, to try other hours and packages and see
-   what they do to the estimates the page compares (config.calcEstimates, with each design).
+   what they do to the estimates the page compares (the presets of config.calcEstimates, each with
+   every design).
 
    Old is the hours.csv the page has: the published one, or on the dev server the one on disk. New
    is Old with the page's edits. The edits live only in the page's address, so a reload keeps them
@@ -7,20 +8,27 @@
    them into src/hours.csv. The page edits hours and packages of the rows there are; the rest of the
    estimator (where items are shown, the rules, link codes) is in src/config.ts. */
 import {
+  aiDiscountShares,
   buildCatalog,
   type Catalog,
   type DesignChoice,
   designChoices,
+  getTile,
   hasTile,
   isSource,
+  optionNotes,
+  ownerOf,
+  packageName,
   placeName,
   places,
   withCatalog,
 } from "../catalog.ts";
 import { config, siteUrl } from "../config.ts";
 import { h, type Kid } from "../dom.ts";
-import { quote, selectionForShape, setTile } from "../quote.ts";
+import { icon } from "../icons.ts";
+import { choiceOf, decodeSelection, quote, selectionForShape, withDesign } from "../quote.ts";
 import {
+  type Config,
   type HoursRow,
   liveHoursText,
   parseHours,
@@ -147,14 +155,15 @@ function writeHash(): void {
 /** Takes the edits of a link's hash, in place of the page's. */
 function applyHash(hash: string): void {
   const { edits, unread } = decodeEdits(hash, config.linkCodes);
+  const live = liveEdits(edits, state.old.read);
   const checked = checkEdits(
-    edits,
+    live.edits,
     state.old.rows,
     state.old.read,
     (some) => typeof tryEdits(some) !== "string",
   );
   state.edits = checked.edits;
-  state.unread = unread + checked.dropped;
+  state.unread = unread + live.dropped + checked.dropped;
   state.typing = null;
   writeHash();
 }
@@ -162,15 +171,46 @@ function applyHash(hash: string): void {
 /** Old changed (the file on disk, or a Save): the edits are checked again. */
 function takeOld(next: Hours): void {
   state.old = next;
+  const live = liveEdits(state.edits, next.read);
   const checked = checkEdits(
-    state.edits,
+    live.edits,
     next.rows,
     next.read,
     (some) => typeof tryEdits(some) !== "string",
   );
   state.edits = checked.edits;
-  state.unread += checked.dropped;
+  state.unread += live.dropped + checked.dropped;
   writeHash();
+}
+
+/* ---------- In development ---------- */
+
+/** What a row in development says while the pointer is on one of its fields. */
+const inDevelopmentNote = "In development: its hours are shown, not edited here.";
+
+/** In development: coming soon, or a part of an item that is, as the estimator shows it locked.
+    The page shows its hours but does not edit them. */
+function inDevelopment(read: readonly Row[], row: Pick<Row, "id" | "status">): boolean {
+  if (row.status === "soon") return true;
+  const owner = ownerOf(row.id);
+  return owner !== undefined && read.some((item) => item.id === owner && item.status === "soon");
+}
+
+/** A link's edits less those of rows in development, which are left out and counted. */
+function liveEdits(
+  edits: readonly Edit[],
+  read: readonly Row[],
+): { edits: Edit[]; dropped: number } {
+  const kept = edits.filter((edit) => {
+    const row = read.find((item) => item.id === edit.id && item.option === edit.option);
+    return !row || !inDevelopment(read, row);
+  });
+  return { edits: kept, dropped: edits.length - kept.length };
+}
+
+/** The tag of what is in development: on its section, item or option, whichever is all of it. */
+function devTag(): HTMLElement {
+  return h("span", { class: "c-dev", title: inDevelopmentNote }, icon("lock"), "In development");
 }
 
 /* ---------- The estimates ---------- */
@@ -193,17 +233,18 @@ type Figures = {
   label: string;
 };
 
-/** An estimate under a catalog: the starting estimate with a design, and what a row of the panel
-    adds, each at what it starts with. */
-function figuresOf(catalog: Catalog, design: DesignChoice, adds: readonly string[]): Figures {
+type Preset = Config["calcEstimates"][number];
+
+/** A preset under a catalog, with a design: its link's estimate, the design in place of the link's,
+    with that design's own feedback rounds and variants. */
+function figuresOf(catalog: Catalog, design: DesignChoice, preset: Preset): Figures {
   return withCatalog(catalog, () => {
-    const start = setTile(selectionForShape("essential"), design.id, true);
-    const selection = adds
-      .filter((id) => hasTile(id))
-      .reduce((made, id) => setTile(made, id, true), start);
-    const result = quote(selection);
+    const linked = decodeSelection(preset.link);
+    if (!linked) throw new Error(`calcEstimates: "${preset.title}" has no estimator link`);
+    const result = quote(withDesign(linked, design.id));
     return {
-      total: result.hours,
+      /* What the estimator gives as the total: with AI design, after its discount */
+      total: result.totalHours,
       design: result.designHours,
       build: result.implementationHours,
       content: result.contentHours,
@@ -219,7 +260,7 @@ function allFigures(catalog: Catalog): Figures[] {
   const known = figureCache.get(catalog);
   if (known) return known;
   const made = config.calcEstimates.flatMap((estimate) =>
-    pricedDesigns.map((design) => figuresOf(catalog, design, estimate.adds)),
+    pricedDesigns.map((design) => figuresOf(catalog, design, estimate)),
   );
   /* Only Old's and the latest New's are worth keeping */
   if (figureCache.size > 4) figureCache.clear();
@@ -231,6 +272,14 @@ const hours = (value: number) => {
   const rounded = Math.round(value * 100) / 100;
   return String(rounded);
 };
+
+/** The AI discount of each package, for the key: none when no package has one. */
+function discountKey(): string | null {
+  const shares = aiDiscountShares();
+  if (shares.every(([, percent]) => percent === 0)) return null;
+  const list = shares.map(([id, percent]) => `${percent}% ${packageName[id]}`).join(", ");
+  return ` · AI's Total is after its discount: ${list}`;
+}
 
 function estimatesCard(newCatalog: Catalog): HTMLElement {
   const olds = allFigures(state.old.catalog);
@@ -244,109 +293,129 @@ function estimatesCard(newCatalog: Catalog): HTMLElement {
     project: "Project",
   };
   let at = 0;
-  const cards = config.calcEstimates.map((estimate) => [
-    h("p", { class: "c-est-row" }, estimate.title),
-    pricedDesigns.map((design) => {
-      const old = olds[at] as Figures;
-      const now = news[at] as Figures;
-      at += 1;
-      const name = `${estimate.title} · ${designShort[design.kind]}`;
-      const shown = kinds.filter(
-        (kind) => kind !== "content" || old.content > 0 || now.content > 0,
-      );
-      const moved = shown.some((kind) => old[kind] !== now[kind]) || old.label !== now.label;
-      const change = now.total - old.total;
-      const percent = old.total > 0 ? Math.round((Math.abs(change) / old.total) * 100) : 0;
-      const sum =
-        change === 0
-          ? h("span", { class: "c-sum is-same", data: { figure: "change" } }, "no change")
-          : h(
-              "span",
-              { class: `c-sum ${change > 0 ? "is-up" : "is-down"}`, data: { figure: "change" } },
-              `${change > 0 ? "▲" : "▼"} ${hours(Math.abs(change))}h `,
-              h("small", null, `${change > 0 ? "+" : "−"}${percent}%`),
-            );
-      const pack =
-        old.label === now.label
-          ? h("span", { class: "c-pk", data: { figure: "package" } }, now.label)
-          : h(
-              "span",
-              { class: "c-pk", data: { figure: "package" } },
-              h("s", null, old.label),
-              " → ",
-              h("b", { class: "c-chg" }, now.label),
-            );
-      const value = (figures: Figures, kind: (typeof kinds)[number]) =>
-        kind === "total" ? `${hours(figures.total)}h` : hours(figures[kind]);
-      const row = (which: "old" | "new", figures: Figures) =>
+  /* Each preset a band: its title, then a card for each design */
+  const sets = config.calcEstimates.map((estimate) =>
+    h("div", { class: "c-set", role: "group", "aria-label": estimate.title }, [
+      h(
+        "p",
+        { class: "c-est-row" },
+        /* The preset as its link has it, in the estimator with the live hours */
         h(
-          "tr",
-          { class: `is-${which}`, data: { row: which } },
-          h("th", { scope: "row" }, which === "old" ? "Old" : "New"),
-          shown.map((kind) =>
+          "a",
+          {
+            href: `../#${estimate.link}`,
+            target: "_blank",
+            rel: "noopener",
+            title: "Open in the estimator",
+          },
+          estimate.title,
+        ),
+      ),
+      pricedDesigns.map((design) => {
+        const old = olds[at] as Figures;
+        const now = news[at] as Figures;
+        at += 1;
+        const name = `${estimate.title} · ${designShort[design.kind]}`;
+        const shown = kinds.filter(
+          (kind) => kind !== "content" || old.content > 0 || now.content > 0,
+        );
+        const moved = shown.some((kind) => old[kind] !== now[kind]) || old.label !== now.label;
+        const change = now.total - old.total;
+        const percent = old.total > 0 ? Math.round((Math.abs(change) / old.total) * 100) : 0;
+        const sum =
+          change === 0
+            ? h("span", { class: "c-sum is-same", data: { figure: "change" } }, "no change")
+            : h(
+                "span",
+                { class: `c-sum ${change > 0 ? "is-up" : "is-down"}`, data: { figure: "change" } },
+                `${change > 0 ? "▲" : "▼"} ${hours(Math.abs(change))}h `,
+                h("small", null, `${change > 0 ? "+" : "−"}${percent}%`),
+              );
+        const pack =
+          old.label === now.label
+            ? h("span", { class: "c-pk", data: { figure: "package" } }, now.label)
+            : h(
+                "span",
+                { class: "c-pk", data: { figure: "package" } },
+                h("s", null, old.label),
+                " → ",
+                h("b", { class: "c-chg" }, now.label),
+              );
+        const value = (figures: Figures, kind: (typeof kinds)[number]) =>
+          kind === "total" ? `${hours(figures.total)}h` : hours(figures[kind]);
+        const row = (which: "old" | "new", figures: Figures) =>
+          h(
+            "tr",
+            { class: `is-${which}`, data: { row: which } },
+            h("th", { scope: "row" }, which === "old" ? "Old" : "New"),
+            shown.map((kind) =>
+              h(
+                "td",
+                {
+                  class: classes(
+                    `k-${kind}`,
+                    which === "new" && old[kind] !== now[kind] && "is-chg",
+                  ),
+                  data: { kind },
+                },
+                value(figures, kind),
+              ),
+            ),
+          );
+        return h(
+          "article",
+          {
+            class: classes("c-est", `d-${design.kind}`, moved && "is-moved"),
+            "aria-label": name,
+            data: { estimate: name },
+          },
+          h(
+            "div",
+            { class: "c-est-top" },
+            /* Shown when the cards stack, with no column heads above them */
+            h("span", { class: "c-est-name" }, designShort[design.kind]),
+            sum,
+            pack,
+          ),
+          h(
+            "table",
+            { class: "c-vs" },
             h(
-              "td",
-              {
-                class: classes(`k-${kind}`, which === "new" && old[kind] !== now[kind] && "is-chg"),
-                data: { kind },
-              },
-              value(figures, kind),
+              "thead",
+              null,
+              h(
+                "tr",
+                null,
+                h("td", null),
+                shown.map((kind) => h("th", { scope: "col", class: `k-${kind}` }, kindName[kind])),
+              ),
+            ),
+            h(
+              "tbody",
+              null,
+              moved ? row("old", old) : null,
+              row("new", now),
+              moved
+                ? h(
+                    "tr",
+                    { class: "is-dif", "aria-hidden": "true" },
+                    h("td", null),
+                    shown.map((kind) => {
+                      const by = now[kind] - old[kind];
+                      return h(
+                        "td",
+                        { class: by > 0 ? "is-up" : by < 0 ? "is-down" : null },
+                        by === 0 ? "" : `${by > 0 ? "▲" : "▼"} ${hours(Math.abs(by))}`,
+                      );
+                    }),
+                  )
+                : null,
             ),
           ),
         );
-      return h(
-        "article",
-        {
-          class: classes("c-est", moved && "is-moved"),
-          "aria-label": name,
-          data: { estimate: name },
-        },
-        h(
-          "div",
-          { class: "c-est-top" },
-          /* Shown when the cards stack, with no column heads above them */
-          h("span", { class: "c-est-name" }, designShort[design.kind]),
-          sum,
-          pack,
-        ),
-        h(
-          "table",
-          { class: "c-vs" },
-          h(
-            "thead",
-            null,
-            h(
-              "tr",
-              null,
-              h("td", null),
-              shown.map((kind) => h("th", { scope: "col", class: `k-${kind}` }, kindName[kind])),
-            ),
-          ),
-          h(
-            "tbody",
-            null,
-            moved ? row("old", old) : null,
-            row("new", now),
-            moved
-              ? h(
-                  "tr",
-                  { class: "is-dif", "aria-hidden": "true" },
-                  h("td", null),
-                  shown.map((kind) => {
-                    const by = now[kind] - old[kind];
-                    return h(
-                      "td",
-                      { class: by > 0 ? "is-up" : by < 0 ? "is-down" : null },
-                      by === 0 ? "" : `${by > 0 ? "▲" : "▼"} ${hours(Math.abs(by))}`,
-                    );
-                  }),
-                )
-              : null,
-          ),
-        ),
-      );
-    }),
-  ]);
+      }),
+    ]),
+  );
   return h(
     "section",
     { class: "c-card c-estimates", "aria-label": "Estimates", data: { keepScroll: "estimates" } },
@@ -364,12 +433,20 @@ function estimatesCard(newCatalog: Catalog): HTMLElement {
       " more hours ",
       h("span", { class: "is-down" }, "▼"),
       " fewer",
+      /* As the estimator gives it: the discount comes off AI design's total only, by its package */
+      discountKey(),
     ),
     h(
       "div",
       { class: "c-grid" },
-      pricedDesigns.map((design) => h("p", { class: "c-est-col" }, designShort[design.kind])),
-      cards,
+      h(
+        "div",
+        { class: "c-heads" },
+        pricedDesigns.map((design) =>
+          h("p", { class: `c-est-col d-${design.kind}` }, designShort[design.kind]),
+        ),
+      ),
+      sets,
     ),
   );
 }
@@ -429,10 +506,25 @@ function otherNote(edit: Edit, old: string): string {
   return `This link changed ${show(edit.was)} → ${show(edit.now)}, but hours.csv has ${show(old)} now. ${show(edit.now)} is used; ↺ puts ${show(old)} back.`;
 }
 
+/** An hours column's classes: its design's tone, and a line before each design's first. */
+function hourTone(column: EditColumn): string {
+  const [design] = column.split("-") as [string];
+  return `c-h d-${design}${column.endsWith("-design") ? " is-design" : ""}`;
+}
+
+/** A row's cells with no hours or package, as an item's with options has: blank, in the columns'
+    tones, so each design's column runs down the sheet unbroken. */
+function blankCells(): Kid[] {
+  return [
+    hourColumns.map((column) => h("td", { class: hourTone(column) })),
+    h("td", { class: "c-pack" }),
+  ];
+}
+
 function hourCell(index: number, row: HoursRow, column: EditColumn): HTMLElement {
   const read = state.old.read[index] as Row;
   const isDesign = column.endsWith("-design");
-  const tone = classes("c-h", isDesign && "is-design");
+  const tone = hourTone(column);
   if (!isEditable(read, column)) {
     return h("td", { class: tone }, h("span", { class: "c-none", title: "Not set" }, "–"));
   }
@@ -442,6 +534,7 @@ function hourCell(index: number, row: HoursRow, column: EditColumn): HTMLElement
   const other = edit && edit.was !== old;
   const typing = state.typing?.focus === `cell ${key}` ? state.typing : null;
   const [design, kind] = column.split("-") as [string, string];
+  const locked = inDevelopment(state.old.read, read);
   return h(
     "td",
     { class: tone },
@@ -463,6 +556,8 @@ function hourCell(index: number, row: HoursRow, column: EditColumn): HTMLElement
         spellcheck: "false",
         "aria-label": `${rowLabel(row)}, ${designOf[design]} ${kind} hours`,
         "aria-invalid": typing?.problem ? "true" : null,
+        disabled: locked,
+        title: locked ? inDevelopmentNote : null,
         data: {
           id: row.id,
           option: row.option,
@@ -491,6 +586,7 @@ function packageCell(index: number, row: HoursRow): HTMLElement {
   const other = edit && edit.was !== old;
   const { name, from } = packageParts(row.package);
   const typing = state.typing?.focus === `from ${key}` ? state.typing : null;
+  const locked = inDevelopment(state.old.read, read);
   const data = { id: row.id, option: row.option, column: "package" };
   return h(
     "td",
@@ -503,6 +599,8 @@ function packageCell(index: number, row: HoursRow): HTMLElement {
         {
           class: classes("c-pick", `is-${name || "any"}`, edit && "is-edited", other && "is-other"),
           "aria-label": `${rowLabel(row)}, package`,
+          disabled: locked,
+          title: locked ? inDevelopmentNote : null,
           data: {
             ...data,
             part: "name",
@@ -531,6 +629,8 @@ function packageCell(index: number, row: HoursRow): HTMLElement {
               spellcheck: "false",
               "aria-label": `${rowLabel(row)}, package from`,
               "aria-invalid": typing?.problem ? "true" : null,
+              disabled: locked,
+              title: locked ? inDevelopmentNote : null,
               data: { ...data, part: "from", lane: "from", focus: `from ${key}` },
             }),
           )
@@ -554,22 +654,36 @@ function rowCells(index: number, row: HoursRow): Kid[] {
   return [hoursCells, packageCell(index, row)];
 }
 
-/** An item's or option's name: with help text, it opens the help on hover or focus. */
-function nameOf(index: number, text: string, help: string): HTMLElement {
-  return help
+/** What the estimator says of a row, word for word, as a new estimate shows it: its item's or
+    option's note, with the build hours of the design a new estimate starts with where it says
+    {build}. The app is where the words come from: the page adds none. Empty when the estimator
+    shows none, or does not show the item. */
+function appNote(catalog: Catalog, row: Pick<HoursRow, "id" | "option">): string {
+  return withCatalog(catalog, () => {
+    if (!hasTile(row.id)) return "";
+    const tile = getTile(row.id);
+    if (tile.hidden) return "";
+    const notes = optionNotes(tile, choiceOf(selectionForShape("essential")));
+    if (!row.option) return notes[0] ?? "";
+    const at = (tile.modes ?? []).findIndex(
+      (mode) => (mode.group ? `${mode.group}: ${mode.label}` : mode.label) === row.option,
+    );
+    return at === -1 ? "" : (notes[at] ?? "");
+  });
+}
+
+/** An item's or option's name: with a note in the estimator, it shows it on hover or focus. */
+function nameOf(index: number, text: string, note: string): HTMLElement {
+  return note
     ? h(
         "span",
-        {
-          class: "c-help",
-          tabindex: "0",
-          data: { help: String(index), focus: `help ${index}` },
-        },
+        { class: "c-help", tabindex: "0", data: { tip: note, focus: `help ${index}` } },
         text,
       )
     : h("span", { class: "c-plain" }, text);
 }
 
-function sheetCard(rows: readonly HoursRow[]): HTMLElement {
+function sheetCard(rows: readonly HoursRow[], catalog: Catalog): HTMLElement {
   const read = state.old.read;
   const body: Kid[] = [];
   const span = String(2 + hourColumns.length);
@@ -578,28 +692,47 @@ function sheetCard(rows: readonly HoursRow[]): HTMLElement {
       .map((row, index) => ({ row, index }))
       .filter(({ row, index }) => read[index]?.place === place && row.id !== fileOnlyId);
     if (own.length === 0) continue;
+    /* In development: striped and locked; the tag on the section, item or option that is all of
+       it */
+    const dev = (index: number) => inDevelopment(read, read[index] as Row);
+    const placeDev = own.every(({ index }) => dev(index));
     body.push(
       h(
         "tr",
-        { class: "c-sec", data: { place } },
-        h("th", { colspan: span, scope: "colgroup" }, placeTitle[place]),
+        { class: classes("c-sec", placeDev && "is-dev"), data: { place } },
+        h(
+          "th",
+          { colspan: span, scope: "colgroup" },
+          h("span", { class: "c-sec-name" }, placeTitle[place]),
+          placeDev ? devTag() : null,
+        ),
       ),
     );
+    /* Every other item on a tone, its options with it, so a row is easy to follow across */
+    let count = 0;
     for (const id of new Set(own.map(({ row }) => row.id))) {
+      const alt = count % 2 === 1 && "is-alt";
+      count += 1;
       const item = own.filter(({ row }) => row.id === id);
       const first = item[0] as { row: HoursRow; index: number };
       const firstRead = read[first.index] as Row;
+      const itemDev = item.every(({ index }) => dev(index));
+      const itemTag = itemDev && !placeDev ? devTag() : null;
       if (!first.row.option) {
         const caption = captionOf(firstRead, false);
         body.push(
           h(
             "tr",
-            { class: "c-row", data: { row: rowLabel(first.row) } },
+            {
+              class: classes("c-row", alt, itemDev && "is-dev"),
+              data: { row: rowLabel(first.row) },
+            },
             h(
               "th",
               { scope: "row", class: "c-item" },
-              nameOf(first.index, first.row.item, first.row.help),
+              nameOf(first.index, first.row.item, appNote(catalog, first.row)),
               caption ? h("small", null, caption) : null,
+              itemTag,
             ),
             rowCells(first.index, first.row),
           ),
@@ -610,14 +743,18 @@ function sheetCard(rows: readonly HoursRow[]): HTMLElement {
       body.push(
         h(
           "tr",
-          { class: "c-row is-head", data: { row: first.row.item } },
+          {
+            class: classes("c-row is-head", alt, itemDev && "is-dev"),
+            data: { row: first.row.item },
+          },
           h(
             "th",
             { scope: "row", class: "c-item" },
             h("span", { class: "c-plain" }, first.row.item),
             caption ? h("small", null, caption) : null,
+            itemTag,
           ),
-          h("td", { colspan: String(hourColumns.length + 1) }),
+          blankCells(),
         ),
       );
       let group = "";
@@ -628,9 +765,9 @@ function sheetCard(rows: readonly HoursRow[]): HTMLElement {
           body.push(
             h(
               "tr",
-              { class: "c-row is-group" },
+              { class: classes("c-row is-group", alt, itemDev && "is-dev") },
               h("th", { scope: "rowgroup", class: "c-item c-opt" }, ownGroup),
-              h("td", { colspan: String(hourColumns.length + 1) }),
+              blankCells(),
             ),
           );
         }
@@ -639,13 +776,20 @@ function sheetCard(rows: readonly HoursRow[]): HTMLElement {
           h(
             "tr",
             {
-              class: classes("c-row", "is-option", ownGroup && "in-group"),
+              class: classes(
+                "c-row",
+                "is-option",
+                ownGroup && "in-group",
+                alt,
+                dev(index) && "is-dev",
+              ),
               data: { row: rowLabel(row) },
             },
             h(
               "th",
               { scope: "row", class: "c-item c-opt" },
-              nameOf(index, named?.[2] ?? row.option, row.help),
+              nameOf(index, named?.[2] ?? row.option, appNote(catalog, row)),
+              dev(index) && !itemDev ? devTag() : null,
             ),
             rowCells(index, row),
           ),
@@ -666,17 +810,21 @@ function sheetCard(rows: readonly HoursRow[]): HTMLElement {
           "tr",
           null,
           h("th", { scope: "col", rowspan: "2", class: "c-item" }, "Item"),
-          ["AI", "Nimbly", "Custom"].map((name) =>
-            h("th", { scope: "colgroup", colspan: "2", class: "c-design" }, name),
+          (["ai", "nimbly", "custom"] as const).map((design) =>
+            h(
+              "th",
+              { scope: "colgroup", colspan: "2", class: `c-design d-${design}` },
+              designOf[design],
+            ),
           ),
           h("th", { scope: "col", rowspan: "2", class: "c-pack" }, "Package"),
         ),
         h(
           "tr",
           null,
-          ["ai", "nimbly", "custom"].flatMap(() => [
-            h("th", { scope: "col", class: "c-h is-design" }, "Design"),
-            h("th", { scope: "col", class: "c-h" }, "Build"),
+          ["ai", "nimbly", "custom"].flatMap((design) => [
+            h("th", { scope: "col", class: `c-h is-design d-${design}` }, "Design"),
+            h("th", { scope: "col", class: `c-h d-${design}` }, "Build"),
           ]),
         ),
       ),
@@ -822,7 +970,7 @@ function draw(): void {
       header(),
       statusLine(),
       state.mode === "local" ? localBar() : null,
-      h("div", { class: "c-layout" }, sheetCard(now.rows), estimatesCard(now.catalog)),
+      h("div", { class: "c-layout" }, sheetCard(now.rows, now.catalog), estimatesCard(now.catalog)),
     ),
   );
   drawing = false;
@@ -978,7 +1126,9 @@ root.addEventListener("keydown", (event) => {
   /* Enter: on to the same column one row down */
   const lane = field.dataset.lane ?? "";
   const all = [
-    ...root.querySelectorAll<HTMLInputElement>(`input[data-lane="${CSS.escape(lane)}"]`),
+    ...root.querySelectorAll<HTMLInputElement>(
+      `input[data-lane="${CSS.escape(lane)}"]:not(:disabled)`,
+    ),
   ];
   const next = all[all.indexOf(field) + 1];
   leave(field);
@@ -1127,36 +1277,10 @@ const tip = h("div", { class: "c-tip", role: "tooltip", id: "c-tip", hidden: tru
 document.body.append(tip);
 let tipFor: HTMLElement | null = null;
 
-/** Help text, with {build} as a chip. */
-function helpText(text: string): Kid[] {
-  return text
-    .split("{build}")
-    .flatMap((part, index) => (index === 0 ? [part] : [h("code", null, "{build}"), part]));
-}
-
 function showTip(anchor: HTMLElement): void {
   if (tipFor === anchor) return;
   hideTip();
-  const index = anchor.dataset.help;
-  if (index !== undefined) {
-    const row = applyEdits(state.old.rows, state.edits)[Number(index)];
-    if (!row) return;
-    tip.replaceChildren(
-      h("p", null, helpText(row.help)),
-      ...(row.help.includes("{build}")
-        ? [
-            h(
-              "p",
-              { class: "c-tip-more" },
-              h("code", null, "{build}"),
-              ` in the app: AI ${row["ai-build"]}h · Nimbly ${row["nimbly-build"]}h · Custom ${row["custom-build"]}h`,
-            ),
-          ]
-        : []),
-    );
-  } else {
-    tip.replaceChildren(h("p", null, anchor.dataset.tip ?? ""));
-  }
+  tip.replaceChildren(h("p", null, anchor.dataset.tip ?? ""));
   tipFor = anchor;
   tip.hidden = false;
   anchor.setAttribute("aria-describedby", "c-tip");
@@ -1176,7 +1300,7 @@ function hideTip(): void {
 }
 
 const tipAnchor = (target: EventTarget | null) =>
-  target instanceof Element ? target.closest<HTMLElement>("[data-help], [data-tip]") : null;
+  target instanceof Element ? target.closest<HTMLElement>("[data-tip]") : null;
 root.addEventListener("mouseover", (event) => {
   const anchor = tipAnchor(event.target);
   if (anchor) showTip(anchor);

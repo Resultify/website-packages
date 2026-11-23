@@ -814,12 +814,56 @@ ul {
   outline: 2px solid var(--chosen);
   outline-offset: 2px;
 }
+/* AI design's discount: a small tilted sticker, on its choice and on the total */
+.deal {
+  display: inline-block;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--tick);
+  font-family: var(--font);
+  font-size: 10px;
+  line-height: 15px;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: 0;
+  color: var(--ink);
+  transform: rotate(4deg);
+}
+/* On the choice's corner, ringed in the column's ground so it reads as stuck on. It takes no width,
+   and lets the press through to the choice */
+.choice .deal {
+  position: absolute;
+  top: -10px;
+  right: -6px;
+  box-shadow: 0 0 0 2px var(--basics);
+  pointer-events: none;
+}
 .dsel small {
   display: block;
   margin-top: 6px;
   font-size: var(--fs-note);
   line-height: 15px;
   color: var(--muted);
+}
+/* Read more after the design's note: a link in the note's line, that opens a dialog */
+.more-link {
+  font: inherit;
+  font-weight: 650;
+  color: var(--chosen);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--chosen) 40%, transparent);
+  text-underline-offset: 2px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.more-link:hover {
+  color: var(--chosen-hover);
+  text-decoration-color: currentColor;
+}
+.more-link:focus-visible {
+  outline: 2px solid var(--chosen);
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 
 /* Header, footer, setup and launch: one line that opens to its three parts */
@@ -1593,6 +1637,72 @@ ul {
   font-style: italic;
   color: var(--faint);
 }
+/* With AI design's discount, a price tag: the total before it struck through beside the total after
+   it, over the sticker. A long total puts it on a line of its own */
+.big.has-was {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 6px 8px;
+}
+.was {
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+  padding-bottom: 2px;
+  font-family: var(--font);
+  letter-spacing: 0;
+}
+.was s {
+  font-size: 18px;
+  line-height: 1;
+  font-weight: 600;
+  color: var(--faint);
+  text-decoration-thickness: 1.5px;
+}
+/* On a line of its own, the sticker beside the old total */
+.big.is-long .was {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+/* Under the price tag, each package's share, drawn as the package card's three dashes: this
+   estimate's in yellow */
+.shares {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  color: var(--faint);
+}
+.shares li {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+.shares i {
+  height: 4px;
+  margin-bottom: 3px;
+  border-radius: 2px;
+  background: var(--dot-empty);
+}
+.shares b {
+  font-size: var(--fs-caption);
+  line-height: 13px;
+  font-weight: 800;
+}
+.shares small {
+  overflow: hidden;
+  font-size: var(--fs-tag);
+  line-height: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shares .is-now {
+  color: var(--ink);
+}
+.shares .is-now i {
+  background: var(--tick);
+}
 .lg {
   display: flex;
   flex-direction: column;
@@ -1804,9 +1914,10 @@ ul {
   color: var(--chosen);
 }
 
-/* ---------- Changelog: a dialog over the page ---------- */
+/* ---------- Changelog and a design's Read more: dialogs over the page ---------- */
 
-.changelog {
+.changelog,
+.design-more {
   width: min(540px, calc(100vw - 32px));
   max-height: min(680px, calc(100vh - 48px));
   padding: 0;
@@ -1816,11 +1927,13 @@ ul {
   color: var(--ink);
   box-shadow: var(--shadow-pop);
 }
-.changelog[open] {
+.changelog[open],
+.design-more[open] {
   display: flex;
   flex-direction: column;
 }
-.changelog::backdrop {
+.changelog::backdrop,
+.design-more::backdrop {
   background: color-mix(in srgb, var(--ink) 36%, transparent);
 }
 .cl-head {
@@ -1899,6 +2012,105 @@ ul {
   color: var(--muted);
 }
 .cl-release li::marker {
+  color: var(--faint);
+}
+
+/* A design's Read more: what it starts from, its steps, numbered down a line, and what more costs */
+.design-more {
+  width: min(480px, calc(100vw - 32px));
+}
+.dm-intro {
+  font-size: var(--fs-sub);
+  line-height: 1.5;
+  color: var(--muted);
+}
+.dm-steps {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+}
+.dm-steps li {
+  position: relative;
+  display: grid;
+  gap: 2px;
+  padding-left: 32px;
+  counter-increment: step;
+}
+.dm-steps li::before {
+  content: counter(step);
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--package-card);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  color: var(--chosen);
+}
+/* The line that ties the steps together, from one number to the next */
+.dm-steps li:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: 26px;
+  bottom: -10px;
+  left: 10.5px;
+  width: 1px;
+  background: var(--line-strong);
+}
+.dm-steps b {
+  font-size: var(--fs-name);
+  line-height: 22px;
+  font-weight: 700;
+}
+.dm-steps span {
+  font-size: var(--fs-sub);
+  line-height: 1.45;
+  color: var(--muted);
+}
+.dm-included {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 8px 10px;
+  border-radius: var(--r-ctl);
+  background: var(--basics);
+  font-size: var(--fs-sub);
+  font-weight: 650;
+}
+.dm-included .ic {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--content);
+}
+.design-more h4 {
+  margin-top: 16px;
+  font-size: var(--fs-caption);
+  line-height: 16px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.dm-extras {
+  display: grid;
+  gap: 4px;
+  margin-top: 6px;
+  padding-left: 18px;
+  list-style: disc;
+  font-size: var(--fs-sub);
+  line-height: 1.45;
+  color: var(--muted);
+}
+.dm-extras li::marker {
   color: var(--faint);
 }
 
@@ -2031,6 +2243,16 @@ ul {
   border-top: 1.5px solid var(--ink);
   font-size: var(--fs-name);
   font-weight: 720;
+}
+/* The AI discount, off the total: over the total's line, apart from the groups */
+.line.is-discount {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  font-weight: 650;
+}
+.line.is-discount + .line.is-total {
+  margin-top: 6px;
 }
 
 /* ---------- Undo for Reset ---------- */
@@ -2184,6 +2406,29 @@ ul {
   }
   .big.is-long {
     font-size: 24px;
+  }
+  /* The narrow sidebar has no room for another line: the price tag takes the place of the Total
+     label, on one line over the total, as a shop's old price sits over the new */
+  .tnum:has(.has-was) .tlabel {
+    display: none;
+  }
+  .big.has-was {
+    flex-direction: column-reverse;
+    align-items: center;
+    gap: 5px;
+  }
+  .was {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    padding: 0;
+  }
+  .was s {
+    font-size: 11px;
+  }
+  /* No room for the packages' shares here, nor in the top bar: the price tag says this one's */
+  .shares {
+    display: none;
   }
   .lg {
     align-self: stretch;
@@ -2356,6 +2601,23 @@ ul {
     font-size: 22px;
     font-style: italic;
     font-weight: 400;
+  }
+  /* The top bar: the Total label back, and the price tag beside the total again, smaller */
+  .tnum:has(.has-was) .tlabel {
+    display: block;
+  }
+  .big.has-was {
+    flex-direction: row;
+    align-items: flex-end;
+    gap: 6px;
+  }
+  .was {
+    display: grid;
+    gap: 3px;
+    padding-bottom: 1px;
+  }
+  .was s {
+    font-size: 15px;
   }
   .lg {
     grid-column: 2;

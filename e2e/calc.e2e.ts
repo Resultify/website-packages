@@ -3,19 +3,20 @@
    mode) or with a 404 (public mode), so a change of the hours in src/ changes none of the numbers.
    Expected hours come from the app's own logic, run here in Node. */
 import { readFile } from "node:fs/promises";
-import { expect, type Page, type Request, test } from "@playwright/test";
+import { expect, type Locator, type Page, type Request, test } from "@playwright/test";
 import {
   buildCatalogFrom,
   type Catalog,
   designChoices,
-  hasTile,
+  getTile,
+  optionNotes,
   placeName,
   places,
   withCatalog,
 } from "../src/catalog.ts";
-import { applyEdits, decodeEdits, fileOnlyId } from "../src/calc/edits.ts";
+import { applyEdits, decodeEdits, encodeEdits, fileOnlyId } from "../src/calc/edits.ts";
 import { config, siteUrl } from "../src/config.ts";
-import { quote, selectionForShape, setTile } from "../src/quote.ts";
+import { choiceOf, decodeSelection, quote, selectionForShape, withDesign } from "../src/quote.ts";
 import { parseHours, rowsFrom, serializeHours } from "../src/table.ts";
 import { fixtureHoursText } from "../test/fixture.ts";
 
@@ -26,17 +27,18 @@ const oldCatalog = buildCatalogFrom(fixtureHoursText, config);
 const withEdits = (hash: string) =>
   serializeHours(applyEdits(oldRows, decodeEdits(hash, config.linkCodes).edits));
 
-/** One of the page's estimates under a catalog. */
-function priced(catalog: Catalog, design: string, adds: readonly string[] = []) {
+/** One of the page's estimates under a catalog: a preset (the first, the starting estimate, unless
+    given) with a design. */
+function priced(catalog: Catalog, design: string, link = config.calcEstimates[0]?.link ?? "") {
   return withCatalog(catalog, () => {
-    const start = setTile(selectionForShape("essential"), design, true);
-    return quote(
-      adds.filter((id) => hasTile(id)).reduce((made, id) => setTile(made, id, true), start),
-    );
+    const linked = decodeSelection(link);
+    if (!linked) throw new Error(`#${link} is not a link`);
+    return quote(withDesign(linked, design));
   });
 }
 const ai = designChoices.find((choice) => choice.kind === "ai")?.id ?? "";
 const nimbly = designChoices.find((choice) => choice.kind === "nimbly")?.id ?? "";
+const custom = designChoices.find((choice) => choice.kind === "custom")?.id ?? "";
 
 type Saved = { edits: { id: string; option: string; column: string; value: string }[] };
 
@@ -93,7 +95,9 @@ test("every row of hours.csv is in the sheet, in the estimator's places and orde
   const shown = await page.evaluate(() =>
     [...document.querySelectorAll(".c-table tbody tr")].flatMap((row) => {
       const element = row as HTMLElement;
-      if (element.classList.contains("c-sec")) return [`# ${element.textContent}`];
+      if (element.classList.contains("c-sec")) {
+        return [`# ${element.querySelector(".c-sec-name")?.textContent}`];
+      }
       return element.dataset.row ? [element.dataset.row] : [];
     }),
   );
@@ -172,6 +176,77 @@ test("a package edit: Page templates need Growth from 3, not 5, and the starting
   await field(page, "Page templates, package").selectOption("");
   await expect(from).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => location.hash)).toBe("#e1.41pg5~n");
+});
+
+test("the estimates: each preset of config.calcEstimates, a row of AI, Nimbly and Custom, its title a link to the estimator", async ({
+  page,
+}) => {
+  await openLocal(page);
+  const titles = page.locator(".c-est-row a");
+  await expect(titles).toHaveText(config.calcEstimates.map((preset) => preset.title));
+  for (const [index, preset] of config.calcEstimates.entries()) {
+    await expect(titles.nth(index)).toHaveAttribute("href", `../#${preset.link}`);
+  }
+  await expect(page.locator(".c-est")).toHaveCount(config.calcEstimates.length * 3);
+  /* The link's estimate with each design: AI and Custom with their own feedback and variants */
+  const last = config.calcEstimates.at(-1);
+  if (!last) return;
+  for (const [short, design] of [
+    ["AI", ai],
+    ["Nimbly", nimbly],
+    ["Custom", custom],
+  ] as const) {
+    const q = priced(oldCatalog, design, last.link);
+    await expect(figure(page, `${last.title} · ${short}`, "new", "total")).toHaveText(
+      `${q.totalHours}h`,
+    );
+    await expect(figure(page, `${last.title} · ${short}`, "new", "design")).toHaveText(
+      String(q.designHours),
+    );
+  }
+});
+
+test("rows in development, as the estimator shows them locked, are striped and not edited: the tag on the section, item or option that is all of it; a link's edits of them are left out", async ({
+  page,
+}) => {
+  await openLocal(page);
+  /* An item coming soon */
+  const crm = page.locator('tr[data-row="CRM Object section"]');
+  await expect(crm).toHaveClass(/is-dev/);
+  await expect(crm.locator(".c-dev")).toHaveText("In development");
+  for (const label of ["AI build hours", "Custom design hours", "package"]) {
+    await expect(field(page, `CRM Object section, ${label}`)).toBeDisabled();
+  }
+  /* An item with options: the tag on the item, each option locked */
+  await expect(page.locator('tr[data-row="Forms with external data"] .c-dev')).toHaveCount(1);
+  await expect(page.locator('tr[data-row="Forms with external data · HubDB"] .c-dev')).toHaveCount(
+    0,
+  );
+  await expect(field(page, "Forms with external data · HubDB, Nimbly design hours")).toBeDisabled();
+  /* A section all in development: the tag on the section only. Access groups is live itself, but a
+     part of Memberships, which is coming soon */
+  await expect(page.locator('tr.c-sec[data-place="membership"] .c-dev')).toHaveText(
+    "In development",
+  );
+  const groups = page.locator('tr[data-row="Access groups"]');
+  await expect(groups).toHaveClass(/is-dev/);
+  await expect(groups.locator(".c-dev")).toHaveCount(0);
+  await expect(field(page, "Access groups, Custom build hours")).toBeDisabled();
+  /* What is live is edited as ever, and Enter skips what is locked */
+  await expect(page.locator('tr[data-row="HubDB section"]')).not.toHaveClass(/is-dev/);
+  await expect(field(page, "HubDB section, AI build hours")).toBeEnabled();
+  await field(page, "HubDB section, AI build hours").press("Enter");
+  await expect(field(page, "Blogs, AI build hours")).toBeFocused();
+
+  /* A link with an edit of each: the live one is kept, the other left out and counted */
+  const live = decodeEdits("e1.42d4~6", config.linkCodes).edits;
+  const locked = { id: "crm-section", option: "", column: "ai-build", was: "0", now: "5" } as const;
+  const hash = encodeEdits([...live, locked], config.linkCodes);
+  await openLocal(page, `#${hash}`);
+  await expect(page.locator(".c-status")).toContainText("1 edit, kept in this page's link");
+  await expect(page.locator(".c-status")).toContainText("1 of this link could not be used");
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe("#e1.42d4~6");
+  await expect(field(page, "CRM Object section, AI build hours")).toHaveValue("0");
 });
 
 test("typing: a value the cell cannot take is not kept, Escape puts the value back, Enter goes down a row", async ({
@@ -306,31 +381,54 @@ test("published, with no dev server: no Save and no local bar, and the edits sti
   await expect(field(page, "Menu · Simple, AI design hours")).toHaveClass(/is-edited/);
 });
 
-test("help text opens on hover and on keyboard focus, with what {build} is in the app", async ({
+test("the help on a name is the estimator's note word for word, as a new estimate shows it, and nothing more", async ({
   page,
 }) => {
   await openLocal(page);
+  /* What the estimator says, from its own code: a new estimate's design fills {build} */
+  const appSays = (catalog: Catalog, id: string, option = 0) =>
+    withCatalog(catalog, () => {
+      const choice = choiceOf(selectionForShape("essential"));
+      return optionNotes(getTile(id), choice)[option];
+    });
   const tip = page.getByRole("tooltip");
-  await page.locator(".c-help", { hasText: "Page templates" }).hover();
-  await expect(tip).toBeVisible();
-  await expect(tip).toHaveText(
-    "{build}h each to build{build} in the app: AI 2h · Nimbly 2h · Custom 2h",
-  );
+  /* Hovered where it is: a scroll closes a help, as on the page, so a name further down is
+     scrolled to first, then hovered */
+  const hoverReads = async (anchor: Locator, text: string) => {
+    await anchor.scrollIntoViewIfNeeded();
+    await expect(async () => {
+      await page.mouse.move(0, 0);
+      await anchor.hover();
+      await expect(tip).toHaveText(text, { timeout: 500 });
+    }).toPass();
+  };
+  const templates = page.locator(".c-help", { hasText: "Page templates" });
+  await hoverReads(templates, appSays(oldCatalog, "templates") ?? "");
+  /* {build} is Nimbly's build hours, as in the estimator */
+  await expect(tip).toHaveText("2h each to build");
   const sections = page.locator(".c-help", { hasText: "Sections" });
   await sections.focus();
-  await expect(tip).toContainText("Hero, cards, quote, FAQ and more.");
-  await expect(tip).toContainText("{build} in the app: AI 5h · Nimbly 4h · Custom 4h");
+  await expect(tip).toHaveText(appSays(oldCatalog, "sections") ?? "");
+  await expect(tip).toHaveText("Hero, cards, quote, FAQ and more. 4h each");
   await expect(sections).toHaveAttribute("aria-describedby", "c-tip");
   await page.keyboard.press("Escape");
   await expect(tip).toBeHidden();
-  /* An item with options has its help on each option, none on its name */
+  /* An item with options has its note on each option, none on its name */
   await expect(page.locator('tr[data-row="Menu"] .c-help')).toHaveCount(0);
-  await page.locator('tr[data-row="Menu · Simple"] .c-help').hover();
-  await expect(tip).toHaveText("One level, touch-friendly on mobile");
-  /* The help follows the edits */
+  await hoverReads(
+    page.locator('tr[data-row="Menu · Advanced"] .c-help'),
+    appSays(oldCatalog, "menu", 1) ?? "",
+  );
+  /* An option with no note of its own: the estimator says its item's, and so does the page */
+  await hoverReads(
+    page.locator('tr[data-row="Forms with external data · External API"] .c-help'),
+    appSays(oldCatalog, "external-forms", 1) ?? "",
+  );
+  /* The help follows the edits of the hours it shows, and only those */
   await field(page, "Page templates, AI build hours").fill("7");
-  await page.locator(".c-help", { hasText: "Page templates" }).hover();
-  await expect(tip).toContainText("AI 7h · Nimbly 2h · Custom 2h");
+  await hoverReads(templates, "2h each to build");
+  await field(page, "Page templates, Nimbly build hours").fill("3");
+  await hoverReads(templates, "3h each to build");
 });
 
 test("at 1440×900 the estimates sit beside the sheet and stay in view while it scrolls, with no sideways scroll", async ({
@@ -351,7 +449,27 @@ test("at 1440×900 the estimates sit beside the sheet and stay in view while it 
   const head = await page.locator(".c-table thead").boundingBox();
   expect(Math.round(head?.y ?? -1)).toBe(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  /* Each preset's cards side by side here, each within its card; where the panel is narrower they
+     stack, still within */
+  const columns = () =>
+    page.evaluate(
+      () =>
+        getComputedStyle(document.querySelector(".c-set")!).gridTemplateColumns.split(" ").length,
+    );
+  const spill = () =>
+    page.evaluate(
+      () =>
+        [...document.querySelectorAll(".c-est")].filter(
+          (card) => card.scrollWidth > card.clientWidth,
+        ).length,
+    );
+  expect(await columns()).toBe(3);
+  expect(await spill()).toBe(0);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await expect.poll(columns).toBe(1);
+  expect(await spill()).toBe(0);
   /* On a phone the page still never scrolls sideways: the sheet scrolls in its card */
   await page.setViewportSize({ width: 390, height: 800 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  expect(await spill()).toBe(0);
 });

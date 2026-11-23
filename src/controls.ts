@@ -1,5 +1,6 @@
 /* State, actions and the controls of the page. Hours and rules come only from quote.ts. */
 import {
+  aiDiscountShares,
   catalogueId,
   defaultWebsitePages,
   designChoices,
@@ -114,9 +115,13 @@ export function designFor(result: Quote, ...ids: string[]): number {
 
 /* Controls */
 
-export function stepper(tile: Tile, qty: number, locked = false): HTMLElement {
+/** A number field with − and +. With `extra`, it shows only what is past the included ones, from 0
+    (Extra feedback, Extra variants): the estimate keeps the whole number, as its link does, so a
+    change of how many are included never changes what a link means. */
+export function stepper(tile: Tile, qty: number, locked = false, extra = false): HTMLElement {
   const wrap = el("div", locked ? "stepper is-locked" : "stepper");
-  const noun = tile.unit ?? tile.label;
+  const from = extra ? tile.includedInBase : 0;
+  const noun = `${extra ? "extra " : ""}${tile.unit ?? tile.label}`;
   /* Units repeat (Page templates, Landing templates, the blog's List and Post template counts are
      all templates), so a screen reader hears whose they are too */
   const whose = noun.toLowerCase() === tile.label.toLowerCase() ? "" : ` (${tile.label})`;
@@ -127,13 +132,14 @@ export function stepper(tile: Tile, qty: number, locked = false): HTMLElement {
   input.id = `qty-${tile.id}`;
   input.type = "number";
   input.inputMode = "numeric";
-  input.min = String(tile.min);
-  input.max = String(tile.max);
+  input.min = String(tile.min - from);
+  input.max = String(tile.max - from);
   input.step = String(tile.step);
-  input.value = String(qty);
+  input.value = String(qty - from);
   input.disabled = locked;
   input.dataset.action = "qty";
   input.dataset.id = tile.id;
+  if (from > 0) input.dataset.from = String(from);
   input.dataset.focus = `qty-${tile.id}`;
   input.setAttribute("aria-label", `${noun}${whose}`);
   const inc = btn("step-btn", "+", { action: "inc", id: tile.id, focus: `inc-${tile.id}` });
@@ -260,6 +266,17 @@ export function designChoice(result: Quote, id: string, label: string): HTMLElem
   input.dataset.action = "design";
   input.dataset.focus = `design-${value}`;
   wrap.append(input, el("span", "choice-name", label));
+  /* AI design's discount, as a sticker on its corner: the most a package gets, "up to" when the
+     packages' shares differ. It changes no width, so the four choices keep theirs. Read as words,
+     after the name */
+  const shares = aiDiscountShares().map(([, percent]) => percent);
+  const most = Math.max(...shares);
+  if (designChoices.find((choice) => choice.id === id)?.kind === "ai" && most > 0) {
+    const upTo = shares.some((percent) => percent !== most) ? "up to " : "";
+    const deal = el("span", "deal", `${upTo}−${formatHours(most)}%`);
+    deal.setAttribute("aria-hidden", "true");
+    wrap.append(deal, el("span", "vh", `(${upTo}${formatHours(most)}% discount)`));
+  }
   return wrap;
 }
 
@@ -551,8 +568,17 @@ export type SummaryGroup = {
 };
 /** What Copy hours and Hours breakdown say, the one as text and the other on the page: the package
     and tier, then Design (always, with the design chosen), Build, Content and Project with each
-    line, and the total. */
-export type HoursSummary = { title: string; groups: SummaryGroup[]; total: number };
+    line, the AI discount when there is one, and the total after it. */
+export type HoursSummary = {
+  title: string;
+  groups: SummaryGroup[];
+  /** Off the total: its name, and the hours it takes off. */
+  discount: { name: string; hours: number } | null;
+  total: number;
+};
+
+/** The hours a discount takes off, with a minus sign. */
+export const minusHours = (hours: number) => `−${hoursLabel(hours)}`;
 
 export function hoursSummary(result: Quote): HoursSummary {
   const design = designOf(result.selection);
@@ -583,7 +609,13 @@ export function hoursSummary(result: Quote): HoursSummary {
   return {
     title: `${result.label} package · Content Hub ${editionLabel[result.edition]}`,
     groups,
-    total: result.hours,
+    discount: result.discount
+      ? {
+          name: `AI design discount · ${formatHours(result.discount.percent)}%`,
+          hours: result.discount.hours,
+        }
+      : null,
+    total: result.totalHours,
   };
 }
 
@@ -598,6 +630,9 @@ export function hoursText(result: Quote): string {
     for (const line of group.lines) {
       out.push(`  - ${line.name}${line.hours === null ? "" : `: ${lineValue(line.hours)}`}`);
     }
+  }
+  if (summary.discount) {
+    out.push(`- ${summary.discount.name}: ${minusHours(summary.discount.hours)}`);
   }
   out.push(`- Total: ${hoursLabel(summary.total)}`);
   return out.join("\n");
@@ -619,6 +654,14 @@ export function breakdownList(result: Quote): HTMLElement {
       li.append(el("span", undefined, line.name), el("span", "line-hours", lineValue(line.hours)));
       list.append(li);
     }
+  }
+  if (summary.discount) {
+    const discount = el("li", "line is-discount");
+    discount.append(
+      el("span", undefined, summary.discount.name),
+      el("span", "line-hours", minusHours(summary.discount.hours)),
+    );
+    list.append(discount);
   }
   const total = el("li", "line is-total");
   total.append(el("span", undefined, "Total"), el("span", "line-hours", hoursLabel(summary.total)));
@@ -667,7 +710,8 @@ export function bindActions(app: HTMLElement): void {
       commit(setTile(selection, input.value, true));
       return;
     }
-    const qty = Number(input.value);
+    /* A field of extras shows the number past the included ones: the estimate keeps the whole */
+    const qty = Number(input.value) + Number(input.dataset.from ?? 0);
     const id = input.dataset.id;
     if (!Number.isFinite(qty) || !id) return;
     if (input.dataset.action === "hours") commit(setQuantity(selection, id, qty));
