@@ -1,13 +1,17 @@
 # Changelog
 
-## [0.3.0](https://github.com/Resultify/website-packages/compare/v0.2.0...v0.3.0) (2026-11-23)
-
+## 0.3.0 (2026-11-23)
 
 ### New
 
-* add design Read more, AI discount by package, and calc presets, tones and locked dev rows ([c69fd59](https://github.com/Resultify/website-packages/commit/c69fd59a1c598946e298431d26681231c0a65566))
-* add the calculations page with share-link edits, an estimates panel and save to src/hours.csv ([fc732b5](https://github.com/Resultify/website-packages/commit/fc732b59c0aa577c9a06bbc9bc91b0732261607a))
-* replace the three csv files with src/hours.csv and src/config.ts, and retire the calc page ([657ed79](https://github.com/Resultify/website-packages/commit/657ed796f10f45c3b850746daece3c10bec9996e))
+- AI generated design takes a share off the total, by package: 20% with Essential, 25% with Growth and 30% with Platform. The total shows the hours before it struck through, and Copy hours and the Hours breakdown list it on a line of its own.
+- Read more, in the note of AI generated, Nimbly and Custom: what the design includes, step by step, the feedback rounds and variants that come with it, what more of them cost, and the package it needs.
+- A calculations page for the team that sets the hours: change an item's hours or package and see what it does to fifteen example estimates, before and after, with AI generated, Nimbly and Custom design. Share the changes as a link, or download them as a file that opens in Google Sheets. What is still in development is shown locked.
+
+### Changed
+
+- Every design includes 3 feedback rounds, and AI generated 5 variants. Extra feedback and Extra variants count only the ones added on top, from 0.
+- New hours for most items: less build time, most of all with AI generated design and in the Product catalogue, and 2h of design for Setup and launch with AI generated and Nimbly. The starting estimate is now 40h with AI generated (was 66h), 75h with Nimbly (was 79h) and 125h with Custom (was 137h).
 
 ## 0.2.0 (2026-11-19)
 
