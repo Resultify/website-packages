@@ -1,16 +1,18 @@
 /* What the dev server does for the calculations page: give src/hours.csv, and save edits to it once
-   the app can read the result, only for the page on this machine. Works on a copy of the file in a
-   folder of its own. */
+   the app can read the result, only for the page on this machine. Works on a folder of its own with
+   the frozen hours of test/fixtures as its file, so a Save from the page never changes what these
+   tests expect. */
 import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Server } from "bun";
 import { hoursPath, hoursRoute, mayWrite, type SavedEdit, saveEdits } from "../src/calc/api.ts";
-import { liveHoursText, parseHours } from "../src/table.ts";
+import { parseHours } from "../src/table.ts";
+import { fixtureHoursText } from "./fixture.ts";
 
 const folders: string[] = [];
-async function copyOfRepo(text = liveHoursText): Promise<string> {
+async function copyOfRepo(text = fixtureHoursText): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "parcel-api-"));
   folders.push(root);
   await Bun.write(join(root, hoursPath), text);
@@ -42,14 +44,14 @@ describe("reading the file", () => {
     const response = await hoursRoute(root).GET();
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(await response.json()).toEqual({ hours: liveHoursText });
+    expect(await response.json()).toEqual({ hours: fixtureHoursText });
   });
 });
 
 describe("saving edits", () => {
   test("sets the cells and writes the file in the app's layout", async () => {
     /* Written another way (CRLF line ends): saved as the file is always written */
-    const root = await copyOfRepo(liveHoursText.replaceAll("\n", "\r\n"));
+    const root = await copyOfRepo(fixtureHoursText.replaceAll("\n", "\r\n"));
     const edits: SavedEdit[] = [
       { id: "menu", option: "Simple", column: "ai-design", value: "4" },
       { id: "templates", option: "", column: "package", value: "growth from 3" },
@@ -61,7 +63,7 @@ describe("saving edits", () => {
     expect(cell(saved, "menu", "Simple", "ai-design")).toBe("4");
     expect(cell(saved, "templates", "", "package")).toBe("growth from 3");
     /* Every other line as it was */
-    const before = liveHoursText.split("\n");
+    const before = fixtureHoursText.split("\n");
     const after = saved.split("\n");
     expect(after.filter((line, index) => line !== before[index])).toHaveLength(2);
   });
@@ -88,7 +90,7 @@ describe("saving edits", () => {
     expect(
       await refused({ id: "menu", option: "Advanced", column: "package", value: "growth from 2" }),
     ).toContain('no "from"');
-    expect(await onDisk(root)).toBe(liveHoursText);
+    expect(await onDisk(root)).toBe(fixtureHoursText);
     const response = await hoursRoute(root).POST(
       post(JSON.stringify({ edits: [{ id: "menu", option: "", column: "ai-build", value: "1" }] })),
       fromThisMachine,
@@ -97,7 +99,7 @@ describe("saving edits", () => {
   });
 
   test("refuses to save into a file the app cannot read", async () => {
-    const broken = liveHoursText.replace("id,item,", "id,name,");
+    const broken = fixtureHoursText.replace("id,item,", "id,name,");
     const root = await copyOfRepo(broken);
     const response = await hoursRoute(root).POST(
       post(
@@ -131,7 +133,7 @@ describe("saving edits", () => {
       expect(response.status).toBe(400);
       expect(await response.json()).toEqual({ error: "No edits were sent" });
     }
-    expect(await onDisk(root)).toBe(liveHoursText);
+    expect(await onDisk(root)).toBe(fixtureHoursText);
   });
 
   test("another device is refused before anything is read", async () => {
