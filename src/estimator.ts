@@ -11,6 +11,7 @@ import {
   clientDesignPercent,
   currentCatalog,
   type DesignChoice,
+  type DiscountBand,
   designChoices,
   managementPercent,
   editionLabel,
@@ -1587,7 +1588,7 @@ function dots(result: Quote): { unit: number; blocks: HTMLElement[] } {
 }
 
 /** With AI design's discount, a price tag: the total before it, struck through, and a sticker
-    with the hours it takes off, beside the total after it. */
+    with its share, beside the total after it. The hours off are on the discount's line, under it. */
 function wasTotal(result: Quote): HTMLElement | null {
   const discount = result.discount;
   if (!discount) return null;
@@ -1596,44 +1597,35 @@ function wasTotal(result: Quote): HTMLElement | null {
     { class: "was" },
     h("span", { class: "vh" }, `, after the ${formatHours(discount.percent)}% AI discount of`),
     h("s", null, hoursLabel(result.hours)),
-    h("span", { class: "deal", "aria-hidden": "true" }, `−${hoursLabel(discount.hours)}`),
+    h("span", { class: "deal", "aria-hidden": "true" }, `−${formatHours(discount.percent)}%`),
   );
 }
 
 /** The discount curve's width, in the wide sidebar's pixels: the curve is drawn between 6 and 56
     down, the hours under it */
 const curveWidth = 172;
+const [curveTop, curveBottom] = [6, 56];
 
-/** The discount curve's drawing, its marks given as SVG text. */
-function curveSvg(marks: string): SVGSVGElement {
+/** A drawing of the discount curve, its marks given as SVG text. */
+function curveSvg(className: string, viewBox: string, marks: string): SVGSVGElement {
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("viewBox", `0 -8 ${curveWidth} 82`);
+  if (className) svg.setAttribute("class", className);
+  svg.setAttribute("viewBox", viewBox);
   svg.setAttribute("aria-hidden", "true");
   svg.innerHTML = marks;
   return svg;
 }
 
-/** With AI design's discount, under the price tag, its real share by an estimate's hours: a curve
-    from the first band's share, rising toward the last band's (dashed), yellow up to this
-    estimate, its dot labelled with its share and the hours off. None when every band has the same
-    share: the button's sticker says it all. Without a discount (another design), its place is kept,
-    unseen, so switching to or from AI design moves nothing under it. */
-function discountCurve(result: Quote): HTMLElement | null {
-  const discount = result.discount;
-  const bands = aiDiscountBands();
+/** AI design's discount by an estimate's hours, from 0h to `span` across the curve's width: its
+    real share, from the first band's at the bottom up to the last band's at the top. */
+function curveScale(span: number, bands: readonly DiscountBand[]) {
   const low = bands[0]?.percent ?? 0;
   const high = bands.at(-1)?.percent ?? 0;
-  if (high === low) return null;
-  if (!discount) {
-    return placeholder(h("div", { class: "curve" }, curveSvg(""), h("p", null, " ")));
-  }
-  /* From 0h to twice where the last band starts, or past this estimate, by 50h */
-  const span = Math.max(2 * (bands.at(-1)?.from ?? 0), Math.ceil(result.hours / 50) * 50);
-  const [width, top, bottom] = [curveWidth, 6, 56];
-  const x = (hours: number) => ((hours / span) * width).toFixed(1);
+  const x = (hours: number) => ((hours / span) * curveWidth).toFixed(1);
   const share = (hours: number) => (hours === 0 ? low : discountShare(hours, bands) / hours);
   const y = (hours: number) =>
-    (bottom - ((share(hours) - low) / (high - low)) * (bottom - top)).toFixed(1);
+    (curveBottom - ((share(hours) - low) / (high - low)) * (curveBottom - curveTop)).toFixed(1);
+  /** The curve from 0h up to `to` hours, as an SVG path */
   const path = (to: number) => {
     const steps = Array.from({ length: 41 }, (_, step) => (step * span) / 40);
     const at = [...new Set([...steps, ...bands.map((band) => band.from), to])]
@@ -1641,37 +1633,97 @@ function discountCurve(result: Quote): HTMLElement | null {
       .sort((a, b) => a - b);
     return `M${at.map((hours) => `${x(hours)} ${y(hours)}`).join(" L")}`;
   };
+  return { x, y, path };
+}
+
+/** In store.open while the AI discount's details are open. */
+const discountOpen = "ai-discount-open";
+
+/** With AI design's discount, its line over the total's parts, as it comes off the total, not off
+    a part: its name, a small curve of its real share by an estimate's hours, yellow up to this
+    estimate, and the hours it takes off. A click on it opens its details under it: the whole
+    curve, from the first band's share toward the last band's (dashed), its dot labelled with this
+    estimate's share and hours off. They stay open while AI design does, and close with another
+    design. With the same share in every band there is no curve: the sticker says it all. Without
+    a discount (another design) its place is kept, unseen, so switching to or from AI design moves
+    nothing; with no share in any band there is none. */
+function discountLine(result: Quote): HTMLElement | null {
+  const discount = result.discount;
+  const bands = aiDiscountBands();
+  const low = bands[0]?.percent ?? 0;
+  const high = bands.at(-1)?.percent ?? 0;
+  if (high === 0) return null;
+  const name = "AI discount";
+  const label = h("span", { class: "disc-name" }, name);
+  if (!discount) {
+    /* Back on AI design, the details wait to be opened again */
+    store.open.delete(discountOpen);
+    return placeholder(
+      h("li", { class: "disc" }, h("div", { class: "disc-head" }, label, h("b", null, "0h"))),
+    );
+  }
+  const off = h("b", null, `−${hoursLabel(discount.hours)}`);
+  if (high === low) return h("li", { class: "disc" }, h("div", { class: "disc-head" }, label, off));
+  /* From 0h to twice where the last band starts, or past this estimate, by 50h */
+  const span = Math.max(2 * (bands.at(-1)?.from ?? 0), Math.ceil(result.hours / 50) * 50);
+  const { x, y, path } = curveScale(span, bands);
+  const width = curveWidth;
+  const marks = `<path class="track" d="${path(span)}"/><path class="reach" d="${path(result.hours)}"/>`;
+  /* The small curve: the details', squeezed into the line, its strokes kept as thick */
+  const spark = curveSvg(
+    "spark",
+    `0 ${curveTop - 2} ${width} ${curveBottom - curveTop + 4}`,
+    marks,
+  );
+  spark.setAttribute("preserveAspectRatio", "none");
   const dot = (result.hours / span) * width;
   const anchor = dot < 34 ? "start" : dot > width - 34 ? "end" : "middle";
   const labelX = anchor === "start" ? 0 : anchor === "end" ? width : dot;
   /* The label over the dot, or under it where it would touch the dashed line */
   const dotY = Number(y(result.hours));
-  const labelY = dotY - 19 < top ? dotY + 16 : dotY - 9;
-  const label = `${formatHours(discount.percent)}% · −${hoursLabel(discount.hours)}`;
-  const svg = curveSvg(
+  const labelY = dotY - 19 < curveTop ? dotY + 16 : dotY - 9;
+  const share = `${formatHours(discount.percent)}%`;
+  const curve = curveSvg(
+    "",
+    `0 -8 ${width} 82`,
     [
       `<text x="0" y="9">${high}%</text>`,
-      `<line class="cap" x1="24" y1="${top}" x2="${width}" y2="${top}"/>`,
-      `<path class="track" d="${path(span)}"/>`,
-      `<path class="reach" d="${path(result.hours)}"/>`,
+      `<line class="cap" x1="24" y1="${curveTop}" x2="${width}" y2="${curveTop}"/>`,
+      marks,
       `<circle class="here" cx="${x(result.hours)}" cy="${y(result.hours)}" r="4.5"/>`,
-      `<text class="val" x="${labelX.toFixed(1)}" y="${labelY.toFixed(1)}" text-anchor="${anchor}">${label}</text>`,
+      `<text class="val" x="${labelX.toFixed(1)}" y="${labelY.toFixed(1)}" text-anchor="${anchor}">${share} · −${hoursLabel(discount.hours)}</text>`,
       `<text x="0" y="70">0h</text>`,
       `<text x="${width / 2}" y="70" text-anchor="middle">${span / 2}h</text>`,
       `<text x="${width}" y="70" text-anchor="end">${span}h</text>`,
     ].join(""),
   );
-  const grows = `The share grows with the hours, toward ${high}%`;
-  return h(
-    "div",
-    {
-      class: "curve",
-      role: "img",
-      "aria-label": `AI discount: ${formatHours(discount.percent)}% of ${hoursLabel(result.hours)}, ${hoursLabel(discount.hours)} off. ${grows}`,
-    },
-    svg,
-    h("p", null, `Grows with the hours, toward ${high}%`),
+  const details = h(
+    "details",
+    { open: store.open.has(discountOpen) },
+    h(
+      "summary",
+      { class: "disc-head", data: { focus: "ai-discount" } },
+      label,
+      icon("chevron", "ic chev"),
+      spark,
+      off,
+    ),
+    h(
+      "div",
+      {
+        class: "curve",
+        role: "img",
+        "aria-label": `${name}: ${share} of ${hoursLabel(result.hours)}, ${hoursLabel(discount.hours)} off. The share grows with the hours, toward ${high}%`,
+      },
+      curve,
+      h("p", null, `Grows with the hours, toward ${high}%`),
+    ),
   );
+  details.addEventListener("toggle", () => {
+    if (details.open) store.open.add(discountOpen);
+    else store.open.delete(discountOpen);
+  });
+  return h("li", { class: "disc" }, details);
 }
 
 function total(result: Quote): HTMLElement {
@@ -1696,10 +1748,10 @@ function total(result: Quote): HTMLElement {
         h("span", { class: "now" }, formatHours(result.totalHours), h("small", null, "h")),
         was,
       ),
-      discountCurve(result),
       h(
         "ul",
         { class: "lg" },
+        discountLine(result),
         h("li", { class: "d" }, "Design", h("b", null, hoursLabel(result.designHours))),
         h("li", { class: "b" }, "Build", h("b", null, hoursLabel(result.implementationHours))),
         h("li", { class: "c" }, "Content", h("b", null, hoursLabel(result.contentHours))),

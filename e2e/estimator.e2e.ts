@@ -92,7 +92,8 @@ const shown = (page: Page) =>
   page.evaluate(() => ({
     hash: location.hash,
     total: document.querySelector(".big .now")?.firstChild?.textContent,
-    legend: [...document.querySelectorAll(".lg b")].map((b) => b.textContent),
+    /* The total's parts: not the AI discount's line over them */
+    legend: [...document.querySelectorAll(".lg li:not(.disc) b")].map((b) => b.textContent),
     head: [...document.querySelectorAll(".est .sh .hrs.sum > span")].map(
       (s) => s.lastChild?.textContent,
     ),
@@ -138,28 +139,39 @@ test("with AI design the total is after its discount, a price tag with the total
     const big = page.locator(".big");
     await expect(big.locator(".now")).toHaveText(hoursLabel(q.totalHours));
     await expect(big.locator(".was s")).toHaveText(hoursLabel(q.hours));
-    /* The sticker: the hours off */
-    await expect(big.locator(".was .deal")).toHaveText(`−${hoursLabel(hours)}`);
+    /* The sticker: its share */
+    await expect(big.locator(".was .deal")).toHaveText(`−${percent}%`);
     await expect(big.locator(".was .deal")).toBeVisible();
-    await expect(page.locator(".lg b")).toHaveText(
+    await expect(page.locator(".lg li:not(.disc) b")).toHaveText(
       [q.designHours, q.implementationHours, q.contentHours, q.projectHours].map(hoursLabel),
     );
-    /* The curve under it, its dot with the share and the hours off; only where the sidebar is
-       wide */
-    const curve = page.locator(".curve");
+    /* Its line over the parts, with the hours off; only where the sidebar is wide. A click on it
+       opens its details under it: the curve, its dot with the share and the hours off */
+    const line = page.locator(".lg .disc");
     if (size.width > 1340) {
       const high = aiDiscountBands().at(-1)?.percent;
-      await expect(curve.locator("text.val")).toHaveText(`${percent}% · −${hoursLabel(hours)}`);
+      await expect(line).toBeVisible();
+      await expect(page.locator(".lg li").first()).toHaveClass("disc");
+      const head = line.locator("summary");
+      await expect(head.locator("b")).toHaveText(`−${hoursLabel(hours)}`);
+      await expect(head.locator(".spark")).toBeVisible();
+      const curve = line.locator(".curve");
+      await expect(curve).toBeHidden();
+      await head.click();
+      await expect(curve).toBeVisible();
       await expect(curve).toHaveAttribute(
         "aria-label",
         `AI discount: ${percent}% of ${hoursLabel(q.hours)}, ${hoursLabel(hours)} off. The share grows with the hours, toward ${high}%`,
       );
+      await expect(curve.locator("text.val")).toHaveText(`${percent}% · −${hoursLabel(hours)}`);
       await expect(curve.locator("p")).toHaveText(`Grows with the hours, toward ${high}%`);
-    } else await expect(curve).toBeHidden();
+      await head.click();
+      await expect(curve).toBeHidden();
+    } else await expect(line).toBeHidden();
     /* All of it inside the sidebar or the top bar */
     const inside = await page.evaluate(() => {
       const side = document.querySelector(".side")!.getBoundingClientRect();
-      return [".big .was", ".curve"].every((selector) => {
+      return [".big .was", ".lg .disc"].every((selector) => {
         const box = document.querySelector(selector)!.getBoundingClientRect();
         return box.width === 0 || (box.left >= side.left && box.right <= side.right);
       });
@@ -172,10 +184,42 @@ test("with AI design the total is after its discount, a price tag with the total
   expect(nimbly.discount).toBeNull();
   await expect(page.locator(".big .now")).toHaveText(hoursLabel(nimbly.hours));
   await expect(page.locator(".big .was")).toHaveCount(0);
-  await expect(page.locator(".curve")).toBeHidden();
+  await expect(page.locator(".lg .disc")).toBeHidden();
+  await expect(page.locator(".lg .disc details")).toHaveCount(0);
 });
 
-test("switching between AI generated, Nimbly and Custom moves nothing: the curve's and Extra variants' places are kept, with nothing in them to reach or find", async ({
+test("the AI discount's details open on a click, not the pointer, and stay open while the estimate changes with AI design; another design closes them", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await open(page);
+  const head = page.locator(".lg .disc summary");
+  const curve = page.locator(".lg .disc .curve");
+  await head.hover();
+  await expect(curve).toBeHidden();
+  await head.click();
+  await expect(curve).toBeVisible();
+  /* The estimate changes and the page is drawn again: still open, its dot further on */
+  const dot = curve.locator(".here");
+  const before = Number(await dot.getAttribute("cx"));
+  await page.locator('[data-action="inc"][data-id="sections"]').click();
+  await expect.poll(async () => Number(await dot.getAttribute("cx"))).toBeGreaterThan(before);
+  await expect(curve).toBeVisible();
+  await page.locator('[data-action="inc"][data-id="templates"]').click();
+  await expect(curve).toBeVisible();
+  /* Another design closes them; back on AI design, they wait to be opened again */
+  await page.locator("#design-nimbly-design").check();
+  await expect(page.locator(".lg .disc")).toBeHidden();
+  await page.locator("#design-ai-design").check();
+  await expect(head).toBeVisible();
+  await expect(curve).toBeHidden();
+  /* The keyboard opens them too */
+  await head.focus();
+  await page.keyboard.press("Enter");
+  await expect(curve).toBeVisible();
+});
+
+test("switching between AI generated, Nimbly and Custom moves nothing: the AI discount line's and Extra variants' places are kept, with nothing in them to reach or find", async ({
   page,
 }) => {
   for (const size of [{ width: 1440, height: 900 }, LAPTOP, { width: 390, height: 844 }]) {
@@ -250,7 +294,8 @@ test("AI design's discount grows with the hours, not the package: a package that
     await expect(page.locator(".big .now")).toHaveText(hoursLabel(q.totalHours), {
       timeout: 15000,
     });
-    await expect(page.locator(".big .was .deal")).toHaveText(
+    await expect(page.locator(".big .was .deal")).toHaveText(`−${discount?.percent}%`);
+    await expect(page.locator(".lg .disc summary b")).toHaveText(
       `−${hoursLabel(discount?.hours ?? 0)}`,
     );
     await expect(page.locator(".curve text.val")).toHaveText(

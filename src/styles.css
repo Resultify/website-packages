@@ -1666,9 +1666,8 @@ ul {
   align-items: center;
   gap: 6px;
 }
-/* Under the price tag, the discount's real share by an estimate's hours: a curve rising toward
-   the last band's share (dashed), yellow up to this estimate, and its dot with its share and
-   hours off */
+/* The AI discount's details: its real share by an estimate's hours, a curve rising toward the last
+   band's share (dashed), yellow up to this estimate, and its dot with its share and hours off */
 .curve svg {
   display: block;
   width: 100%;
@@ -1691,16 +1690,20 @@ ul {
   stroke-dasharray: 2 3;
 }
 .curve .track,
-.curve .reach {
+.curve .reach,
+.spark .track,
+.spark .reach {
   fill: none;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-.curve .track {
+.curve .track,
+.spark .track {
   stroke: color-mix(in srgb, var(--faint) 40%, var(--bg));
   stroke-width: 2;
 }
-.curve .reach {
+.curve .reach,
+.spark .reach {
   stroke: var(--tick);
   stroke-width: 4;
 }
@@ -1714,6 +1717,20 @@ ul {
   font-size: var(--fs-tag);
   line-height: 13px;
   color: var(--faint);
+}
+/* The small curve on the discount's line: squeezed, its strokes as thin as drawn */
+.spark {
+  overflow: visible;
+}
+.spark .track,
+.spark .reach {
+  vector-effect: non-scaling-stroke;
+}
+.spark .track {
+  stroke-width: 1.5;
+}
+.spark .reach {
+  stroke-width: 3;
 }
 .lg {
   display: flex;
@@ -1758,6 +1775,71 @@ ul {
 }
 .lg .p b {
   color: var(--project);
+}
+/* AI design's discount, over the parts, a hairline under it: it comes off the total, not off a
+   part. A yellow marker, the small curve, the hours off. A click opens its details under it, the
+   chevron turned; the small curve gives way to the whole one, its place kept */
+.lg .disc {
+  display: block;
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+}
+.lg .disc::before {
+  content: none;
+}
+.disc-head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.disc-head::before {
+  content: "";
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  background: var(--tick);
+}
+.lg .disc summary {
+  list-style: none;
+  cursor: pointer;
+}
+.lg .disc summary::-webkit-details-marker {
+  display: none;
+}
+/* The line has 5px to spare in the wide sidebar: the name and its chevron keep their width, and the
+   small curve gives some up to hours off of three figures */
+.disc-name {
+  white-space: nowrap;
+}
+.lg .disc .chev {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  margin-left: -3px;
+}
+.lg .disc details[open] .chev {
+  transform: rotate(90deg);
+}
+.lg .disc summary:hover .chev,
+.lg .disc summary:focus-visible .chev {
+  color: var(--ink);
+}
+.lg .disc .spark {
+  flex: 0 1 30px;
+  min-width: 0;
+  height: 12px;
+  margin-left: auto;
+}
+.lg .disc .spark + b {
+  margin-left: 6px;
+}
+.lg .disc details[open] .spark {
+  visibility: hidden;
+}
+.lg .disc .curve {
+  padding: 12px 0 2px;
 }
 .hgrid {
   display: grid;
@@ -2440,8 +2522,9 @@ ul {
   .was s {
     font-size: 11px;
   }
-  /* No room for the discount's curve here, nor in the top bar: the price tag says the hours off */
-  .curve {
+  /* No room for the discount's line here, nor in the top bar: the price tag says its share, and
+     the totals the hours off. Its place goes with it, so nothing moves */
+  .lg .disc {
     display: none;
   }
   .lg {
