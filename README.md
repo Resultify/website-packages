@@ -146,18 +146,20 @@ hours; its feedback rounds and the package it needs are in the `rules` of
   cost less than a smaller one. Each band's share is at least the one
   before's. The discount's percent is its real share of the hours before that
   rounding, rounded down: 30.9h of 128h is 24%, so never under the first
-  band's. Design, Build, Content and Project keep their hours, and only the
-  total is less. Its button has a sticker with the first band's share ("from
-  −20%"; just "−20%" when every band has the same, none when the first has
-  none). The Total panel shows the total after it large, with the one before
-  it struck through beside it and a sticker with its share ("−22%"). In the
-  wide sidebar only, the first line over Design, Build, Content and Project
-  is "AI discount" with a small curve and the hours off ("−22h"); with
-  another design its place stays empty, so switching moves nothing. A click
-  on it opens its details under it: the real share by the estimate's hours
-  (from 0h to twice where the last band starts), rising toward the last
-  band's share, yellow up to this estimate, and its dot labelled "22% ·
-  −22h". They stay open while the estimate changes with AI design, and close
+  band's, and at least 1% when it takes hours off (a first band of 0% and
+  later ones of 1% would round 1h off 150h down to 0%). Design, Build,
+  Content and Project keep their hours, and only the total is less. Its
+  button has a sticker with the first band's share ("from −20%"; just "−20%"
+  when every band has the same, none when the first has none). The Total
+  panel shows the total after it large, with the one before it struck
+  through beside it and a sticker with its share ("−22%"). In the wide
+  sidebar only, the first line over Design, Build, Content and Project is
+  "AI discount" with a small curve and the hours off ("−22h"); with another
+  design its place stays empty, so switching moves nothing. A click on it
+  opens its details under it: the real share by the estimate's hours (from
+  0h to twice where the last band starts, or past this estimate to the next
+  50h), rising toward the last band's share, yellow up to this estimate, and
+  its dot labelled "22% · −22h". They stay open while the estimate changes with AI design, and close
   when another design is chosen. Copy hours and the Hours breakdown list
   "AI design discount · 22%: −22h" over the total. The calculations page's AI
   totals are after it, and its key lists the bands
