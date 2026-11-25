@@ -81,9 +81,11 @@ export const config: Config = {
     "ai-variant-percent": 50,
     // No AI discount, as before there was one: the pricing tests keep their totals, and a test
     // that wants one sets it in a draft
-    "ai-discount-essential-percent": 0,
-    "ai-discount-growth-percent": 0,
-    "ai-discount-platform-percent": 0,
+    "ai-discount-percent": 0,
+    "ai-discount-band-2-from": 50,
+    "ai-discount-band-2-percent": 0,
+    "ai-discount-band-3-from": 100,
+    "ai-discount-band-3-percent": 0,
     // Feedback rounds of each design: included, hours each, the most
     "ai-feedback-included": 1,
     "ai-feedback-each": 3,

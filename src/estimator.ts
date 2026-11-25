@@ -5,7 +5,7 @@
    and fields drawn here carry data-action, data-id and data-focus, so bindActions handles them. Copy
    hours, Share link and Reset with Undo are the client's (PageState). */
 import {
-  aiDiscountShares,
+  aiDiscountBands,
   catalogueId,
   catalogueSources,
   clientDesignPercent,
@@ -62,6 +62,7 @@ import {
   aiVariantCost,
   choiceOf,
   designOf,
+  discountShare,
   managementLineId,
   isIn,
   isBlocked,
@@ -168,6 +169,19 @@ function stack(texts: readonly string[], active: number): HTMLElement {
 function reserved<T extends Element>(node: T, unused: boolean): T {
   if (unused) node.classList.add("reserved");
   return node;
+}
+
+/** A copy of what another choice shows, there only to keep its place: unseen, inert, hidden from
+    screen readers, and with no data, id or label for the page or a test to find. */
+function placeholder<T extends Element>(node: T): T {
+  for (const element of [node, ...node.querySelectorAll("*")]) {
+    for (const name of element.getAttributeNames()) {
+      if (/^(data-|id$|for$|name$|aria-)/.test(name)) element.removeAttribute(name);
+    }
+  }
+  node.setAttribute("aria-hidden", "true");
+  node.setAttribute("inert", "");
+  return reserved(node, true);
 }
 
 /** Design over Build, the same column everywhere. A row that never has design hours keeps one line:
@@ -503,19 +517,20 @@ function designPart(result: Quote): HTMLElement[] {
       }),
     );
   }
-  if (chosen.kind === "ai") {
-    const variants = getTile("ai-design");
-    out.push(
-      row({
-        lead: icon("variants"),
-        name: "Extra variants",
-        info: { id: "variants", content: variantsInfo(result) },
-        note: `${variants.includedInBase} included, then ${hoursLabel(aiVariantCost(result))} each`,
-        control: stepper(variants, tiles["ai-design"] ?? variants.initial, false, true),
-        hours: hrs(null, lineHours(result, "ai-variants")),
-      }),
-    );
-  }
+  const variants = getTile("ai-design");
+  const variantsRow = (ai: boolean) =>
+    row({
+      lead: icon("variants"),
+      name: "Extra variants",
+      info: ai ? { id: "variants", content: variantsInfo(result) } : undefined,
+      note: `${variants.includedInBase} included, then ${hoursLabel(aiVariantCost(result))} each`,
+      control: stepper(variants, tiles["ai-design"] ?? variants.initial, false, true),
+      hours: hrs(null, lineHours(result, "ai-variants")),
+    });
+  if (chosen.kind === "ai") out.push(variantsRow(true));
+  /* Nimbly and Custom keep Extra variants' place, unseen, so switching to or from AI design moves
+     nothing under it. Its copy has nothing to reach, read or find */
+  else if (feedbackId) out.push(placeholder(variantsRow(false)));
   return out;
 }
 
@@ -1571,40 +1586,91 @@ function dots(result: Quote): { unit: number; blocks: HTMLElement[] } {
   return { unit, blocks };
 }
 
-/** With AI design's discount, a price tag: the total before it, struck through, and the button's
-    sticker, beside the total after it. */
+/** With AI design's discount, a price tag: the total before it, struck through, and a sticker
+    with the hours it takes off, beside the total after it. */
 function wasTotal(result: Quote): HTMLElement | null {
   const discount = result.discount;
   if (!discount) return null;
-  const percent = formatHours(discount.percent);
   return h(
     "span",
     { class: "was" },
-    h("span", { class: "vh" }, `, after the ${percent}% AI discount of`),
+    h("span", { class: "vh" }, `, after the ${formatHours(discount.percent)}% AI discount of`),
     h("s", null, hoursLabel(result.hours)),
-    h("span", { class: "deal", "aria-hidden": "true" }, `−${percent}%`),
+    h("span", { class: "deal", "aria-hidden": "true" }, `−${hoursLabel(discount.hours)}`),
   );
 }
 
-/** With AI design's discount, each package's share under the total, drawn as the package card's
-    three dashes, this estimate's in yellow: a bigger site gets a bigger share. */
-function discountShares(result: Quote): HTMLElement | null {
+/** The discount curve's width, in the wide sidebar's pixels: the curve is drawn between 6 and 56
+    down, the hours under it */
+const curveWidth = 172;
+
+/** The discount curve's drawing, its marks given as SVG text. */
+function curveSvg(marks: string): SVGSVGElement {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", `0 -8 ${curveWidth} 82`);
+  svg.setAttribute("aria-hidden", "true");
+  svg.innerHTML = marks;
+  return svg;
+}
+
+/** With AI design's discount, under the price tag, its real share by an estimate's hours: a curve
+    from the first band's share, rising toward the last band's (dashed), yellow up to this
+    estimate, its dot labelled with its share and the hours off. None when every band has the same
+    share: the button's sticker says it all. Without a discount (another design), its place is kept,
+    unseen, so switching to or from AI design moves nothing under it. */
+function discountCurve(result: Quote): HTMLElement | null {
   const discount = result.discount;
-  if (!discount) return null;
+  const bands = aiDiscountBands();
+  const low = bands[0]?.percent ?? 0;
+  const high = bands.at(-1)?.percent ?? 0;
+  if (high === low) return null;
+  if (!discount) {
+    return placeholder(h("div", { class: "curve" }, curveSvg(""), h("p", null, " ")));
+  }
+  /* From 0h to twice where the last band starts, or past this estimate, by 50h */
+  const span = Math.max(2 * (bands.at(-1)?.from ?? 0), Math.ceil(result.hours / 50) * 50);
+  const [width, top, bottom] = [curveWidth, 6, 56];
+  const x = (hours: number) => ((hours / span) * width).toFixed(1);
+  const share = (hours: number) => (hours === 0 ? low : discountShare(hours, bands) / hours);
+  const y = (hours: number) =>
+    (bottom - ((share(hours) - low) / (high - low)) * (bottom - top)).toFixed(1);
+  const path = (to: number) => {
+    const steps = Array.from({ length: 41 }, (_, step) => (step * span) / 40);
+    const at = [...new Set([...steps, ...bands.map((band) => band.from), to])]
+      .filter((hours) => hours <= to)
+      .sort((a, b) => a - b);
+    return `M${at.map((hours) => `${x(hours)} ${y(hours)}`).join(" L")}`;
+  };
+  const dot = (result.hours / span) * width;
+  const anchor = dot < 34 ? "start" : dot > width - 34 ? "end" : "middle";
+  const labelX = anchor === "start" ? 0 : anchor === "end" ? width : dot;
+  /* The label over the dot, or under it where it would touch the dashed line */
+  const dotY = Number(y(result.hours));
+  const labelY = dotY - 19 < top ? dotY + 16 : dotY - 9;
+  const label = `${formatHours(discount.percent)}% · −${hoursLabel(discount.hours)}`;
+  const svg = curveSvg(
+    [
+      `<text x="0" y="9">${high}%</text>`,
+      `<line class="cap" x1="24" y1="${top}" x2="${width}" y2="${top}"/>`,
+      `<path class="track" d="${path(span)}"/>`,
+      `<path class="reach" d="${path(result.hours)}"/>`,
+      `<circle class="here" cx="${x(result.hours)}" cy="${y(result.hours)}" r="4.5"/>`,
+      `<text class="val" x="${labelX.toFixed(1)}" y="${labelY.toFixed(1)}" text-anchor="${anchor}">${label}</text>`,
+      `<text x="0" y="70">0h</text>`,
+      `<text x="${width / 2}" y="70" text-anchor="middle">${span / 2}h</text>`,
+      `<text x="${width}" y="70" text-anchor="end">${span}h</text>`,
+    ].join(""),
+  );
+  const grows = `The share grows with the hours, toward ${high}%`;
   return h(
-    "ul",
-    { class: "shares", "aria-label": "AI discount by package" },
-    aiDiscountShares().map(([id, percent]) => {
-      const now = id === discount.packageId;
-      return h(
-        "li",
-        { class: now ? "is-now" : null, "aria-current": now ? "true" : null },
-        h("i", { "aria-hidden": "true" }),
-        h("b", null, percent > 0 ? `−${formatHours(percent)}%` : "0%"),
-        " ",
-        h("small", null, packageName[id]),
-      );
-    }),
+    "div",
+    {
+      class: "curve",
+      role: "img",
+      "aria-label": `AI discount: ${formatHours(discount.percent)}% of ${hoursLabel(result.hours)}, ${hoursLabel(discount.hours)} off. ${grows}`,
+    },
+    svg,
+    h("p", null, `Grows with the hours, toward ${high}%`),
   );
 }
 
@@ -1630,7 +1696,7 @@ function total(result: Quote): HTMLElement {
         h("span", { class: "now" }, formatHours(result.totalHours), h("small", null, "h")),
         was,
       ),
-      discountShares(result),
+      discountCurve(result),
       h(
         "ul",
         { class: "lg" },

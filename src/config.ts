@@ -22,7 +22,7 @@ export const siteUrl = "https://resultify.github.io/website-packages/";
 export const config: Config = {
   items: {
     templates: { place: "basics", unit: "templates", start: 3, max: 50 },
-    sections: { place: "basics", unit: "sections", start: 7, max: 100 },
+    sections: { place: "basics", unit: "sections", start: 10, max: 100 },
     menu: { place: "basics", options: { Simple: { start: 1 } } },
     header: { place: "basics" },
     footer: { place: "basics" },
@@ -123,12 +123,16 @@ export const config: Config = {
     "ai-variants-included": 5,
     "ai-variants-max": 20,
     "ai-variant-percent": 50,
-    // With AI design, this share comes off the estimate's total only, by the package it needs,
-    // rounded down to whole hours; its Design, Build, Content and Project hours stay as they are.
-    // 0 is no discount
-    "ai-discount-essential-percent": 20,
-    "ai-discount-growth-percent": 25,
-    "ai-discount-platform-percent": 30,
+    // With AI design, a share of the estimate's hours comes off its total only, in bands: this
+    // share of its first hours, then each band's share of the hours from where it starts. They are
+    // added up and rounded down to whole hours, so more hours never cost less. Its Design, Build,
+    // Content and Project hours stay as they are. A band's share is at least the one before it;
+    // 0 in every band is no discount
+    "ai-discount-percent": 20,
+    "ai-discount-band-2-from": 50,
+    "ai-discount-band-2-percent": 25,
+    "ai-discount-band-3-from": 100,
+    "ai-discount-band-3-percent": 30,
     // Feedback rounds of each design: included, hours each, the most
     "ai-feedback-included": 3,
     "ai-feedback-each": 3,
@@ -243,8 +247,8 @@ export const config: Config = {
   /* Each a link's code from the estimator, made with Nimbly design. The page prices it with every
      design: AI and Custom take Nimbly's place, with their own feedback rounds and variants */
   calcEstimates: [
-    /* 3 templates, 7 sections: the estimate the estimator starts with */
-    { title: "Starting estimate", link: "oLZ9I" },
+    /* 3 templates, 10 sections: the estimate the estimator starts with */
+    { title: "Starting estimate", link: "ELYrS" },
     /* 4 templates, 10 sections, the Blog */
     { title: "Blog", link: "qLIK0Pr4" },
     /* 3 templates, 10 sections, the Blog, 1 custom form, Search, over 30 pages */

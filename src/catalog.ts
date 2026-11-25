@@ -512,6 +512,10 @@ type PageRule = {
   steps: readonly { edition: Edition; at: number }[];
 };
 
+/** A band of AI design's discount: its share, in percent, of an estimate's hours from `from` on,
+    up to where the next band starts. */
+export type DiscountBand = { from: number; percent: number };
+
 export type Catalog = {
   tiles: readonly Tile[];
   byId: ReadonlyMap<string, Tile>;
@@ -520,8 +524,9 @@ export type Catalog = {
   pages: PageRule;
   /** Extra AI variants: this share of the AI design hours each, in percent. */
   variantPercent: number;
-  /** With AI design, this share comes off the estimate's total, in percent, by its package. */
-  aiDiscountPercent: Readonly<Record<PackageId, number>>;
+  /** With AI design, a share of the estimate's hours comes off its total: each band's of the hours
+      in it. */
+  aiDiscountBands: readonly DiscountBand[];
   /** Project management: this share of the estimate's design, build and content hours, in percent, whatever the
       design. */
   managementPercent: number;
@@ -1175,18 +1180,34 @@ function rule(rules: Rules, name: RuleName): number {
   return value;
 }
 
-/** The AI discount of each package: a share of the total, so 0 to 100. */
-function discountRules(rules: Rules): Record<PackageId, number> {
-  const percent = (name: RuleName) => {
-    const value = rule(rules, name);
-    if (value > 100) throw new Error(`Rule ${name} must be 0 to 100. It is ${value}`);
-    return value;
-  };
-  return {
-    essential: percent("ai-discount-essential-percent"),
-    growth: percent("ai-discount-growth-percent"),
-    platform: percent("ai-discount-platform-percent"),
-  };
+/** The AI discount's bands, the first from 0h. Each starts past the one before, and its share is
+    0 to 100, at least the one before's: the share of an estimate's hours only grows with them. */
+function discountRules(rules: Rules): DiscountBand[] {
+  const bands: DiscountBand[] = [];
+  const steps = [
+    { from: null, percent: "ai-discount-percent" },
+    { from: "ai-discount-band-2-from", percent: "ai-discount-band-2-percent" },
+    { from: "ai-discount-band-3-from", percent: "ai-discount-band-3-percent" },
+  ] as const;
+  for (const step of steps) {
+    const before = bands.at(-1);
+    const from = step.from ? rule(rules, step.from) : 0;
+    if (step.from && before && from <= before.from) {
+      const after = before.from === 0 ? "above 0" : "past the band before";
+      throw new Error(
+        `Rule ${step.from} must be more than ${before.from}: ${after}. It is ${from}`,
+      );
+    }
+    const percent = rule(rules, step.percent);
+    const least = before?.percent ?? 0;
+    if (percent < least || percent > 100) {
+      throw new Error(
+        `Rule ${step.percent} must be ${least} to 100: at least the band before. It is ${percent}`,
+      );
+    }
+    bands.push({ from, percent });
+  }
+  return bands;
 }
 
 /** A quantity of rounds or variants: so many included, each one past them costs `each`. */
@@ -1482,7 +1503,7 @@ export function buildCatalog(
     packageRules,
     pages: pageRule(rules),
     variantPercent: rule(rules, "ai-variant-percent"),
-    aiDiscountPercent: discountRules(rules),
+    aiDiscountBands: discountRules(rules),
     managementPercent: rule(rules, "pm-percent"),
     clientDesignPercent: rule(rules, "pm-none-design-percent"),
     codes: merged,
@@ -1664,15 +1685,9 @@ export function clientDesignPercent(): number {
   return active.clientDesignPercent;
 }
 
-/** With AI design: the share that comes off the total of an estimate of this package, in percent.
-    0 is none. */
-export function aiDiscountPercent(packageId: PackageId): number {
-  return active.aiDiscountPercent[packageId];
-}
-
-/** With AI design: each package's share of the total, in percent, Essential's first. */
-export function aiDiscountShares(): [PackageId, number][] {
-  return (Object.keys(packageName) as PackageId[]).map((id) => [id, aiDiscountPercent(id)]);
+/** With AI design: the discount's bands, the first from 0h. 0 in every band is none. */
+export function aiDiscountBands(): readonly DiscountBand[] {
+  return active.aiDiscountBands;
 }
 
 /** One variant beyond the included ones: a share of the base design, rounded up to a whole hour. */

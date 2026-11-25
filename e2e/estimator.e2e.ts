@@ -3,8 +3,7 @@
 import { expect, type Page, test } from "@playwright/test";
 import { appName, currentRelease, releases } from "../src/changelog.ts";
 import {
-  aiDiscountPercent,
-  aiDiscountShares,
+  aiDiscountBands,
   buildCatalogFrom,
   clientDesignPercent,
   designChoices,
@@ -27,6 +26,7 @@ import {
   shelfLanes,
 } from "../src/controls.ts";
 import {
+  aiDiscount,
   decodeSelection,
   encodeSelection,
   formatHours,
@@ -129,34 +129,37 @@ test("with AI design the total is after its discount, a price tag with the total
     await page.setViewportSize(size);
     await open(page);
     const q = quoteOf(await page.evaluate(() => location.hash));
-    /* Its package's share */
-    expect(q.discount?.packageId).toBe(q.shape);
-    const percent = q.discount?.percent ?? 0;
-    expect(percent).toBe(aiDiscountPercent(q.discount?.packageId ?? "essential"));
-    expect(percent).toBeGreaterThan(0);
-    expect(q.totalHours).toBe(q.hours - (q.discount?.hours ?? 0));
+    /* Its share by its hours, whatever the package */
+    const discount = aiDiscount(q.hours);
+    expect(discount).not.toBeNull();
+    expect(q.discount).toEqual(discount);
+    const { percent, hours } = discount ?? { percent: 0, hours: 0 };
+    expect(q.totalHours).toBe(q.hours - hours);
     const big = page.locator(".big");
     await expect(big.locator(".now")).toHaveText(hoursLabel(q.totalHours));
     await expect(big.locator(".was s")).toHaveText(hoursLabel(q.hours));
-    await expect(big.locator(".was .deal")).toHaveText(`−${percent}%`);
+    /* The sticker: the hours off */
+    await expect(big.locator(".was .deal")).toHaveText(`−${hoursLabel(hours)}`);
     await expect(big.locator(".was .deal")).toBeVisible();
     await expect(page.locator(".lg b")).toHaveText(
       [q.designHours, q.implementationHours, q.contentHours, q.projectHours].map(hoursLabel),
     );
-    /* Each package's share under it, this one's marked; only where the sidebar is wide */
-    const shares = page.locator(".shares");
+    /* The curve under it, its dot with the share and the hours off; only where the sidebar is
+       wide */
+    const curve = page.locator(".curve");
     if (size.width > 1340) {
-      await expect(shares.locator("li")).toHaveText(
-        aiDiscountShares().map(([id, share]) => `−${share}% ${packageName[id]}`),
+      const high = aiDiscountBands().at(-1)?.percent;
+      await expect(curve.locator("text.val")).toHaveText(`${percent}% · −${hoursLabel(hours)}`);
+      await expect(curve).toHaveAttribute(
+        "aria-label",
+        `AI discount: ${percent}% of ${hoursLabel(q.hours)}, ${hoursLabel(hours)} off. The share grows with the hours, toward ${high}%`,
       );
-      await expect(shares.locator('li[aria-current="true"]')).toHaveText(
-        `−${percent}% ${packageName[q.discount?.packageId ?? "essential"]}`,
-      );
-    } else await expect(shares).toBeHidden();
+      await expect(curve.locator("p")).toHaveText(`Grows with the hours, toward ${high}%`);
+    } else await expect(curve).toBeHidden();
     /* All of it inside the sidebar or the top bar */
     const inside = await page.evaluate(() => {
       const side = document.querySelector(".side")!.getBoundingClientRect();
-      return [".big .was", ".shares"].every((selector) => {
+      return [".big .was", ".curve"].every((selector) => {
         const box = document.querySelector(selector)!.getBoundingClientRect();
         return box.width === 0 || (box.left >= side.left && box.right <= side.right);
       });
@@ -169,17 +172,69 @@ test("with AI design the total is after its discount, a price tag with the total
   expect(nimbly.discount).toBeNull();
   await expect(page.locator(".big .now")).toHaveText(hoursLabel(nimbly.hours));
   await expect(page.locator(".big .was")).toHaveCount(0);
-  await expect(page.locator(".shares")).toHaveCount(0);
+  await expect(page.locator(".curve")).toBeHidden();
 });
 
-test("AI design's discount follows the package: the price tag and the shares under it say Essential's, Growth's or Platform's; the button, the most", async ({
+test("switching between AI generated, Nimbly and Custom moves nothing: the curve's and Extra variants' places are kept, with nothing in them to reach or find", async ({
   page,
 }) => {
-  const most = Math.max(...aiDiscountShares().map(([, share]) => share));
+  for (const size of [{ width: 1440, height: 900 }, LAPTOP, { width: 390, height: 844 }]) {
+    await page.setViewportSize(size);
+    await open(page);
+    const places: Record<string, number[]> = {};
+    for (const id of ["ai-design", "nimbly-design", "custom-design"]) {
+      await page.locator(`#design-${id}`).check();
+      await expect(page.locator(`.choice.is-on #design-${id}`)).toHaveCount(1);
+      places[id] = await page.evaluate(() =>
+        [
+          ".big .now",
+          ".lg",
+          ".hgrid",
+          '[data-focus="act-copy"]',
+          '[data-focus="qty-templates"]',
+          ".est",
+        ].map((selector) => {
+          const node = document.querySelector(selector);
+          if (!node) return -1;
+          /* The total's number: where its baseline is, as an empty mark on it says. Its box is
+             not: a line in one design, a flex item beside the price tag in another */
+          if (selector === ".big .now") {
+            const mark = document.createElement("span");
+            mark.style.cssText = "display: inline-block; width: 0; height: 0";
+            node.append(mark);
+            const baseline = mark.getBoundingClientRect().top;
+            mark.remove();
+            return Math.round(baseline);
+          }
+          return Math.round(node.getBoundingClientRect().top);
+        }),
+      );
+    }
+    expect(places["nimbly-design"], `Nimbly at ${size.width}px`).toEqual(places["ai-design"]);
+    expect(places["custom-design"], `Custom at ${size.width}px`).toEqual(places["ai-design"]);
+    /* The kept places, with Custom on: unseen, and nothing in them for the page, a test or a
+       screen reader */
+    const kept = page.locator(".reserved[inert]");
+    await expect(kept.locator(".lead")).toHaveCount(1);
+    for (const place of await kept.all()) {
+      await expect(place).toBeHidden();
+      await expect(place).toHaveAttribute("aria-hidden", "true");
+    }
+    await expect(kept.locator("[data-action], [data-focus], [id], [aria-label]")).toHaveCount(0);
+    await expect(page.locator('[data-id="ai-design"]')).toHaveCount(0);
+  }
+});
+
+test("AI design's discount grows with the hours, not the package: a package that needs more costs more, its dot sits further on the curve; the button, the first band's", async ({
+  page,
+}) => {
+  const first = aiDiscountBands()[0]?.percent;
   const essentialAi = setTile(selectionForShape("essential"), "ai-design", true);
   /* Page templates past what Essential takes need Growth; the Product catalogue, Platform */
   const growthAi = setQuantity(essentialAi, "templates", 5);
   const platformAi = setTile(growthAi, "product-catalogue", true);
+  let total = 0;
+  let dot = -1;
   for (const [selection, packageId] of [
     [essentialAi, "essential"],
     [growthAi, "growth"],
@@ -187,20 +242,27 @@ test("AI design's discount follows the package: the price tag and the shares und
   ] as const) {
     const q = quote(selection);
     expect(q.shape).toBe(packageId);
-    const percent = aiDiscountPercent(packageId);
+    const discount = aiDiscount(q.hours);
+    expect(q.discount).toEqual(discount);
+    expect(q.totalHours).toBeGreaterThan(total);
+    total = q.totalHours;
     await page.goto(`/#${encodeSelection(selection)}`);
     await expect(page.locator(".big .now")).toHaveText(hoursLabel(q.totalHours), {
       timeout: 15000,
     });
-    await expect(page.locator(".big .was .deal")).toHaveText(`−${percent}%`);
-    await expect(page.locator('.shares li[aria-current="true"]')).toHaveText(
-      `−${percent}% ${packageName[packageId]}`,
+    await expect(page.locator(".big .was .deal")).toHaveText(
+      `−${hoursLabel(discount?.hours ?? 0)}`,
     );
-    await expect(page.locator(".shares li.is-now")).toHaveCount(1);
-    /* The button's sticker is the same whatever the package: the most a package gets */
-    await expect(page.locator(".dsel .choice .deal")).toHaveText(`up to −${most}%`);
+    await expect(page.locator(".curve text.val")).toHaveText(
+      `${discount?.percent}% · −${hoursLabel(discount?.hours ?? 0)}`,
+    );
+    const x = Number(await page.locator(".curve .here").getAttribute("cx"));
+    expect(x).toBeGreaterThan(dot);
+    dot = x;
+    /* The button's sticker is the same whatever the package: the share every estimate gets */
+    await expect(page.locator(".dsel .choice .deal")).toHaveText(`from −${first}%`);
     await expect(
-      page.getByRole("radio", { name: `AI generated (up to ${most}% discount)` }),
+      page.getByRole("radio", { name: `AI generated (from ${first}% discount)` }),
     ).toBeChecked();
   }
 });
@@ -218,15 +280,15 @@ test("Design offers AI generated, Nimbly, Custom and None, Nimbly first, each wi
     "Custom",
     "None",
   ]);
-  /* AI design's discount, on its corner only, and said with its name: the most a package gets,
-     since the packages' shares differ */
-  const shares = aiDiscountShares().map(([, share]) => share);
-  const most = Math.max(...shares);
+  /* AI design's discount, on its corner only, and said with its name: the first band's share,
+     "from" it since later bands get more */
+  const shares = aiDiscountBands().map((band) => band.percent);
+  const first = shares[0];
   expect(new Set(shares).size).toBeGreaterThan(1);
-  await expect(choices.locator(".deal")).toHaveText([`up to −${most}%`]);
+  await expect(choices.locator(".deal")).toHaveText([`from −${first}%`]);
   await expect(choices.first().locator(".deal")).toBeVisible();
   await expect(
-    page.getByRole("radio", { name: `AI generated (up to ${most}% discount)` }),
+    page.getByRole("radio", { name: `AI generated (from ${first}% discount)` }),
   ).toHaveCount(1);
   await expect(choices.filter({ hasText: "Nimbly" })).toHaveClass(/is-on/);
   const note = page.locator(".dsel small");

@@ -1,6 +1,6 @@
 /* State, actions and the controls of the page. Hours and rules come only from quote.ts. */
 import {
-  aiDiscountShares,
+  aiDiscountBands,
   catalogueId,
   defaultWebsitePages,
   designChoices,
@@ -266,16 +266,16 @@ export function designChoice(result: Quote, id: string, label: string): HTMLElem
   input.dataset.action = "design";
   input.dataset.focus = `design-${value}`;
   wrap.append(input, el("span", "choice-name", label));
-  /* AI design's discount, as a sticker on its corner: the most a package gets, "up to" when the
-     packages' shares differ. It changes no width, so the four choices keep theirs. Read as words,
-     after the name */
-  const shares = aiDiscountShares().map(([, percent]) => percent);
-  const most = Math.max(...shares);
-  if (designChoices.find((choice) => choice.id === id)?.kind === "ai" && most > 0) {
-    const upTo = shares.some((percent) => percent !== most) ? "up to " : "";
-    const deal = el("span", "deal", `${upTo}−${formatHours(most)}%`);
+  /* AI design's discount, as a sticker on its corner: the first band's share, which every estimate
+     gets, "from" when later bands get more. None when the first band gets none. It changes no
+     width, so the four choices keep theirs. Read as words, after the name */
+  const bands = aiDiscountBands();
+  const first = bands[0]?.percent ?? 0;
+  if (designChoices.find((choice) => choice.id === id)?.kind === "ai" && first > 0) {
+    const from = bands.some((band) => band.percent !== first) ? "from " : "";
+    const deal = el("span", "deal", `${from}−${formatHours(first)}%`);
     deal.setAttribute("aria-hidden", "true");
-    wrap.append(deal, el("span", "vh", `(${upTo}${formatHours(most)}% discount)`));
+    wrap.append(deal, el("span", "vh", `(${from}${formatHours(first)}% discount)`));
   }
   return wrap;
 }

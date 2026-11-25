@@ -8,7 +8,7 @@
    them into src/hours.csv. The page edits hours and packages of the rows there are; the rest of the
    estimator (where items are shown, the rules, link codes) is in src/config.ts. */
 import {
-  aiDiscountShares,
+  aiDiscountBands,
   buildCatalog,
   type Catalog,
   type DesignChoice,
@@ -275,11 +275,23 @@ const hours = (value: number) => {
   return String(rounded);
 };
 
-/** The AI discount of each package, for the key: none when no package has one. */
+/** The AI discount's bands, for the key: "20% of the first 50h, 25% to 100h, 30% past 100h", one
+    share when every band has it, and none when no band has one. */
 function discountKey(): string | null {
-  const shares = aiDiscountShares();
-  if (shares.every(([, percent]) => percent === 0)) return null;
-  const list = shares.map(([id, percent]) => `${percent}% ${packageName[id]}`).join(", ");
+  const bands = aiDiscountBands();
+  if (bands.every((band) => band.percent === 0)) return null;
+  const same = bands.every((band) => band.percent === bands[0]?.percent);
+  const list = same
+    ? `${bands[0]?.percent}%`
+    : bands
+        .map((band, index) => {
+          const next = bands[index + 1];
+          if (!next) return `${band.percent}% past ${band.from}h`;
+          return index === 0
+            ? `${band.percent}% of the first ${next.from}h`
+            : `${band.percent}% to ${next.from}h`;
+        })
+        .join(", ");
   return ` · AI's Total is after its discount: ${list}`;
 }
 
@@ -435,7 +447,7 @@ function estimatesCard(newCatalog: Catalog): HTMLElement {
       " more hours ",
       h("span", { class: "is-down" }, "▼"),
       " fewer",
-      /* As the estimator gives it: the discount comes off AI design's total only, by its package */
+      /* As the estimator gives it: the discount comes off AI design's total only, by its hours */
       discountKey(),
     ),
     h(

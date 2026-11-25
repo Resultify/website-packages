@@ -36,7 +36,9 @@ test("the calculations page's fifteen estimates", () => {
           `project ${q.projectHours}`,
         ].join(", ");
         /* The total the page shows, as the estimator gives it: after AI design's discount */
-        const off = q.discount ? `, ${q.hours}h less ${q.discount.percent}%` : "";
+        const off = q.discount
+          ? `, ${q.hours}h less ${q.discount.hours}h, ${q.discount.percent}%`
+          : "";
         return `${preset.title} · ${short[design.kind]}: ${q.totalHours}h (${kinds}${off}) ${q.label}`;
       }),
     );
