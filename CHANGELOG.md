@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.4.0](https://github.com/Resultify/website-packages/compare/v0.3.0...v0.4.0) (2026-11-25)
+
+
+### New
+
+* discount AI design by bands of hours, with a curve under the total ([704b161](https://github.com/Resultify/website-packages/commit/704b161bb758166e8da7047643c33e77afc796f4))
+* show AI discount as a legend line that opens to its curve on click ([a330d7c](https://github.com/Resultify/website-packages/commit/a330d7c9f50a710e201a5f52c19821f441e01f8c))
+
+
+### Fixed
+
+* never show an AI discount that takes hours off as 0% ([bc0ad3a](https://github.com/Resultify/website-packages/commit/bc0ad3a276cc5786bbbe82f055e747583b1c99dc))
+
 ## 0.3.0 (2026-11-23)
 
 ### New
