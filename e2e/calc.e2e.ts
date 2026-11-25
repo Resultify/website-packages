@@ -178,10 +178,15 @@ test("a package edit: Page templates need Growth from 3, not 5, and the starting
   await expect.poll(() => page.evaluate(() => location.hash)).toBe("#e1.41pg5~n");
 });
 
-test("the estimates: each preset of config.calcEstimates, a row of AI, Nimbly and Custom, its title a link to the estimator", async ({
+test("the estimates: each preset of config.calcEstimates, a row of AI, Nimbly and Custom, its title a link to the estimator; the key lists AI's discount bands", async ({
   page,
 }) => {
   await openLocal(page);
+  /* AI's totals are after its discount, as the estimator's: the key says so, with the bands */
+  const rule = (name: keyof typeof config.rules) => config.rules[name];
+  await expect(page.locator(".c-key")).toContainText(
+    `AI's Total is after its discount: ${rule("ai-discount-percent")}% of the first ${rule("ai-discount-band-2-from")}h, ${rule("ai-discount-band-2-percent")}% to ${rule("ai-discount-band-3-from")}h, ${rule("ai-discount-band-3-percent")}% past ${rule("ai-discount-band-3-from")}h`,
+  );
   const titles = page.locator(".c-est-row a");
   await expect(titles).toHaveText(config.calcEstimates.map((preset) => preset.title));
   for (const [index, preset] of config.calcEstimates.entries()) {
