@@ -1,17 +1,16 @@
 # Changelog
 
-## [0.4.0](https://github.com/Resultify/website-packages/compare/v0.3.0...v0.4.0) (2026-11-25)
-
+## 0.4.0 (2026-11-25)
 
 ### New
 
-* discount AI design by bands of hours, with a curve under the total ([704b161](https://github.com/Resultify/website-packages/commit/704b161bb758166e8da7047643c33e77afc796f4))
-* show AI discount as a legend line that opens to its curve on click ([a330d7c](https://github.com/Resultify/website-packages/commit/a330d7c9f50a710e201a5f52c19821f441e01f8c))
+- AI discount, a line over Design under the total on a wide screen: a small curve and the hours it takes off ("−12h"). A click opens the whole curve: the share by the estimate's hours, rising toward 30%, with a dot for this estimate ("20% · −12h"). It stays open while the estimate changes, until another design is chosen.
 
+### Changed
 
-### Fixed
-
-* never show an AI discount that takes hours off as 0% ([bc0ad3a](https://github.com/Resultify/website-packages/commit/bc0ad3a276cc5786bbbe82f055e747583b1c99dc))
+- AI generated design's discount goes by the estimate's hours, whatever the package: 20% of the first 50h, 25% of the hours from 50h to 100h, and 30% past 100h. More hours never cost less: 98h comes to 76h, with 22h off, which is 22%. Its button's sticker says "from −20%" (was "up to −30%"). The total's sticker, Copy hours and the Hours breakdown show the estimate's own share, and the key of the calculations page lists the bands.
+- New hours for many items, nearly all of them more, most of all in the Product catalogue. Setup and launch takes 10h to build with AI generated and Nimbly (was 8h). A new estimate starts with 10 sections (was 7). The starting estimate is now 46h with AI generated (was 40h), 93h with Nimbly (was 75h) and 149h with Custom (was 125h).
+- Switching between AI generated, Nimbly and Custom no longer moves the rows below: with Nimbly and Custom, Extra variants and the AI discount keep their place, empty.
 
 ## 0.3.0 (2026-11-23)
 
