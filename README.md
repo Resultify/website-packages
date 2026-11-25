@@ -150,13 +150,17 @@ hours; its feedback rounds and the package it needs are in the `rules` of
   total is less. Its button has a sticker with the first band's share ("from
   −20%"; just "−20%" when every band has the same, none when the first has
   none). The Total panel shows the total after it large, with the one before
-  it struck through beside it and a sticker with the hours off ("−22h").
-  Under them, in the wide sidebar only, a small curve of the real share by
-  the estimate's hours (from 0h to twice where the last band starts),
-  rising toward the last band's share, yellow up to this estimate, and its dot
-  labelled "22% · −22h". Copy hours and the Hours breakdown list "AI design
-  discount · 22%: −22h" over the total. The calculations page's AI totals are
-  after it, and its key lists the bands
+  it struck through beside it and a sticker with its share ("−22%"). In the
+  wide sidebar only, the first line over Design, Build, Content and Project
+  is "AI discount" with a small curve and the hours off ("−22h"); with
+  another design its place stays empty, so switching moves nothing. A click
+  on it opens its details under it: the real share by the estimate's hours
+  (from 0h to twice where the last band starts), rising toward the last
+  band's share, yellow up to this estimate, and its dot labelled "22% ·
+  −22h". They stay open while the estimate changes with AI design, and close
+  when another design is chosen. Copy hours and the Hours breakdown list
+  "AI design discount · 22%: −22h" over the total. The calculations page's AI
+  totals are after it, and its key lists the bands
 - **Nimbly**, the one a new estimate starts with: a designer adapts Nimbly's
   default templates to the client's brief. Then 3h a feedback round
 - **Custom**: a designer creates a fully custom design from the client's brief.
