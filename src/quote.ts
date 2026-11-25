@@ -181,11 +181,12 @@ export function discountShare(hours: number, bands = aiDiscountBands()): number 
 /** AI design's discount of an estimate of `hours`, or null when it takes no whole hour off. The
     hours are rounded down, so the total after it rounds up, as every share of the estimate does:
     20% of 51h is 10.2, so 10h off and 41h. The percent is its share before that rounding, rounded
-    down: 30.9h of 128h is 24%. So it is never under the first band's. */
+    down: 30.9h of 128h is 24%. So it is never under the first band's, and at least 1% when it
+    takes hours off: a first band of 0 and later ones of 1% would round 1h off 150h down to 0%. */
 export function aiDiscount(hours: number, bands = aiDiscountBands()): Discount | null {
   const share = discountShare(hours, bands);
   const off = Math.floor(share / 100);
-  return off > 0 ? { percent: Math.floor(share / hours), hours: off } : null;
+  return off > 0 ? { percent: Math.max(1, Math.floor(share / hours)), hours: off } : null;
 }
 
 /** With AI design and a discount to give: its share, and the hours it takes off. */

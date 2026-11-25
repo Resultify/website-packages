@@ -413,6 +413,14 @@ describe("a draft", () => {
       expect(aiDiscount(98)).toEqual({ percent: 22, hours: 22 });
       expect(aiDiscount(128)).toEqual({ percent: 24, hours: 30 });
       expect(discountShare(128)).toBe(50 * 20 + 50 * 25 + 28 * 30);
+      /* Hours off are never said as 0%: none in the first band and 1% after it take 1h off 150h,
+         0.67% of it */
+      const thin = [
+        { from: 0, percent: 0 },
+        { from: 50, percent: 1 },
+        { from: 100, percent: 1 },
+      ];
+      expect(aiDiscount(150, thin)).toEqual({ percent: 1, hours: 1 });
       /* More hours never cost less, and the share never falls */
       let total = 0;
       let percent = 20;
