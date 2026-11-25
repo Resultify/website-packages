@@ -135,19 +135,28 @@ hours; its feedback rounds and the package it needs are in the `rules` of
   template's wireframe, then whole designs from it (5 variants included, each
   one more half of the AI design hours, counted from 0 in **Extra variants**)
   for the client to pick one. Then 3h a feedback round. A share of the
-  estimate's total comes off, by its package: 20% with Essential, 25% with
-  Growth, 30% with Platform (the rules `ai-discount-essential-percent`,
-  `ai-discount-growth-percent` and `ai-discount-platform-percent`), rounded
-  down to whole hours, so the total rounds up as every share does: 20% of 51h
-  is 10.2h, so 10h off and 41h. Design, Build, Content and Project keep their
-  hours, and only the total is less. Its button has a sticker with the most a
-  package gets ("up to −30%"; just "−20%" when every package gets the same).
-  The Total panel shows the total after it large, with the one before it
-  struck through beside it and a sticker with this estimate's share
-  ("−25%"). Under them, in the wide sidebar only, each package's share, drawn
-  as the package card's three dashes, this estimate's in yellow. Copy hours and
-  the Hours breakdown list "AI design discount · 25%: −25h" over the total,
-  and the calculations page's AI totals are after it
+  estimate's hours comes off its total, in bands of hours, whatever the
+  package: 20% of the first 50h, 25% of the hours from 50h to 100h, 30% of
+  the hours past 100h (the rules `ai-discount-percent`,
+  `ai-discount-band-2-from`, `ai-discount-band-2-percent`,
+  `ai-discount-band-3-from` and `ai-discount-band-3-percent`). The bands'
+  shares are added up and rounded down to whole hours, so the total rounds up
+  as every share does: 98h is 10h + 12h, so 22h off and 76h. More hours never
+  cost less: with a share for each package, a site that needed Growth could
+  cost less than a smaller one. Each band's share is at least the one
+  before's. The discount's percent is its real share of the hours before that
+  rounding, rounded down: 30.9h of 128h is 24%, so never under the first
+  band's. Design, Build, Content and Project keep their hours, and only the
+  total is less. Its button has a sticker with the first band's share ("from
+  −20%"; just "−20%" when every band has the same, none when the first has
+  none). The Total panel shows the total after it large, with the one before
+  it struck through beside it and a sticker with the hours off ("−22h").
+  Under them, in the wide sidebar only, a small curve of the real share by
+  the estimate's hours (from 0h to twice where the last band starts),
+  rising toward the last band's share, yellow up to this estimate, and its dot
+  labelled "22% · −22h". Copy hours and the Hours breakdown list "AI design
+  discount · 22%: −22h" over the total. The calculations page's AI totals are
+  after it, and its key lists the bands
 - **Nimbly**, the one a new estimate starts with: a designer adapts Nimbly's
   default templates to the client's brief. Then 3h a feedback round
 - **Custom**: a designer creates a fully custom design from the client's brief.

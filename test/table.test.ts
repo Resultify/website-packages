@@ -3,7 +3,7 @@
    a change of the hours in src/ changes none of the numbers here. */
 import { describe, expect, test } from "bun:test";
 import {
-  aiDiscountShares,
+  aiDiscountBands,
   buildCatalog,
   catalogueSources,
   designChoices,
@@ -18,9 +18,10 @@ import {
 import { hoursText, lineName, ruleFor, shelfGroupOf, shelfLanes } from "../src/controls.ts";
 import { packLink, unpackLink } from "../src/link.ts";
 import {
+  aiDiscount,
   aiVariantCost,
   decodeSelection,
-  discountHours,
+  discountShare,
   encodeSelection,
   type HourLine,
   quote,
@@ -337,7 +338,16 @@ describe("a draft", () => {
   });
 
   test("AI design's discount comes off the total only, rounded down: every group, line, package and tier stay", () => {
-    const off = drafted({}, { "ai-discount-essential-percent": "20" });
+    /* One share in every band */
+    const flat = [{ from: 0, percent: 20 }];
+    const off = drafted(
+      {},
+      {
+        "ai-discount-percent": "20",
+        "ai-discount-band-2-percent": "20",
+        "ai-discount-band-3-percent": "20",
+      },
+    );
     const before = quote(ai());
     expect(before.discount).toBeNull();
     expect(before.totalHours).toBe(before.hours);
@@ -355,12 +365,15 @@ describe("a draft", () => {
       expect(after[key]).toEqual(before[key]);
     }
     /* 20% of 51h is 10.2: 10h off, so the total rounds up, as every share of the estimate does;
-       20% of 54h is 10.8, still 10h */
-    expect(discountHours(51, 20)).toBe(10);
-    expect(discountHours(54, 20)).toBe(10);
-    expect(discountHours(55, 20)).toBe(11);
-    const hours = discountHours(before.hours, 20);
-    expect(after.discount).toEqual({ percent: 20, hours, packageId: "essential" });
+       20% of 54h is 10.8, still 10h. Its share stays 20% */
+    expect(aiDiscount(51, flat)).toEqual({ percent: 20, hours: 10 });
+    expect(aiDiscount(54, flat)).toEqual({ percent: 20, hours: 10 });
+    expect(aiDiscount(55, flat)).toEqual({ percent: 20, hours: 11 });
+    /* Less than a whole hour off is none */
+    expect(aiDiscount(4, flat)).toBeNull();
+    const hours = aiDiscount(before.hours, flat)?.hours ?? 0;
+    expect(hours).toBeGreaterThan(0);
+    expect(after.discount).toEqual({ percent: 20, hours });
     expect(after.totalHours).toBe(before.hours - hours);
     /* Copy hours says it over the total */
     expect(
@@ -374,42 +387,74 @@ describe("a draft", () => {
       expect(other.discount).toBeNull();
       expect(other.totalHours).toBe(other.hours);
     }
-    expect(() => drafted({}, { "ai-discount-platform-percent": "101" })).toThrow(
-      "Rule ai-discount-platform-percent must be 0 to 100",
-    );
   });
 
-  test("AI design's discount is its package's: 20% with Essential, 25% with Growth, 30% with Platform", () => {
+  test("AI design's discount is in bands of hours: 20% of the first 50h, 25% to 100h, 30% past", () => {
     const off = drafted(
       {},
       {
-        "ai-discount-essential-percent": "20",
-        "ai-discount-growth-percent": "25",
-        "ai-discount-platform-percent": "30",
+        "ai-discount-percent": "20",
+        "ai-discount-band-2-from": "50",
+        "ai-discount-band-2-percent": "25",
+        "ai-discount-band-3-from": "100",
+        "ai-discount-band-3-percent": "30",
       },
     );
     withCatalog(off, () => {
+      expect(aiDiscountBands()).toEqual([
+        { from: 0, percent: 20 },
+        { from: 50, percent: 25 },
+        { from: 100, percent: 30 },
+      ]);
+      /* Each band's share of the hours in it, added up, then rounded down; the percent is the
+         share before that, rounded down, so never under the first band's */
+      expect(aiDiscount(49)).toEqual({ percent: 20, hours: 9 });
+      expect(aiDiscount(50)).toEqual({ percent: 20, hours: 10 });
+      expect(aiDiscount(98)).toEqual({ percent: 22, hours: 22 });
+      expect(aiDiscount(128)).toEqual({ percent: 24, hours: 30 });
+      expect(discountShare(128)).toBe(50 * 20 + 50 * 25 + 28 * 30);
+      /* More hours never cost less, and the share never falls */
+      let total = 0;
+      let percent = 20;
+      for (let hours = 5; hours <= 600; hours++) {
+        const discount = aiDiscount(hours);
+        const after = hours - (discount?.hours ?? 0);
+        expect(after, `${hours}h`).toBeGreaterThanOrEqual(total);
+        expect(discount?.percent ?? 20, `${hours}h`).toBeGreaterThanOrEqual(percent);
+        total = after;
+        percent = discount?.percent ?? 20;
+      }
+      /* Whatever the package: one that needs Growth or Platform costs more, not less */
       const essentialAi = ai();
-      /* Page templates past what Essential takes need Growth; the Product catalogue, Platform */
       const growthAi = setQuantity(essentialAi, "templates", 5);
       const platformAi = setTile(growthAi, "product-catalogue", true);
-      for (const [selection, packageId, percent] of [
-        [essentialAi, "essential", 20],
-        [growthAi, "growth", 25],
-        [platformAi, "platform", 30],
-      ] as const) {
-        const q = quote(selection);
-        expect(q.shape).toBe(packageId);
-        expect(q.discount).toEqual({ percent, hours: discountHours(q.hours, percent), packageId });
-        expect(q.totalHours).toBe(q.hours - discountHours(q.hours, percent));
+      const quotes = [essentialAi, growthAi, platformAi].map((selection) => quote(selection));
+      expect(quotes.map((q) => q.shape)).toEqual(["essential", "growth", "platform"]);
+      for (const q of quotes) {
+        expect(q.discount).toEqual(aiDiscount(q.hours));
+        expect(q.totalHours).toBe(q.hours - (q.discount?.hours ?? 0));
       }
-      /* The shares under the total, Essential's first */
-      expect(aiDiscountShares()).toEqual([
-        ["essential", 20],
-        ["growth", 25],
-        ["platform", 30],
-      ]);
+      const totals = quotes.map((q) => q.totalHours);
+      expect(totals).toEqual([...totals].sort((a, b) => a - b));
     });
+  });
+
+  test("the AI discount's rules: shares 0 to 100, each at least the one before; each band past the one before", () => {
+    expect(() => drafted({}, { "ai-discount-band-3-percent": "101" })).toThrow(
+      "Rule ai-discount-band-3-percent must be 0 to 100: at least the band before. It is 101",
+    );
+    expect(() =>
+      drafted({}, { "ai-discount-percent": "20", "ai-discount-band-2-percent": "10" }),
+    ).toThrow("Rule ai-discount-band-2-percent must be 20 to 100: at least the band before");
+    expect(() => drafted({}, { "ai-discount-band-2-from": "0" })).toThrow(
+      "Rule ai-discount-band-2-from must be more than 0: above 0. It is 0",
+    );
+    expect(() => drafted({}, { "ai-discount-band-3-from": "50" })).toThrow(
+      "Rule ai-discount-band-3-from must be more than 50: past the band before. It is 50",
+    );
+    expect(() => drafted({}, { "ai-discount-band-2-from": "" })).toThrow(
+      "Rule ai-discount-band-2-from must be a whole number",
+    );
   });
 
   test("the package a design needs comes from the rules: Custom and None need Growth", () => {

@@ -9,7 +9,7 @@
 
 import {
   type Amount,
-  aiDiscountPercent,
+  aiDiscountBands,
   aiVariantHours,
   alwaysOnTileIds,
   basicsTileIds,
@@ -162,24 +162,35 @@ export type Quote = {
   pageSpeed: PageSpeed;
 };
 
-/** The AI discount: `percent` of the estimate's hours, off its total only. The percent is the
-    package's. */
-export type Discount = { percent: number; hours: number; packageId: PackageId };
+/** The AI discount, off the estimate's total only: the hours it takes off, and its real share of
+    the estimate's hours, in percent. */
+export type Discount = { percent: number; hours: number };
 
-/** The hours a discount takes off: `percent` of `total`, rounded down to a whole hour, so the total
-    after it rounds up, as every share of the estimate does: 20% of 51h is 10.2, so 10h off, and
-    41h. */
-export function discountHours(total: number, percent: number): number {
-  return Math.floor((total * percent) / 100);
+/** What AI design's bands take off `hours`, in hundredths of an hour: each band's percent of the
+    hours in it, added up. Whole hours and percents, so it is exact: 50h at 20% and 48h at 25% is
+    2200, 22h. */
+export function discountShare(hours: number, bands = aiDiscountBands()): number {
+  let share = 0;
+  bands.forEach((band, index) => {
+    const end = bands[index + 1]?.from ?? Number.POSITIVE_INFINITY;
+    share += Math.max(0, Math.min(hours, end) - band.from) * band.percent;
+  });
+  return share;
 }
 
-/** With AI design and a discount to give: its package's share, and the hours it takes off. */
+/** AI design's discount of an estimate of `hours`, or null when it takes no whole hour off. The
+    hours are rounded down, so the total after it rounds up, as every share of the estimate does:
+    20% of 51h is 10.2, so 10h off and 41h. The percent is its share before that rounding, rounded
+    down: 30.9h of 128h is 24%. So it is never under the first band's. */
+export function aiDiscount(hours: number, bands = aiDiscountBands()): Discount | null {
+  const share = discountShare(hours, bands);
+  const off = Math.floor(share / 100);
+  return off > 0 ? { percent: Math.floor(share / hours), hours: off } : null;
+}
+
+/** With AI design and a discount to give: its share, and the hours it takes off. */
 function discountOf(selection: Selection, hours: number): Discount | null {
-  if (choiceOf(selection) !== "ai") return null;
-  const packageId = packageFor(selection);
-  const percent = aiDiscountPercent(packageId);
-  const off = discountHours(hours, percent);
-  return off > 0 ? { percent, hours: off, packageId } : null;
+  return choiceOf(selection) === "ai" ? aiDiscount(hours) : null;
 }
 
 /** Project management's hours: `percent` of `base`, rounded up to a whole hour. Hours and
