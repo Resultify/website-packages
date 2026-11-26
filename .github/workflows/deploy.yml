@@ -2,6 +2,7 @@
 # checks the tag's code, builds it and deploys it.
 # Run by hand (Actions → Deploy → Run workflow, "Use workflow from": a tag), it publishes that tag
 # again: after a deploy that failed for a reason outside the code, or to put an older version back.
+# Only a tag that holds this file can be picked: the tags made before it have no Deploy workflow.
 # The github-pages environment must allow v* tags (Settings → Environments → github-pages).
 name: Deploy
 on:

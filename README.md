@@ -424,7 +424,8 @@ A release is a commit `chore: release 0.5.0` on `main` and its tag `v0.5.0`:
 
 To publish a tag again (a deploy that failed for a reason outside the code, or
 an older version put back): Actions → Deploy → **Run workflow**, and pick the
-tag under "Use workflow from".
+tag under "Use workflow from". This works only for a tag made after `deploy.yml`
+was added: an older tag doesn't hold the workflow.
 
 Deploy needs two GitHub settings: Settings → Pages → Source is **GitHub
 Actions**, and Settings → Environments → `github-pages` allows `v*` tags.
