@@ -710,7 +710,7 @@ test("Changelog, under Reset, lists the releases in a dialog that Escape, Close 
   await expect(dialog.locator(".cl-release h3")).toHaveText(
     releases.map((release) => new RegExp(`^v${release.label.replaceAll(".", "\\.")}`)),
   );
-  /* Each release's sections, New or Fixed, each a heading over its items */
+  /* Each release's sections, such as New, Changed or Fixed, each a heading over its items */
   const first = dialog.locator(".cl-release").first();
   await expect(first.locator("h4")).toHaveText(
     currentRelease.sections.map((section) => section.title),

@@ -1895,8 +1895,9 @@ function changelogButton(): HTMLElement {
   );
 }
 
-/** The releases, newest first, each with its sections (New, Fixed), in a dialog of its own outside
-    the page, so a redraw of the page leaves it open. Escape, Close or a press outside it closes it. */
+/** The releases, newest first, each with its sections (New, Changed, Fixed), in a dialog of its
+    own outside the page, so a redraw of the page leaves it open. Escape, Close or a press
+    outside it closes it. */
 function changelogDialog(): HTMLDialogElement {
   const found = document.querySelector<HTMLDialogElement>("dialog.changelog");
   if (found) return found;
