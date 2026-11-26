@@ -16,6 +16,8 @@ permissions:
   contents: read
 jobs:
   verify:
+    # Only a release tag: a run by hand from a branch is skipped, and deploy with it
+    if: startsWith(github.ref, 'refs/tags/v')
     uses: ./.github/workflows/verify.yml
   deploy:
     needs: verify
