@@ -1,11 +1,11 @@
-/* CHANGELOG.md as the app reads it: the releases in the Changelog dialog and the version under it,
-   and a release's notes for its GitHub release. */
+/* CHANGELOG.md as the app reads it: the releases in the Changelog dialog and the version under it. */
 import { expect, test } from "bun:test";
 import packageJson from "../package.json";
-import { parseChangelog, releaseNotes, releases } from "../src/changelog.ts";
+import { parseChangelog, releases } from "../src/changelog.ts";
 
-/* As release-please writes it: a new version over the seeded ones, a patch in the ### heading its
-   older versions wrote, links after each item, a scope, and a breaking change listed twice */
+/* As release-please wrote the older releases: a new version over the seeded ones, a patch in the ###
+   heading its older versions wrote, links after each item, a scope, and a breaking change listed
+   twice */
 const notes030 = `### ⚠ BREAKING CHANGES
 
 * drop the old links ([#14](https://github.com/o/r/issues/14)) ([abc1234](https://github.com/o/r/commit/abc1234))
@@ -42,7 +42,7 @@ ${notes021}
 - A new layout.
 `;
 
-test("reads release-please's headings, sections and items", () => {
+test("reads the headings, sections and items release-please wrote", () => {
   const read = parseChangelog(fixture);
   expect(read.map(({ version, label, date, stage }) => ({ version, label, date, stage }))).toEqual([
     { version: "0.3.0", label: "0.3", date: "2026-12-01", stage: "Beta" },
@@ -62,6 +62,19 @@ test("reads release-please's headings, sections and items", () => {
     { title: "Fixed", items: ["Round project management up when the design is None"] },
   ]);
   expect(read[2]!.sections).toEqual([{ title: "New", items: ["A new layout."] }]);
+});
+
+test("reads a heading with Beta after the version while the major is 0", () => {
+  const [release] = parseChangelog(
+    "# Changelog\n\n## 0.8.0 Beta (2026-11-26)\n\n### New\n\n- One line.\n\n## 0.7.0 (2026-11-25)\n\n### Fixed\n\n- Two.\n",
+  );
+  expect(release).toEqual({
+    version: "0.8.0",
+    label: "0.8",
+    date: "2026-11-26",
+    stage: "Beta",
+    sections: [{ title: "New", items: ["One line."] }],
+  });
 });
 
 test("a version from 1.0.0 on has no Beta", () => {
@@ -85,13 +98,6 @@ test.each([
   ["## 0.3.0 (2026-12-01)\n\n## Notes\n", /^line 3, a heading that is not a release's/],
 ])("refuses what it can't read, naming the line: %#", (text, problem) => {
   expect(() => parseChangelog(text)).toThrow(problem);
-});
-
-test("a release's notes are its markdown, as written, for its GitHub release", () => {
-  expect(releaseNotes(fixture, "0.3.0")).toBe(notes030);
-  expect(releaseNotes(fixture, "0.2.1")).toBe(notes021);
-  expect(releaseNotes(fixture, "0.2.0")).toBe("### New\n\n- A new layout.");
-  expect(releaseNotes(fixture, "9.9.9")).toBeUndefined();
 });
 
 test("CHANGELOG.md reads; its first release is package.json's version; each has a day and items", () => {

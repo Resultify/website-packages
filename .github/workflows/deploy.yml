@@ -1,0 +1,41 @@
+# Publishes a release to GitHub Pages. A pushed release tag (v0.5.0) starts this workflow, which
+# checks the tag's code, builds it and deploys it.
+# Run by hand (Actions → Deploy → Run workflow, "Use workflow from": a tag), it publishes that tag
+# again: after a deploy that failed for a reason outside the code, or to put an older version back.
+# The github-pages environment must allow v* tags (Settings → Environments → github-pages).
+name: Deploy
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+concurrency:
+  group: pages
+  cancel-in-progress: false
+permissions:
+  contents: read
+jobs:
+  verify:
+    uses: ./.github/workflows/verify.yml
+  deploy:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.5
+      - run: bun install --frozen-lockfile
+      - run: bun scripts/build.ts
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: docs
+      - id: deployment
+        uses: actions/deploy-pages@v5

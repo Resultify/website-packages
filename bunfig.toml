@@ -1,9 +1,9 @@
 [fmt]
 # The repo's line length; everything else is Bun's default (Prettier style)
 printWidth = 100
-# docs/ is the built site, minified by bun run build. CHANGELOG.md and .release-please-manifest.json
-# are written by release-please, and kept as it writes them
-ignorePatterns = ["docs/**", "CHANGELOG.md", ".release-please-manifest.json"]
+# docs/ is the built site, minified by bun run build. CHANGELOG.md is written for people, and its
+# older releases stay as release-please wrote them
+ignorePatterns = ["docs/**", "CHANGELOG.md"]
 
 [serve.static]
 # Imports hours.csv as text in the dev server, also after they change (see scripts/csv-text.ts)

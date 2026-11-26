@@ -1,6 +1,5 @@
-# PR titles and commit messages keep the rule in scripts/messages.ts. The release PR also gets the
-# full checks once it is ready for review: its draft updates come from release-please's token, which
-# starts no workflows, so only the owner's own events (Ready for review, an edit) run them.
+# PR titles and commit messages keep the rule in scripts/messages.ts. A push to main also gets the
+# full checks (Verify), so a release starts from a commit that passed them.
 name: Checks
 on:
   pull_request:
@@ -32,11 +31,6 @@ jobs:
         env:
           RANGE: ${{ github.event.before }}..${{ github.event.after }}
         run: bun scripts/check-messages.ts --range "$RANGE"
-  # With one package, release-please adds its name to the branch:
-  # release-please--branches--main--components--<package.json name>
-  release-pr:
-    if: >-
-      github.event_name == 'pull_request' &&
-      startsWith(github.head_ref, 'release-please--branches--main') &&
-      !github.event.pull_request.draft
+  verify:
+    if: github.event_name == 'push'
     uses: ./.github/workflows/verify.yml

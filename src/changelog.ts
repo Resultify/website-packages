@@ -1,8 +1,8 @@
-/* What changed in the estimator, for the people who use it: CHANGELOG.md, newest first. release-please
-   writes a release's section in its release PR, from the commit messages (feat: under New, fix: under
-   Fixed), and it may be edited there before the PR merges. The first release is the version the
-   sidebar shows under Changelog. A release's notes give the values it shipped with, such as 15%: a
-   rule changed later doesn't rewrite them. */
+/* What changed in the estimator, for the people who use it: CHANGELOG.md, newest first. A release's
+   section tells the changes since the last release. The older releases came from release-please,
+   with its headings, links and sections. The first release is the version the sidebar shows under
+   Changelog. A release's notes give the values it shipped with, such as 15%: a rule changed later
+   doesn't rewrite them. */
 import changelogText from "../CHANGELOG.md" with { type: "text" };
 
 export type Section = { title: string; items: readonly string[] };
@@ -21,10 +21,11 @@ export type Release = {
 
 export const appName = "Website packages";
 
-/* A release's heading: "## [0.3.0](compare link) (2026-11-20)" as release-please writes it, the
-   same with ### for a patch as its older versions wrote it, or "## 0.2.0 (2026-11-19)" */
+/* A release's heading: "## 0.5.0 Beta (2026-11-26)" (Beta while the major version is 0),
+   "## [0.3.0](compare link) (2026-11-20)" as release-please wrote it, the same with ### for a patch
+   as its older versions wrote it, or "## 0.2.0 (2026-11-19)" */
 const versionHeading =
-  /^#{2,3} (?:\[(\d+\.\d+\.\d+)\]\([^)]*\)|(\d+\.\d+\.\d+)) \((\d{4}-\d{2}-\d{2})\)$/;
+  /^#{2,3} (?:\[(\d+\.\d+\.\d+)\]\([^)]*\)|(\d+\.\d+\.\d+))(?: Beta)? \((\d{4}-\d{2}-\d{2})\)$/;
 /* A ## or ### line whose text starts with a version is meant as a release's heading */
 const looksLikeVersion = /^#{2,3} \[?\d+\.\d+\.\d+/;
 
@@ -123,17 +124,6 @@ export function parseChangelog(text: string): Release[] {
   close();
   if (!releases.length) throw new Error("no release: its heading is ## 0.2.0 (YYYY-MM-DD)");
   return releases;
-}
-
-/** A release's notes as written in CHANGELOG.md, for its GitHub release: the markdown between its
-    heading and the next release's, trimmed. */
-export function releaseNotes(text: string, version: string): string | undefined {
-  const lines = text.split(/\r?\n/);
-  const start = lines.findIndex((line) => headingOf(line)?.version === version);
-  if (start < 0) return undefined;
-  const after = lines.slice(start + 1);
-  const end = after.findIndex((line) => headingOf(line));
-  return (end < 0 ? after : after.slice(0, end)).join("\n").trim();
 }
 
 export const releases: readonly Release[] = parseChangelog(changelogText);

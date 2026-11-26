@@ -17,16 +17,16 @@ page at http://localhost:4173/calc/. Set `PORT` to use another port.
 
 ## Commands
 
-| Command                    | What it does                                                                                                     |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `bun run dev`              | Start the dev server with hot reload                                                                             |
-| `bun run start`            | Start the server without hot reload                                                                              |
-| `bun test`                 | Run the unit tests in `test/`                                                                                    |
-| `bun run e2e`              | Run the browser tests in `e2e/` in Chrome; starts the server if none is running                                  |
-| `bun check`                | Type-check                                                                                                       |
-| `bun fmt`                  | Format the code; `bun fmt --check` only checks                                                                   |
-| `bun run build`            | Build the estimator and the calculations page into `docs/`, to preview them; the Release workflow publishes them |
-| `bun scripts/hours-fmt.ts` | Write `src/hours.csv` (or the file given) in the app's layout, or say what the app cannot read in it             |
+| Command                    | What it does                                                                                                    |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `bun run dev`              | Start the dev server with hot reload                                                                            |
+| `bun run start`            | Start the server without hot reload                                                                             |
+| `bun test`                 | Run the unit tests in `test/`                                                                                   |
+| `bun run e2e`              | Run the browser tests in `e2e/` in Chrome; starts the server if none is running                                 |
+| `bun check`                | Type-check                                                                                                      |
+| `bun fmt`                  | Format the code; `bun fmt --check` only checks                                                                  |
+| `bun run build`            | Build the estimator and the calculations page into `docs/`, to preview them; the Deploy workflow publishes them |
+| `bun scripts/hours-fmt.ts` | Write `src/hours.csv` (or the file given) in the app's layout, or say what the app cannot read in it            |
 
 The tests check three things apart:
 
@@ -399,45 +399,38 @@ it shows the hours of the new files.
 ## Changelog
 
 **Changelog**, under Reset in the sidebar, lists the releases in a dialog, each
-with its sections (New, Fixed); under it is the app's name and version, with
-Beta while the version is 0.x. Both are read from
+with its sections (New, Changed, Fixed); under it is the app's name and
+version, with Beta while the version is 0.x. Both are read from
 [`CHANGELOG.md`](CHANGELOG.md) by [`src/changelog.ts`](src/changelog.ts).
-release-please writes the file from the commit messages: don't edit it on
-`main` by hand, only in a release PR (see [Releasing](#releasing)). Its lines
-are for the people who use the estimator.
+Each release is written for people who know the estimator a little or not at
+all: simple English, one sentence per item. Its heading says Beta while the
+version is 0.x: `## 0.5.0 Beta (2026-11-26)`. The older releases came from
+release-please and stay as they are.
 
 ## Releasing
 
-A release is made from a draft PR that
-[release-please](https://github.com/googleapis/release-please) keeps open
-(`.github/workflows/release.yml`):
+A release is a commit `chore: release 0.5.0` on `main` and its tag `v0.5.0`:
 
-1. Commits land on `main`.
-2. release-please updates a draft PR titled `chore: release 0.3.0`. It holds
-   the new `version` in `package.json` and a new top section in `CHANGELOG.md`:
-   **New** for `feat` commits, **Fixed** for `fix`. Other types are left out.
-   Every new commit on `main` rewrites the draft (a force-push), which loses
-   any edits in it.
-3. To release:
-   1. Optionally, edit `CHANGELOG.md` in the draft: remove a duplicate, add a
-      refactor worth mentioning, reword a line. Commit it as
-      `docs: edit the release notes`. Edit last: a later commit on `main`
-      throws the edit away.
-   2. Click **Ready for review**. The full checks run on the PR: types, unit
-      tests, browser tests and a build.
-   3. **Squash-merge** the PR.
-4. The Release workflow then tags `v0.3.0`, makes the GitHub release with the
-   `0.3.0` section of `CHANGELOG.md` as its notes, checks the code, builds it
-   and publishes it to GitHub Pages. What `CHANGELOG.md` holds at the merge is
-   what ships.
+1. The commit adds the release at the top of `CHANGELOG.md` and sets the new
+   version in `package.json`. The version comes from the commits since the last
+   tag: `feat` raises the minor version (0.2.0 → 0.3.0), `fix` the patch
+   (0.2.0 → 0.2.1), and a breaking change (`feat!`) the minor too while the
+   version is 0.x.
+2. The tag starts the Deploy workflow (`.github/workflows/deploy.yml`): it
+   checks the tag's code (types, unit tests, browser tests, a build), builds it
+   and publishes it to GitHub Pages.
+3. The GitHub release of the tag has the release's section of `CHANGELOG.md`
+   as its notes.
 
-Actions → Release → **Run workflow** publishes again by hand: a tag given, or
-the latest release.
+To publish a tag again (a deploy that failed for a reason outside the code, or
+an older version put back): Actions → Deploy → **Run workflow**, and pick the
+tag under "Use workflow from".
 
-Versions stay 0.x: `feat` raises the minor version (0.2.0 → 0.3.0), `fix` the
-patch (0.2.0 → 0.2.1), and a breaking change (`feat!`) the minor too. To reach
-1.0.0, set `"release-as": "1.0.0"` in `release-please-config.json`, and remove
-it after that release.
+Deploy needs two GitHub settings: Settings → Pages → Source is **GitHub
+Actions**, and Settings → Environments → `github-pages` allows `v*` tags.
+
+Every push to `main` runs the full checks (the Verify workflow). Release a
+commit only after they pass.
 
 The release builds with `bun run build`, which writes the estimator and the
 calculations page, and stops on an item without a code in `config.linkCodes`.
@@ -448,13 +441,11 @@ Commit messages and PR titles follow one rule, checked by the Checks workflow
 (`scripts/messages.ts`): `<type>[!]: <description>`, with no scope.
 
 - The types: `feat`, `fix`, `refactor`, `style`, `test`, `docs`, `build`, `ops`
-  and `chore`. `feat` and `fix` become lines of the changelog, in words for the
-  people who use the estimator
+  and `chore`. `feat` and `fix` decide the next version
 - The description is imperative, starts with a lowercase letter and has no
   period at the end; the whole line is at most 100 characters
-- Merge PRs with **squash** or **rebase**, never a merge commit, so a change is
-  not listed twice. With squash, extra `feat:` or `fix:` lines at the end of the
-  message add more changelog lines
+- Any merge method works. A merge commit itself is not checked. A squash
+  commit takes the PR's title, so the title's type must cover the whole PR
 - A fix to work that hasn't been released yet is a `refactor:`, so it doesn't
   show as a fix of something no one had
 

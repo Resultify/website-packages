@@ -4,5 +4,5 @@ node_modules
 test-results
 playwright-report
 .tmp
-# The built site: bun run build writes it, the Release workflow publishes it
+# The built site: bun run build writes it, the Deploy workflow publishes it
 docs/

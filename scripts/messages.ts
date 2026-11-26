@@ -1,6 +1,6 @@
-/* The rule for commit messages and PR titles, as pr-git writes them: "<type>[!]: <description>", with
-   no scope. The description starts with a lowercase letter and has no period at the end; the line
-   is at most 100 characters. release-please reads feat and fix into CHANGELOG.md. */
+/* The rule for commit messages and PR titles: "<type>[!]: <description>", with no scope. The
+   description starts with a lowercase letter and has no period at the end; the line is at most 100
+   characters. feat and fix decide the next version. */
 
 export const commitTypes = [
   "feat",
